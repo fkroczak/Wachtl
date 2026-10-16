@@ -96,7 +96,8 @@ dl { display: grid; grid-template-columns: max-content 1fr; gap: 0.3rem 1.2rem; 
 dt { color: var(--text-muted); }
 dd { margin: 0; }
 
-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border);
+/* position: relative hält absolut positionierte .sr-only-Köpfe im Scrollbereich der Tabelle */
+table { position: relative; width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); overflow: hidden; font-size: 0.92rem; }
 th, td { text-align: left; padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 thead th { font-weight: 600; color: var(--text-muted); font-size: 0.82rem; background: var(--bg); }
@@ -120,7 +121,7 @@ td.cell.unknown, td.cell.na { color: var(--text-muted); }
 .badge.critical { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }
 .badge.warning { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); color: var(--warn); }
 
-.flash { padding: 0.6rem 0.9rem; border-radius: var(--radius); margin: 0 0 0.8rem; border: 1px solid var(--border);
+.flash { overflow-wrap: anywhere; padding: 0.6rem 0.9rem; border-radius: var(--radius); margin: 0 0 0.8rem; border: 1px solid var(--border);
   background: var(--surface); }
 .flash.ok { border-color: var(--ok); }
 .flash.error { border-color: var(--bad); color: var(--bad); }
@@ -128,7 +129,10 @@ td.cell.unknown, td.cell.na { color: var(--text-muted); }
 
 input, select, button { font: inherit; color: inherit; }
 input, select { background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px; padding: 0.4rem 0.55rem; }
-input:focus-visible, select:focus-visible { outline: 3px solid var(--focus); outline-offset: 0; }
+
+/* Felder immer mit Fokusring; :focus-within deckt das Uhr-/Kalendersymbol in Zeit- und Datumsfeldern ab */
+input:focus, select:focus, textarea:focus { outline: 3px solid var(--focus); outline-offset: 0; }
+input:focus-within { outline: 3px solid var(--focus); outline-offset: 0; }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--bad); border-width: 2px; }
 input.num { width: 7rem; }
 button { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.9rem; cursor: pointer; }

@@ -159,6 +159,63 @@ manuelle Prüfungen. Empfehlung: einmal je Release die Seiten aus `e2e/pages.js`
 
 Ausgangsbefunde, Korrekturen und Vorher/Nachher-Werte: siehe Abschnitt „Audit 2026-10-16“ unten.
 
+## Audit 2026-10-16
+
+### Vorher / nachher (Lighthouse, Median aus 3 Läufen, 11 Seiten × mobil/desktop)
+
+| Kennzahl | Vorher | Nachher |
+| --- | --- | --- |
+| Accessibility | 91–100 (Verwaltung 91, Ausfälle 92, Übersicht/Standort 93, Alarme 95, Bandbreite 98) | 100 auf allen Seiten |
+| Best Practices | 100 | 100 |
+| SEO | 91 (fehlende Meta-Beschreibung) | 100 |
+| Performance | 96–100 (Check-Formular desktop 96) | 100 auf allen Seiten |
+| CLS Check-Formular | 0,083 mobil / 0,121 desktop | 0 / 0 |
+| LCP mobil | 1,07–1,27 s | 1,06–1,26 s (keine Änderung jenseits der Streuung) |
+| Seitengewicht | 35–91 KB | 39–79 KB (+4–7 KB CSS/JS/HTML; Graph-Daten schwanken mit der Uhrzeit) |
+
+| axe-core (WCAG 2.2 AA + Best Practices, 15 Seiten × hell/dunkel) | Vorher | Nachher |
+| --- | --- | --- |
+| Betroffene Elemente | 95 | 0 |
+| Regelverstöße (Regel × Seite) | 26 | 0 |
+
+Die Standort- und Probe-Seite lieferten vor der Korrektur HTTP 500, sobald ein Ziel eine Minute lang nicht
+antwortete; ihre Baseline-Werte stammen daher vom Stand mit diesem Fix.
+
+### Befunde und Korrekturen
+
+| # | Befund | WCAG / Kriterium | Wirkung | Korrektur |
+| --- | --- | --- | --- | --- |
+| 1 | Standort-/Probe-Seite HTTP 500, wenn alle Pings der letzten Minute verloren sind | Funktion | kritisch – Dashboard fällt genau bei Störungen aus | `vm.live_status` belegt alle Schlüssel vor (parallel auch auf `main` behoben) |
+| 2 | 22 Eingabefelder und 9 Auswahllisten der Alarmregeln ohne Namen | 1.3.1, 4.1.2 | kritisch für Screenreader | `aria-label` mit Regel + Spalte, Regelname als Zeilenkopf |
+| 3 | Kontrast: Warnung 2,8:1, ok 4,0:1, Badges 2,3/4,1:1, Feldränder 1,35:1 (hell) | 1.4.3, 1.4.11 | hoch | neue Farbwerte nahe der Markenpalette, Token-Test |
+| 4 | Fehler im Check-Formular nur als Meldung oben, ohne Feldbezug; kein `aria-invalid` | 3.3.1, 3.3.3, 1.3.1 | hoch | Fehlerübersicht (fokussiert, verlinkt) + Meldung am Feld |
+| 5 | Auto-Refresh alle 30 s lädt auch Seiten mit Formular neu – Eingaben gehen verloren | 2.2.1, 3.2.2 | hoch | kein Neuladen bei fokussiertem/geändertem Formular |
+| 6 | Kein Skip-Link; 7 Tab-Schritte bis zum Inhalt | 2.4.1 | mittel | „Zum Inhalt springen“ |
+| 7 | Leere Tabellenköpfe (Aktionen-Spalten) | 1.3.1 | mittel | `sr-only`-Text |
+| 8 | Statuspunkte ohne Text (Dauerpings der Probe) | 1.4.1 | mittel | Text „ok/Verlust/gestört/keine Daten“ |
+| 9 | Links im Navigationspfad nur über Farbe erkennbar (1,3:1 zum Text) | 1.4.1 | mittel | unterstrichen |
+| 10 | Überschriften springen h1 → h3 (Bandbreite, Ausfälle) | 1.3.1 | niedrig | h2 |
+| 11 | Zwei `<nav>` ohne Namen, aktuelle Seite nur per Klasse | 1.3.1, 4.1.2 | niedrig | `aria-label`, `aria-current` |
+| 12 | Layout-Sprung im Check-Formular (Felder werden erst per JS ausgeblendet) | CLS | niedrig | Sichtbarkeit serverseitig |
+| 13 | Hauptnavigation bei 320 px abgeschnitten | 1.4.10 | niedrig | Umbruch |
+| 14 | Kommentarfeld beim Bestätigen nur mit Platzhalter beschriftet; „Bestätigen“ je Zeile nicht unterscheidbar | 3.3.2, 2.4.6 | niedrig | `aria-label` mit Alarmtext |
+| 15 | Schweregrade englisch („critical“) in deutscher Oberfläche | Verständlichkeit | niedrig | „kritisch / Warnung / Info“ |
+| 16 | Fokusring auf dem Uhrsymbol von Zeitfeldern kaum sichtbar | 2.4.7 | niedrig | `input:focus-within` |
+| 17 | Hinweistexte Ziel/Ausfälle schwer lesbar (WSTF 16,4 / 12,7) | Lesbarkeit | niedrig | umformuliert (WSTF 10,9 / 7,6) |
+
+Reproduzieren: `e2e/start-server.sh`, dann die genannte Seite öffnen; für 1 die Probe eine Minute nichts melden
+lassen (oder `tests/test_web.py::LiveStatusGapsTest`); für 5 auf der Probe-Seite ein Feld ändern und 30 s warten;
+für 2–4, 6–11 und 14 meldet `npx playwright test` bzw. axe die Stelle, wenn man den alten Stand auscheckt.
+
+### Manuell geprüft (ohne Screenreader)
+
+- Tastatur: Anmeldung, Navigation, Check-Formular inkl. Fehlerkorrektur, Zeitraum-Buttons – vollständig bedienbar, keine Fokusfalle.
+- Reflow: alle Seiten bei 320 und 640 px ohne seitliches Scrollen der Seite; breite Tabellen scrollen in ihrem Container.
+- Nähe: Label-zu-Feld-Abstand 0,25 rem, Feld-zu-Feld 1,1 rem; bei 1280/768/320 px liegt jedes Label näher am eigenen Feld.
+- Hick: Hauptnavigation 3–4 Punkte, Verwaltung gegliedert mit Sprungmarken, Check-Formulare in Feldgruppen.
+  Das iperf3-Formular zeigt bis zu 16 Felder gleichzeitig – Vorschlag zum Einklappen siehe offene Punkte.
+- Nicht geprüft: Screenreader-Ausgabe (NVDA/VoiceOver), echte Mobilgeräte, Windows-Hochkontrastmodus.
+
 Offene Punkte mit Verantwortlichkeit (Projektverantwortliche/r, bis zum nächsten Minor-Release):
 
 | Punkt | Art | Nächster Schritt |

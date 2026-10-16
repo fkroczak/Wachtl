@@ -50,7 +50,7 @@ test("Fokus ist auf jedem Bedienelement sichtbar", async ({ page }) => {
                outline: cs.outlineStyle, width: parseFloat(cs.outlineWidth), shadow: cs.boxShadow };
     });
     const visible = (style.outline !== "none" && style.width >= 2) || style.shadow !== "none";
-    expect(visible, `kein sichtbarer Fokus auf ${style.tag} ${style.name}`).toBe(true);
+    expect(visible, `kein sichtbarer Fokus auf ${style.tag} ${style.name}: ${JSON.stringify(style)}`).toBe(true);
   }
 });
 
