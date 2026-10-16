@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Enrollment-Token{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('web.admin') }}#enrollment">Verwaltung</a> / Enrollment-Token</p>
+<h1>Enrollment-Token für {{ site.name }}</h1>
+<div class="flash warn">Der Token wird nur jetzt angezeigt. Er gilt {{ days }} Tage für {{ max_uses }} Probe{{ 'n' if max_uses > 1 }}.</div>
+{% if not pin %}<p class="flash error">WACHTL_SPKI_PIN ist nicht gesetzt – bitte das Server-Setup bzw. <code>setup.sh</code> erneut ausführen.</p>{% endif %}
+
+<section class="steps">
+  <div class="card">
+    <h2>1 · Fertiges Paket (empfohlen)</h2>
+    {% if setup_name %}
+    <p>ZIP mit <code>{{ setup_name }}</code> und einer <code>wachtl-probe.ini</code>, in der Server, Pin und Token schon stehen.
+       Auf dem PC entpacken, Setup starten, nur noch <em>Weiter</em> klicken.</p>
+    <form method="post" action="{{ url_for('web.token_package') }}" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <label class="grow">Proxy für diese PCs (optional) <input name="proxy" placeholder="http://proxy.kunde.local:3128"></label>
+      <button class="primary">Paket herunterladen</button>
+    </form>
+    {% else %}
+    <p class="muted">Auf diesem Server liegt kein Probe-Setup. Windows-Server: im Setup enthalten. Linux: <code>WachtlProbeSetup-*.exe</code>
+      in den Ordner <code>deploy/probe</code> legen.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>2 · Setup von Hand</h2>
+    <p>Probe-Setup starten und diese Werte eintragen:</p>
+    <dl class="kvlist">
+      <dt>Server-Adresse</dt><dd><code class="copy">{{ server_url }}</code></dd>
+      <dt>SPKI-Pin</dt><dd><code class="copy">{{ pin }}</code></dd>
+      <dt>Token</dt><dd><code class="copy">{{ token }}</code></dd>
+    </dl>
+  </div>
+
+  <div class="card">
+    <h2>3 · Softwareverteilung / unbeaufsichtigt</h2>
+    <pre class="copy"><code>{{ setup_name or 'WachtlProbeSetup-0.2.0.exe' }} /VERYSILENT /SUPPRESSMSGBOXES /Server="{{ server_url }}" /Pin="{{ pin }}" /Token="{{ token }}"</code></pre>
+    <p class="muted small">Exit-Code 0 = Probe läuft. Alternativ per PowerShell-Skript:</p>
+    <pre class="copy"><code>.\Install-Wachtl.ps1 -Action Install -ServerUrl "{{ server_url }}" -EnrollToken "{{ token }}" -SpkiPin "{{ pin }}"</code></pre>
+  </div>
+</section>
+<p><a href="{{ url_for('web.admin') }}#enrollment">Zurück zur Verwaltung</a></p>
+{% endblock %}

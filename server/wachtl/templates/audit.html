@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Audit-Log{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / Audit-Log</p>
+<h1>Audit-Log</h1>
+<table>
+  <thead><tr><th>Zeit</th><th>Wer</th><th>Aktion</th><th>Objekt</th><th>Details</th></tr></thead>
+  <tbody>{% for r in rows %}
+    <tr><td class="nowrap">{{ r.ts|dt }}</td><td>{{ r.username or '–' }}</td><td><code>{{ r.action }}</code></td><td>{{ r.object or '' }}</td><td>{{ r.detail or '' }}</td></tr>
+  {% else %}<tr><td colspan="5" class="muted">Keine Einträge.</td></tr>{% endfor %}</tbody>
+</table>
+{% endblock %}

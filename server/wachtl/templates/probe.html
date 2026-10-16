@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ probe.hostname }}{% endblock %}
+{% block content %}
+<div data-autorefresh="30" hidden></div>
+<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</p>
+<h1>{{ probe.hostname }}</h1>
+
+<section class="cards">
+  <div class="card kv">
+    <dl>
+      <dt>Status</dt><dd>
+        {% if probe.status != 'active' %}<span class="dot off"></span> deaktiviert
+        {% elif probe_online(probe) %}<span class="dot ok"></span> online
+        {% else %}<span class="dot down"></span> offline{% endif %}</dd>
+      <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
+      <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}</dd>
+      <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
+      <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
+      <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>
+      <dt>Puffer (nicht gesendet)</dt><dd>{{ probe.buffer_items or 0 }} Werte</dd>
+      <dt>Registriert</dt><dd>{{ probe.created_at|dt }}</dd>
+    </dl>
+  </div>
+</section>
+
+{% if has_role(user, 'admin') %}
+<div class="actions">
+  <form method="post" action="{{ url_for('web.probe_status', probe_id=probe.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if probe.status == 'active' %}
+      <button name="action" value="disable" data-confirm="Probe deaktivieren? Ihr Token wird sofort abgelehnt.">Deaktivieren</button>
+    {% else %}
+      <button name="action" value="enable">Aktivieren</button>
+    {% endif %}
+  </form>
+  <form method="post" action="{{ url_for('web.probe_delete', probe_id=probe.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger" data-confirm="Probe {{ probe.hostname }} endgültig löschen?">Löschen</button>
+  </form>
+</div>
+{% endif %}
+
+<h2>Ziele</h2>
+{% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
+<table>
+  <thead><tr><th>Status</th><th>Name</th><th>Ziel</th><th>Rolle</th><th>Intervall</th><th>Latenz 1 min</th><th>Verlust 5 min</th></tr></thead>
+  <tbody>
+  {% for c, v in rows %}
+    <tr>
+      <td><span class="dot {{ cell_state(v) }}"></span></td>
+      <td><a href="{{ url_for('web.target', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
+      <td>{{ c.target }}</td>
+      <td>{{ CHECK_ROLES[c.role] }}</td>
+      <td>{{ c.interval_s }} s</td>
+      <td>{{ (v.rtt if v else None)|ms }}</td>
+      <td>{{ (v.loss if v else None)|pct }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">Keine Checks zugewiesen.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Letzte Alarme</h2>
+{% if alerts %}
+<table>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Ende</th></tr></thead>
+  <tbody>{% for a in alerts %}
+    <tr><td><span class="badge {{ a.severity }}">{{ a.severity }}</span></td><td>{{ a.summary or a.alertname }}</td>
+      <td>{{ a.starts_at|dt }}</td><td>{{ a.ends_at|dt if a.ends_at else 'aktiv' }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Keine Alarme für diese Probe.</p>{% endif %}
+{% endblock %}

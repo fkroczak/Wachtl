@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ site.name }}{% endblock %}
+{% block content %}
+<div data-autorefresh="30" hidden></div>
+<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</p>
+<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
+{% if site.description %}<p class="muted">{{ site.description }}</p>{% endif %}
+{% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
+
+{% if probes %}
+<p class="muted">Durchschnittliche Latenz der letzten Minute und Paketverlust der letzten 5 Minuten, je Ziel und Probe.</p>
+<div class="scroll">
+<table class="matrix">
+  <thead>
+    <tr><th>Ziel</th>
+      {% for p in probes %}
+      <th><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>
+        <br><span class="muted small">{{ 'online' if probe_online(p) else 'offline' }}</span></th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in checks %}
+    <tr>
+      <th>{{ c.name }}<br><span class="muted small">{{ c.target }} · {{ CHECK_ROLES[c.role] }}</span></th>
+      {% for p in probes %}
+        {% if (c.id, p.id) in matrix %}
+          {% set v = matrix[(c.id, p.id)] %}
+          <td class="cell {{ cell_state(v) }}">
+            <a href="{{ url_for('web.target', probe_id=p.id, check_id=c.id) }}">
+              {{ (v.rtt if v else None)|ms }}<br><span class="small">{{ (v.loss if v else None)|pct }}</span>
+            </a>
+          </td>
+        {% else %}<td class="cell na">nicht zugewiesen</td>{% endif %}
+      {% endfor %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
+{% endblock %}

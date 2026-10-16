@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Anmelden{% endblock %}
+{% block content %}
+<div class="login">
+  <h1 class="sr-only">Wachtl</h1>
+  <img class="wordmark wordmark-light" src="{{ url_for('static', filename='wachtl-wordmark.svg') }}" alt="Wachtl">
+  <img class="wordmark wordmark-dark" src="{{ url_for('static', filename='wachtl-wordmark-dark.svg') }}" alt="Wachtl">
+  <p class="tagline">Netzwerk-Monitoring</p>
+  <form method="post" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Benutzername <input name="username" autocomplete="username" required autofocus></label>
+    <label>Passwort <input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="primary">Anmelden</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <title>Wachtl</title>
+  <rect width="128" height="128" rx="26" fill="#6B4A2E"/>
+  <g transform="translate(66 66) scale(1.02) translate(-72 -66)">
+    <path d="M41 49 C40.5 40 46.5 34.5 54 35 C59 35.3 62 38 64.5 41 C73 36.5 87 35.5 97 41 C105 45.5 110 53 113 60 L120 64 L112 69 C108 86 94 96 76 96 C56 96 42 86 41 71 C40.5 64 41 59 41.5 56 L33 52.5 Z" stroke="#F7F4EE" stroke-width="7"/>
+    <circle cx="50" cy="46" r="3.4" fill="#F7F4EE"/>
+    <path d="M25 44 A11 11 0 0 0 25 61" stroke="#E2B25A" stroke-width="7"/>
+  </g>
+</svg>

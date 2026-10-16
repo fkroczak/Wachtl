@@ -1,0 +1,30 @@
+# Traefik: TLS mit dem selbstsignierten Zertifikat aus ./certs, alles an den Flask-Collector.
+http:
+  routers:
+    wachtl:
+      rule: "PathPrefix(`/`)"
+      entryPoints: [websecure]
+      service: wachtl
+      middlewares: [security-headers]
+      tls: {}
+  middlewares:
+    security-headers:
+      headers:
+        stsSeconds: 31536000
+        frameDeny: true
+        contentTypeNosniff: true
+  services:
+    wachtl:
+      loadBalancer:
+        servers:
+          - url: "http://app:8000"
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/wachtl.crt
+        keyFile: /certs/wachtl.key

@@ -1,0 +1,152 @@
+# Wachtl – zentraler Server pro Kunde.
+# Start und Erstkonfiguration über ./setup.sh, nicht direkt mit docker compose.
+name: wachtl
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  traefik:
+    image: traefik:${TRAEFIK_VERSION:-v3.3}
+    restart: unless-stopped
+    command:
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --log.level=WARN
+      - --accesslog=false
+      - --global.sendanonymoususage=false
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./certs:/certs:ro
+    networks: [edge]
+    logging: *logging
+
+  app:
+    build: ../server
+    image: wachtl-app:local
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      WACHTL_DATABASE_URL: postgresql://wachtl:${POSTGRES_PASSWORD}@postgres:5432/wachtl
+      WACHTL_VM_RAW_URL: http://vm-raw:8428
+      WACHTL_VM_AGG_URL: http://vm-agg:8428
+      WACHTL_VMALERT_URL: http://vmalert:8880
+      WACHTL_ALERTMANAGER_URL: http://alertmanager:9093
+      WACHTL_RULES_DIR: /rules
+      WACHTL_AM_CONFIG: /amconfig/alertmanager.yml
+      WACHTL_INTERNAL_URL: http://app:8000
+      WACHTL_TRUST_PROXY: "1"
+      WACHTL_PROBE_DIR: /probe
+    volumes:
+      - rules:/rules
+      - amconfig:/amconfig
+      - ./probe:/probe:ro   # WachtlProbeSetup-*.exe hier ablegen -> Download im Web-UI
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [edge, internal]
+    logging: *logging
+
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wachtl
+      POSTGRES_USER: wachtl
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wachtl -d wachtl"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [internal]
+    logging: *logging
+
+  # 1-s-Rohdaten, kurze Aufbewahrung
+  vm-raw:
+    image: victoriametrics/victoria-metrics:${VM_VERSION:-v1.149.0}
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=${RAW_RETENTION:-30d}
+      - -httpListenAddr=:8428
+      - -search.maxPointsPerTimeseries=100000
+    volumes:
+      - vmraw:/storage
+    networks: [internal]
+    logging: *logging
+
+  # 1-min-Aggregate, lange Aufbewahrung (Monate)
+  vm-agg:
+    image: victoriametrics/victoria-metrics:${VM_VERSION:-v1.149.0}
+    restart: unless-stopped
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=${AGG_RETENTION:-13}
+      - -httpListenAddr=:8428
+    volumes:
+      - vmagg:/storage
+    networks: [internal]
+    logging: *logging
+
+  vmalert:
+    image: victoriametrics/vmalert:${VM_VERSION:-v1.149.0}
+    restart: unless-stopped
+    command:
+      - -rule=/rules/*.yml
+      - -datasource.url=http://vm-raw:8428
+      - -remoteWrite.url=http://vm-agg:8428
+      - -remoteRead.url=http://vm-agg:8428
+      - -notifier.url=http://alertmanager:9093
+      - -evaluationInterval=15s
+      - -rule.evalDelay=30s
+      - -httpListenAddr=:8880
+      - -external.url=${WACHTL_PUBLIC_URL}/alerts
+    volumes:
+      - rules:/rules:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [internal]
+    logging: *logging
+
+  alertmanager:
+    image: prom/alertmanager:${ALERTMANAGER_VERSION:-v0.28.1}
+    restart: unless-stopped
+    command:
+      - --config.file=/amconfig/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.external-url=${WACHTL_PUBLIC_URL}/alerts
+      - --cluster.listen-address=
+    volumes:
+      - amconfig:/amconfig:ro
+      - amdata:/alertmanager
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [internal]
+    logging: *logging
+
+networks:
+  edge:
+  internal:
+
+volumes:
+  pgdata:
+  vmraw:
+  vmagg:
+  rules:
+  amconfig:
+  amdata:

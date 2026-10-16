@@ -1,0 +1,82 @@
+# Wachtl
+
+Netzwerk-Monitoring für Kunden mit mehreren Standorten: Windows-PCs und -Server messen als Dienst
+Latenz und Paketverlust (Ping im 1-s-Takt), ein zentraler Server beim Kunden speichert, wertet aus,
+zeigt Graphen und alarmiert per E-Mail oder Microsoft Teams.
+
+Der Server läuft wahlweise als **Linux-VM mit Docker** oder als **Windows-Dienst** (Setup-Assistent, kein Docker).
+
+```
+Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Flask-Collector + Web-UI ─▶ PostgreSQL
+                                                                     │
+                                                                     ▼
+                                              VictoriaMetrics raw (1 s, 30 Tage)
+                                                       │ vmalert: 1-min-Aggregate + Alarmregeln
+                                                       ▼
+                                              VictoriaMetrics agg (1 min, 13 Monate)
+                                              Alertmanager ─▶ E-Mail / Teams, Historie zurück an Flask
+```
+
+## Stand: 0.2
+
+| Bereich | Enthalten |
+| --- | --- |
+| Probe | Windows-Dienst (.NET 8, eine .exe), Ping 1–60 s, Gateway-Erkennung, Jitter, lokaler Puffer (SQLite, 7 Tage), Enrollment mit Token, Zertifikats-Pinning, Proxy |
+| Server | Probe-API, Ingest nach VictoriaMetrics, zentrale Check-Verwaltung, Rollen (Admin, Operator, Nur lesen), Audit-Log |
+| Dashboard | Übersicht, Standort-Matrix (alle Probes im Vergleich), Probe-Detail, Ziel-Detail mit Graph (1 h – 30 Tage) und Statistik (1 min – 24 h) |
+| Alarme | Probe offline, Ziel nicht erreichbar (3 Fehler in Folge), WAN gestört, Paketverlust, Latenz; Bestätigen = Stummschalten; Historie |
+| Betrieb | Linux: `setup.sh`, `backup.sh`/`restore.sh` · Windows: Setup-Assistent, `wachtl-server.cmd` |
+| Probe-Installation | Setup-Assistent mit Verbindungs- und Pin-Prüfung, fertiges Paket aus dem Web-UI (Server, Pin, Token vorbelegt), unbeaufsichtigt per Parameter; alternativ `Install-Wachtl.ps1` |
+| Marke | Flaches Logo mit Wachtel-Umriss, Farben Wachtelbraun/Ocker/Weizen; Quelle `brand/render.py` |
+| Benachrichtigungen | E-Mail und Teams im Web-UI einstellbar, mit Testnachricht |
+
+Nächste Phasen: Traceroute mit Routenvergleich, DNS-, HTTP/HTTPS- und TCP-Checks, iperf3, MTU, Berichte (PDF/CSV),
+Heatmaps, mTLS und automatische Probe-Updates.
+
+## Ordner
+
+| Pfad | Inhalt |
+| --- | --- |
+| `server/` | Flask-Collector und Dashboard (Python 3.12), Tests unter `server/tests` |
+| `probe/` | Windows-Probe (C# / .NET 8) und xUnit-Tests, `build.ps1` |
+| `installer/` | `Install-Wachtl.ps1` – Installation, Update, Status, Deinstallation der Probe |
+| `deploy/` | Linux: Docker-Compose-Stack, `setup.sh`, Backup und Restore |
+| `windows/` | Windows-Server: Setup-Assistent (`WachtlServer.iss`), `build-server.ps1`, `wachtl-server.cmd`, `assets/` (Symbole, Assistenten-Bilder) |
+| `probe/setup/` | Client-Setup-Assistent (`WachtlProbe.iss`) |
+| `brand/` | Logo-Quelle und Generator für SVG, PNG, ICO und Assistenten-Bilder |
+| `server/wachtl/win/` | Windows-Laufzeit: Dienst-Supervisor, HTTPS-Server, Einrichtung, Backup |
+| `docs/` | Installationsanleitungen, Betrieb, Sicherheit, API |
+
+## Schnellstart
+
+1. Server, eine von zwei Varianten:
+   - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.2.0.exe` starten
+2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
+   echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
+3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md)
+4. Betrieb, Backup, Updates, Sicherheit, Alarme: [docs/BETRIEB.md](docs/BETRIEB.md)
+
+## Entwicklung
+
+```bash
+cd server
+pip install -r requirements-dev.txt
+python -m pytest -q                              # 49 Tests (inkl. Windows-Logik im Trockenlauf)
+
+# Lokal ohne Docker: Fake-VictoriaMetrics + SQLite
+python devtools/fake_vm.py 18428 &
+export WACHTL_SECRET_KEY=dev WACHTL_DATABASE_URL=sqlite:///dev.db WACHTL_RULES_DIR=./rules \
+       WACHTL_VM_RAW_URL=http://127.0.0.1:18428 WACHTL_VM_AGG_URL=http://127.0.0.1:18428 \
+       WACHTL_VMALERT_URL= WACHTL_ALERTMANAGER_URL= WACHTL_COOKIE_SECURE=0 \
+       WACHTL_INITIAL_ADMIN_PASSWORD=admin-passwort-123
+flask --app wachtl init && flask --app wachtl run
+# Enrollment-Token im UI erzeugen, dann Demodaten einspielen:
+python devtools/simulate_probes.py http://127.0.0.1:5000 <token> 2
+```
+
+```powershell
+cd probe
+dotnet test Wachtl.Probe.Tests
+.\build.ps1        # erzeugt ..\dist\wachtl-probe.exe + Install-Wachtl.ps1
+```

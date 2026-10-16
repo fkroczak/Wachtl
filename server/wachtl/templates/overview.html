@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Übersicht{% endblock %}
+{% block content %}
+<div data-autorefresh="30" hidden></div>
+<h1>Übersicht</h1>
+{% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
+
+<section class="cards">
+  <div class="card stat"><span class="num">{{ sites|length }}</span><span>Standorte</span></div>
+  <div class="card stat"><span class="num">{{ probes|selectattr('status','equalto','active')|list|length }}</span><span>Probes aktiv</span></div>
+  <div class="card stat {{ 'bad' if alerts else '' }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></div>
+</section>
+
+<h2>Aktive Alarme</h2>
+{% if alerts %}
+<table>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th><th>Bestätigt</th></tr></thead>
+  <tbody>
+  {% for a in alerts %}
+    <tr>
+      <td><span class="badge {{ a.severity }}">{{ a.severity }}</span></td>
+      <td>{{ a.summary or a.alertname }}</td>
+      <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
+      <td>{{ a.acked_by or '–' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Keine aktiven Alarme.</p>{% endif %}
+
+<h2>Standorte</h2>
+{% if sites %}
+<div class="cards">
+  {% for s in sites %}
+  <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}">
+    <div><strong>{{ s.name }}</strong>{% if s.customer_no %} <span class="muted">· {{ s.customer_no }}</span>{% endif %}</div>
+    <span>{{ site_stats[s.id].online }} / {{ site_stats[s.id].probes }} Probes online</span>
+  </a>
+  {% endfor %}
+</div>
+{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.admin') }}#standorte">Jetzt anlegen</a>{% endif %}</p>{% endif %}
+
+<h2>Probes</h2>
+{% if probes %}
+<table>
+  <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Ziele ok / Warnung / gestört</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
+  <tbody>
+  {% for p in probes %}
+    {% set st = per_probe.get(p.id|string, {'ok':0,'warn':0,'down':0}) %}
+    <tr>
+      <td>
+        {% if p.status != 'active' %}<span class="dot off"></span> deaktiviert
+        {% elif probe_online(p) %}<span class="dot ok"></span> online
+        {% else %}<span class="dot down"></span> offline{% endif %}
+      </td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a></td>
+      <td>{{ p.site_name }}</td>
+      <td><span class="ok-t">{{ st.ok }}</span> / <span class="warn-t">{{ st.warn }}</span> / <span class="down-t">{{ st.down }}</span></td>
+      <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
+      <td>{{ p.buffer_items or 0 }}</td>
+      <td>{{ p.version or '–' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Noch keine Probes registriert.</p>{% endif %}
+{% endblock %}

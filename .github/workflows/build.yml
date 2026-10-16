@@ -1,0 +1,145 @@
+name: Build und Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  WACHTL_VERSION: "0.2.0"
+
+jobs:
+  server:
+    name: Server-Tests (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  probe:
+    name: Windows-Probe bauen (C#)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Testen und veröffentlichen
+        shell: pwsh
+        run: ./probe/build.ps1 -Version $env:WACHTL_VERSION -Output "${{ github.workspace }}/dist/probe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wachtl-probe-win-x64
+          path: dist/probe/
+
+  windows-server:
+    name: Windows-Server-Setup bauen und testen
+    runs-on: windows-latest
+    needs: [server, probe]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: wachtl-probe-win-x64
+          path: dist/probe
+      - name: Setup-Assistent bauen
+        shell: pwsh
+        run: ./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist
+
+      - name: Unbeaufsichtigt installieren
+        shell: pwsh
+        run: |
+          $setup = "dist/WachtlServerSetup-$env:WACHTL_VERSION.exe"
+          $p = Start-Process $setup -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/LOG=dist\setup-install.log',
+            '/Hostnames=localhost,127.0.0.1', '/HttpsPort=8443', '/HttpPort=8080',
+            '/AdminPassword=ci-test-passwort-123', '/DataDir=C:\WachtlData')
+          Write-Host "Setup beendet mit $($p.ExitCode)"
+          Get-Content C:\WachtlData\logs\setup.log -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw 'Setup fehlgeschlagen' }
+
+      - name: Server prüfen
+        shell: pwsh
+        run: |
+          Get-Service WachtlServer | Format-List Name, Status, StartType
+          (Get-CimInstance Win32_Service -Filter "Name='WachtlServer'").StartName
+          # HTTPS mit selbstsigniertem Zertifikat, Healthcheck und Login-Seite
+          $ok = $false
+          foreach ($i in 1..30) {
+            try { $r = Invoke-WebRequest https://localhost:8443/healthz -SkipCertificateCheck -UseBasicParsing; $ok = $true; break }
+            catch { Start-Sleep 5 }
+          }
+          if (-not $ok) { Get-ChildItem C:\WachtlData\logs; Get-Content C:\WachtlData\logs\*.log -Tail 30; throw 'Server antwortet nicht' }
+          Write-Host $r.Content
+          $login = Invoke-WebRequest https://localhost:8443/login -SkipCertificateCheck -UseBasicParsing
+          if ($login.StatusCode -ne 200) { throw 'Login-Seite fehlt' }
+          $redir = Invoke-WebRequest http://localhost:8080/ -MaximumRedirection 0 -SkipHttpErrorCheck -UseBasicParsing
+          if ($redir.StatusCode -ne 301) { throw 'HTTP-Umleitung fehlt' }
+          & "${env:ProgramFiles}\Wachtl Server\wachtl-server.cmd" status
+          if ($LASTEXITCODE -ne 0) { throw 'Status meldet Fehler' }
+          & "${env:ProgramFiles}\Wachtl Server\wachtl-server.cmd" backup
+          Get-ChildItem C:\WachtlData\backups
+
+      - name: Probe-Setup unbeaufsichtigt installieren und anmelden lassen
+        shell: pwsh
+        run: |
+          $w = "${env:ProgramFiles}\Wachtl Server\wachtl-server.cmd"
+          $pin = (Get-Content C:\WachtlData\config\wachtl.env | Where-Object { $_ -like 'WACHTL_SPKI_PIN=*' }) -replace '^WACHTL_SPKI_PIN=', ''
+          $token = (& $w create-token --site CI --uses 2 | Select-Object -Last 1).Trim()
+          if ($token -notlike 'wachtl-*') { throw "Kein Token: $token" }
+          $setup = Get-ChildItem dist/probe/WachtlProbeSetup-*.exe | Select-Object -First 1
+          $p = Start-Process $setup.FullName -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/LOG=dist\probe-install.log',
+            '/Server=https://localhost:8443', "/Pin=$pin", "/Token=$token", '/Hostname=CI-PROBE')
+          Write-Host "Probe-Setup beendet mit $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { Get-Content dist\probe-install.log -Tail 60; throw 'Probe-Setup fehlgeschlagen' }
+          Get-Service Wachtl | Format-List Name, Status, StartType
+          & "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" status
+          $online = $false
+          foreach ($i in 1..12) {
+            Start-Sleep 10
+            $list = & $w probes
+            $list
+            if ($list -match 'CI-PROBE.*online') { $online = $true; break }
+          }
+          if (-not $online) { Get-Content C:\ProgramData\Wachtl\logs\*.log -Tail 40; throw 'Probe meldet sich nicht' }
+
+      - name: Probe deinstallieren
+        shell: pwsh
+        run: |
+          $p = Start-Process "${env:ProgramFiles}\Wachtl\unins000.exe" -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES'
+          if ($p.ExitCode -ne 0) { throw "Probe-Deinstallation fehlgeschlagen ($($p.ExitCode))" }
+          if (Get-Service Wachtl -ErrorAction SilentlyContinue) { throw 'Probe-Dienst noch vorhanden' }
+
+      - name: Logs bei Fehler
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem C:\WachtlData\logs -ErrorAction SilentlyContinue | ForEach-Object { "==== $($_.Name)"; Get-Content $_.FullName -Tail 50 }
+          Get-Content dist\setup-install.log -Tail 80 -ErrorAction SilentlyContinue
+          Get-Content dist\probe-install.log -Tail 80 -ErrorAction SilentlyContinue
+          Get-ChildItem C:\ProgramData\Wachtl\logs -ErrorAction SilentlyContinue | ForEach-Object { "==== $($_.Name)"; Get-Content $_.FullName -Tail 40 }
+
+      - name: Deinstallieren
+        shell: pwsh
+        run: |
+          $p = Start-Process "${env:ProgramFiles}\Wachtl Server\unins000.exe" -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES'
+          if ($p.ExitCode -ne 0) { throw "Deinstallation fehlgeschlagen ($($p.ExitCode))" }
+          if (Get-Service WachtlServer -ErrorAction SilentlyContinue) { throw 'Dienst noch vorhanden' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wachtl-setups
+          path: |
+            dist/WachtlServerSetup-*.exe
+            dist/probe/WachtlProbeSetup-*.exe

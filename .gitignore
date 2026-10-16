@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.db
+.pytest_cache/
+server/rules/
+deploy/.env
+deploy/certs/
+deploy/backups/
+bin/
+obj/
+dist/

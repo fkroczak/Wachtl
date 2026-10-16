@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Ziel</p>
+<h1>{{ check.name }} <span class="muted">· {{ check.target }}</span></h1>
+<p class="muted">{{ CHECK_ROLES[check.role] }} · Ping alle {{ check.interval_s }} s · Timeout {{ check.timeout_ms }} ms</p>
+
+<div id="chart-panel" data-series-url="{{ url_for('api_admin.series', probe_id=probe.id, check_id=check.id) }}"
+     data-stats-url="{{ url_for('api_admin.stats', probe_id=probe.id, check_id=check.id) }}">
+  <div class="range-buttons">
+    {% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}">{{ r }}</button>{% endfor %}
+    <span id="chart-source" class="muted small"></span>
+  </div>
+  <div class="legend small"><span class="lg-avg"></span> Durchschnitt <span class="lg-band"></span> Min–Max <span class="lg-loss"></span> Paketverlust</div>
+  <div id="chart" class="chart"></div>
+  <p id="chart-error" class="flash error" hidden></p>
+</div>
+
+<h2>Statistik</h2>
+<table id="stats">
+  <thead><tr><th>Zeitraum</th><th>Min</th><th>Median</th><th>Durchschnitt</th><th>Max</th><th>Jitter</th><th>Verlust</th></tr></thead>
+  <tbody>
+  {% for w in windows %}
+    <tr data-window="{{ w }}"><th>{{ w }}</th><td data-k="min">…</td><td data-k="median">…</td><td data-k="avg">…</td><td data-k="max">…</td><td data-k="jitter">…</td><td data-k="loss">…</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted small">Bis 6 h aus den 1-s-Rohdaten, darüber aus 1-min-Aggregaten. Jitter = mittlere Differenz aufeinanderfolgender Antwortzeiten.</p>
+{% endblock %}

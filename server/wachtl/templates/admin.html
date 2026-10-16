@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Verwaltung{% endblock %}
+{% block content %}
+<h1>Verwaltung</h1>
+<nav class="subnav">
+  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#checks">Checks</a>
+  <a href="#alarme">Alarmregeln</a><a href="#benachrichtigungen">Benachrichtigungen</a><a href="#benutzer">Benutzer</a><a href="{{ url_for('web.audit') }}">Audit-Log</a>
+</nav>
+
+<section id="standorte">
+  <h2>Standorte</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sites %}
+      <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
+        <td><form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?">Löschen</button></form></td></tr>
+    {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="{{ url_for('web.site_create') }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Name <input name="name" required maxlength="100"></label>
+    <label>Kundennummer <input name="customer_no" maxlength="20"></label>
+    <label class="grow">Beschreibung <input name="description" maxlength="200"></label>
+    <button class="primary">Standort anlegen</button>
+  </form>
+</section>
+
+<section id="enrollment">
+  <h2>Probes registrieren</h2>
+  <p class="muted">Ein Enrollment-Token gilt für einen Standort. Mit mehreren Nutzungen kannst du einen Token für alle PCs eines Standorts verwenden.
+    Nach dem Erzeugen gibt es ein fertiges Installationspaket für die PCs.
+    {% if probe_setup %}<a href="{{ url_for('web.probe_setup_download') }}">{{ probe_setup.name }} herunterladen</a>{% endif %}</p>
+  {% if tokens %}
+  <table>
+    <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th></th></tr></thead>
+    <tbody>{% for t in tokens %}
+      <tr><td>{{ t.site_name }}</td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
+        <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger">Widerrufen</button></form></td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% endif %}
+  <form method="post" action="{{ url_for('web.token_create') }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Standort
+      <select name="site_id" required>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Nutzungen <input name="max_uses" type="number" min="1" max="500" value="1"></label>
+    <label>Gültig (Tage) <input name="days" type="number" min="1" max="90" value="7"></label>
+    <label class="grow">Beschreibung <input name="description" maxlength="200" placeholder="z. B. Rollout Erdgeschoss"></label>
+    <button class="primary" {{ 'disabled' if not sites }}>Token erzeugen</button>
+  </form>
+</section>
+
+<section id="checks">
+  <h2>Checks</h2>
+  <p class="muted">Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt. Änderungen erreichen die Probes mit dem nächsten Heartbeat (≤ 30 s).</p>
+  <table>
+    <thead><tr><th>Name</th><th>Ziel</th><th>Rolle</th><th>Intervall</th><th>Timeout</th><th>Zuweisung</th><th>Status</th><th></th></tr></thead>
+    <tbody>{% for c in checks %}
+      <tr class="{{ '' if c.enabled else 'disabled' }}">
+        <td>{{ c.name }}</td><td>{{ c.target }}</td><td>{{ CHECK_ROLES[c.role] }}</td><td>{{ c.interval_s }} s</td><td>{{ c.timeout_ms }} ms</td>
+        <td>{{ assignments[c.id]|join(', ') }}</td>
+        <td>{{ 'aktiv' if c.enabled else 'pausiert' }}</td>
+        <td class="nowrap">
+          <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Pausieren' if c.enabled else 'Aktivieren' }}</button></form>
+          <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?">Löschen</button></form>
+        </td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+  <form method="post" action="{{ url_for('web.check_create') }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Name <input name="name" required maxlength="100" placeholder="z. B. Fileserver"></label>
+    <label>Ziel <input name="target" required maxlength="253" placeholder="IP, Hostname oder gateway"></label>
+    <label>Rolle <select name="role">{% for k, v in CHECK_ROLES.items() %}<option value="{{ k }}" {{ 'selected' if k == 'target' }}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Intervall <select name="interval_s">{% for i in intervals %}<option value="{{ i }}">{{ i }} s</option>{% endfor %}</select></label>
+    <label>Timeout (ms) <input name="timeout_ms" type="number" min="100" max="5000" value="1000"></label>
+    <label>Zuweisung
+      <select name="scope" id="scope-select">
+        <option value="all">Alle Probes</option><option value="site">Ein Standort</option><option value="probe">Eine Probe</option>
+      </select>
+    </label>
+    <label data-scope="site" hidden>Standort <select name="site_id">{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
+    <label data-scope="probe" hidden>Probe <select name="probe_id">{% for p in probes %}<option value="{{ p.id }}">{{ p.hostname }}</option>{% endfor %}</select></label>
+    <button class="primary">Check anlegen</button>
+  </form>
+</section>
+
+<section id="alarme">
+  <h2>Alarmregeln</h2>
+  <form method="post" action="{{ url_for('web.rules_update') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <table>
+      <thead><tr><th>Aktiv</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
+      <tbody>{% for r in rules %}
+        <tr>
+          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="aktiv"></td>
+          <td>{{ r.name }}</td>
+          <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num"></td>
+          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
+              {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num">{% endif %}</td>
+          <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num"></td>
+          <td><select name="severity_{{ r.kind }}">{% for sv in ('info','warning','critical') %}<option {{ 'selected' if sv == r.severity }}>{{ sv }}</option>{% endfor %}</select></td>
+        </tr>
+      {% endfor %}</tbody>
+    </table>
+    <button class="primary">Alarmregeln speichern</button>
+  </form>
+</section>
+
+<section id="benachrichtigungen">
+  <h2>Benachrichtigungen</h2>
+  {% if not notify_enabled %}<div class="flash error">Alertmanager-Datei ist nicht konfiguriert (WACHTL_AM_CONFIG).</div>{% endif %}
+  <p class="muted">Alarme gehen an alle eingetragenen Empfänger. Leere Felder schalten den Kanal ab. Mehrere E-Mail-Empfänger mit Komma trennen.</p>
+  {% set n = notify_settings %}
+  <form method="post" action="{{ url_for('web.notify_update') }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="grow">E-Mail an <input name="email_to" value="{{ n.email_to }}" maxlength="500" placeholder="it@kunde.de"></label>
+    <label>Absender <input name="email_from" value="{{ n.email_from }}" maxlength="200" placeholder="wachtl@kunde.de"></label>
+    <label>SMTP-Server (host:port) <input name="smtp_smarthost" value="{{ n.smtp_smarthost }}" maxlength="200" placeholder="mail.kunde.de:587"></label>
+    <label>SMTP-Benutzer <input name="smtp_username" value="{{ n.smtp_username }}" maxlength="200" autocomplete="off"></label>
+    <label>SMTP-Passwort <input name="smtp_password" type="password" maxlength="200" autocomplete="new-password"
+      placeholder="{{ 'gesetzt – leer lassen = unverändert' if n.smtp_password else '' }}"></label>
+    <label class="check"><input type="checkbox" name="smtp_require_tls" {{ 'checked' if n.smtp_require_tls == 'true' }}> STARTTLS verlangen</label>
+    {% if n.smtp_password %}<label class="check"><input type="checkbox" name="clear_password"> Passwort löschen</label>{% endif %}
+    <label class="grow">Microsoft-Teams-Webhook <input name="teams_webhook_url" value="{{ n.teams_webhook_url }}" maxlength="1000"
+      placeholder="https://… (Teams-Workflow „Bei Empfang einer Teams-Webhookanforderung posten“)"></label>
+    <button class="primary">Speichern</button>
+  </form>
+  <form method="post" action="{{ url_for('web.notify_test') }}" class="inline-actions">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button {{ 'disabled' if not (n.email_to or n.teams_webhook_url) }}>Testnachricht senden</button>
+  </form>
+</section>
+
+<section id="benutzer">
+  <h2>Benutzer</h2>
+  <table>
+    <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th></th></tr></thead>
+    <tbody>{% for u in users %}
+      <tr><td>{{ u.username }}</td><td>{{ ROLE_LABELS[u.role] }}</td><td>{{ u.last_login|dt }}</td>
+        <td>{% if u.id != user.id %}<form method="post" action="{{ url_for('web.user_delete', user_id=u.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Benutzer {{ u.username }} löschen?">Löschen</button></form>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <form method="post" action="{{ url_for('web.user_create') }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Benutzername <input name="username" required maxlength="64" autocomplete="off"></label>
+    <label>Passwort (min. 12 Zeichen) <input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+    <label>Rolle <select name="role">{% for r in roles %}<option value="{{ r }}">{{ ROLE_LABELS[r] }}</option>{% endfor %}</select></label>
+    <button class="primary">Benutzer anlegen</button>
+  </form>
+</section>
+{% endblock %}

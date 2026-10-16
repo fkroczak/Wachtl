@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Konto{% endblock %}
+{% block content %}
+<h1>Konto {{ user.username }}</h1>
+<form method="post" class="stack narrow">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Altes Passwort <input name="old_password" type="password" required autocomplete="current-password"></label>
+  <label>Neues Passwort (min. 12 Zeichen) <input name="new_password" type="password" required minlength="12" autocomplete="new-password"></label>
+  <button class="primary">Passwort ändern</button>
+</form>
+{% endblock %}

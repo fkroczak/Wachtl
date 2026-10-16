@@ -1,0 +1,12 @@
+Wachtl Server enthält folgende Fremdkomponenten:
+
+Python 3.12 (eingebettete Distribution)  – Python Software Foundation License   https://www.python.org
+Flask, Werkzeug, Jinja2, click           – BSD-3-Clause                        https://palletsprojects.com
+cheroot                                  – BSD-3-Clause                        https://github.com/cherrypy/cheroot
+cryptography                             – Apache-2.0 / BSD                    https://cryptography.io
+requests, urllib3                        – Apache-2.0 / MIT                    https://requests.readthedocs.io
+PyYAML                                   – MIT                                 https://pyyaml.org
+VictoriaMetrics, vmalert, vmbackup,
+vmrestore (Community-Edition)            – Apache-2.0                          https://github.com/VictoriaMetrics/VictoriaMetrics
+Prometheus Alertmanager                  – Apache-2.0                          https://github.com/prometheus/alertmanager
+WinSW (Windows Service Wrapper)          – MIT                                 https://github.com/winsw/winsw
