@@ -29,6 +29,6 @@ if (-not $iscc) {
     $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 }
 $out = (Resolve-Path $Output).Path
-& $iscc "/DAppVersion=$Version" "/DPublishDir=$out" "/O$out" "$PSScriptRoot\setup\WachtlProbe.iss"
+& $iscc "/DAppVersion=$Version" "/DPublishDir=$out" "/O$out" "$PSScriptRoot\setup\WachtlProbe.iss" 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup fehlgeschlagen' }
 Write-Host "Fertig: $out\wachtl-probe.exe, $out\WachtlProbeSetup-$Version.exe" -ForegroundColor Green

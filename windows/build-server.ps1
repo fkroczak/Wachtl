@@ -148,7 +148,7 @@ if (-not $iscc) {
     $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
-& $iscc "/DAppVersion=$Version" "/DBuildDir=$Build" "/O$((Resolve-Path $Output).Path)" (Join-Path $PSScriptRoot 'WachtlServer.iss')
+& $iscc "/DAppVersion=$Version" "/DBuildDir=$Build" "/O$((Resolve-Path $Output).Path)" (Join-Path $PSScriptRoot 'WachtlServer.iss') 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup fehlgeschlagen' }
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 Write-Host "Fertig: $Output\WachtlServerSetup-$Version.exe" -ForegroundColor Green
