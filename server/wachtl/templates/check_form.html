@@ -1,12 +1,16 @@
 {% extends "base.html" %}
+{% from "_forms.html" import field, error_summary %}
 {% block title %}{{ 'Check bearbeiten' if check else 'Neuer Check' }} – {{ ctype.label }}{% endblock %}
 {% block content %}
 {% set fv = form or {} %}
-<p class="crumbs"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / <a href="{{ url_for('web.admin') }}#checks">Checks</a> / {{ 'Bearbeiten' if check else 'Neu' }}</p>
+{% set fe = field_errors or {} %}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / <a href="{{ url_for('web.admin') }}#checks">Checks</a> / {{ 'Bearbeiten' if check else 'Neu' }}</nav>
 <h1>{{ ctype.label }}{% if check %} <span class="muted">· {{ check.name }}</span>{% endif %}</h1>
 <p class="muted">{{ ctype.description }}</p>
 
-<form method="post" action="{{ url_for('web.check_create') }}" class="settings-form" data-check-form>
+{{ error_summary(errors) }}
+
+<form method="post" action="{{ url_for('web.check_create') }}" class="settings-form" data-check-form novalidate>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="type" value="{{ ctype.key }}">
   {% if check %}<input type="hidden" name="check_id" value="{{ check.id }}">{% endif %}
@@ -14,22 +18,28 @@
   <fieldset>
     <legend>Allgemein</legend>
     <div class="grid-form">
-      <label>Name <input name="name" required maxlength="100" value="{{ fv.name or (check.name if check else '') }}"
-        placeholder="{{ {'ping': 'z. B. Fileserver', 'path': 'z. B. Pfad zu Cloudflare', 'iperf': 'z. B. iperf zum Server', 'speedtest': 'z. B. Internet-Speedtest'}[ctype.key] }}"></label>
+      {% call(attrs) field("name", "Name", error=fe.name) %}
+        <input name="name" required maxlength="100" value="{{ fv.name or (check.name if check else '') }}" {{ attrs }}
+          placeholder="{{ {'ping': 'z. B. Fileserver', 'path': 'z. B. Pfad zu Cloudflare', 'iperf': 'z. B. iperf zum Server', 'speedtest': 'z. B. Internet-Speedtest'}[ctype.key] }}">
+      {% endcall %}
       {% if ctype.key in ('ping', 'path') %}
-        <label>{{ ctype.target_label }} <input name="target" required maxlength="253"
-          value="{{ fv.target or (check.target if check else ('1.1.1.1' if ctype.key == 'path' else '')) }}">
-          <small>{{ ctype.target_help }}</small></label>
+        {% call(attrs) field("target", ctype.target_label, help=ctype.target_help, error=fe.target) %}
+          <input name="target" required maxlength="253" {{ attrs }}
+            value="{{ fv.target or (check.target if check else ('1.1.1.1' if ctype.key == 'path' else '')) }}">
+        {% endcall %}
         {% if ctype.uses_role %}
-        <label>Rolle <select name="role">{% for k, v in CHECK_ROLES.items() %}
-          <option value="{{ k }}" {{ 'selected' if k == (fv.role or (check.role if check else 'target')) }}>{{ v }}</option>{% endfor %}</select>
-          <small>Gateway und Referenzen steuern die Ursachenerkennung bei Ausfällen.</small></label>
+        {% call(attrs) field("role", "Rolle", help="Gateway und Referenzziele helfen, bei einem Ausfall die Ursache zu erkennen.", error=fe.role) %}
+          <select name="role" {{ attrs }}>{% for k, v in CHECK_ROLES.items() %}
+            <option value="{{ k }}" {{ 'selected' if k == (fv.role or (check.role if check else 'target')) }}>{{ v }}</option>{% endfor %}</select>
+        {% endcall %}
         {% endif %}
         {% set cur_int = (fv.interval_s or (check.interval_s if check else 1))|int %}
-        <label>{{ 'Ping-Intervall je Hop' if ctype.key == 'path' else 'Intervall' }}
-          <select name="interval_s">{% for i in intervals %}<option value="{{ i }}" {{ 'selected' if i == cur_int }}>{{ i }} s</option>{% endfor %}</select></label>
-        <label>Timeout <span class="unit-input"><input name="timeout_ms" type="number" min="100" max="5000"
-          value="{{ fv.timeout_ms or (check.timeout_ms if check else 1000) }}"><span>ms</span></span></label>
+        {% call(attrs) field("interval_s", 'Ping-Intervall je Hop' if ctype.key == 'path' else 'Intervall', error=fe.interval_s) %}
+          <select name="interval_s" {{ attrs }}>{% for i in intervals %}<option value="{{ i }}" {{ 'selected' if i == cur_int }}>{{ i }} s</option>{% endfor %}</select>
+        {% endcall %}
+        {% call(attrs) field("timeout_ms", "Timeout", unit="ms", error=fe.timeout_ms) %}
+          <input name="timeout_ms" type="number" min="100" max="5000" value="{{ fv.timeout_ms or (check.timeout_ms if check else 1000) }}" {{ attrs }}>
+        {% endcall %}
       {% endif %}
     </div>
   </fieldset>
@@ -40,33 +50,32 @@
     <div class="grid-form">
     {% for f in fields %}
       {% set v = params[f.key] %}
-      <label {% if f.show_if %}data-show-if="{{ f.show_if[0] }}:{{ f.show_if[1]|join(',') }}"{% endif %} class="{{ 'check' if f.kind == 'bool' }}">
-      {% if f.kind == 'bool' %}
-        <input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }}> {{ f.label }}
-      {% else %}
-        {{ f.label }}
-        {% if f.kind == 'choice' %}
-          <select name="{{ f.key }}" data-field="{{ f.key }}">{% for k, label in f.choices %}
+      {% set show_if = (f.show_if[0] ~ ':' ~ f.show_if[1]|join(',')) if f.show_if else None %}
+      {% set off = f.key not in visible %}
+      {% call(attrs) field(f.key, f.label, help=f.help, error=fe[f.key], unit=f.unit if f.kind in ('int', 'float') else None,
+                          check=f.kind == 'bool', show_if=show_if, hidden=off) %}
+        {%- if f.kind == 'bool' -%}
+          <input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }} {{ 'disabled' if off }} {{ attrs }}>
+        {%- elif f.kind == 'choice' -%}
+          <select name="{{ f.key }}" data-field="{{ f.key }}" {{ 'disabled' if off }} {{ attrs }}>{% for k, label in f.choices %}
             <option value="{{ k }}" {{ 'selected' if k == v }}>{{ label }}</option>{% endfor %}</select>
-        {% elif f.key == 'peer_probe_id' %}
-          <select name="{{ f.key }}">
+        {%- elif f.key == 'peer_probe_id' -%}
+          <select name="{{ f.key }}" {{ 'disabled' if off }} {{ attrs }}>
             <option value="0">– Probe wählen –</option>
             {% for p in probes %}<option value="{{ p.id }}" {{ 'selected' if p.id == v|int }}>{{ p.hostname }} ({{ p.site_name }}){{ '' if p.iperf_server else ' – Gegenstelle nicht aktiv' }}</option>{% endfor %}
           </select>
-        {% elif f.kind in ('int', 'float') %}
-          <span class="unit-input"><input name="{{ f.key }}" type="number" value="{{ v }}"
+        {%- elif f.kind in ('int', 'float') -%}
+          <input name="{{ f.key }}" type="number" value="{{ v }}" {{ 'disabled' if off }} {{ attrs }}
             {% if f.min is not none %}min="{{ f.min }}"{% endif %} {% if f.max is not none %}max="{{ f.max }}"{% endif %}
-            step="{{ 'any' if f.kind == 'float' else 1 }}">{% if f.unit %}<span>{{ f.unit }}</span>{% endif %}</span>
-        {% elif f.kind == 'time' %}
-          <input name="{{ f.key }}" type="time" value="{{ v }}">
-        {% elif f.kind == 'url' %}
-          <input name="{{ f.key }}" type="url" value="{{ v }}" maxlength="500">
-        {% else %}
-          <input name="{{ f.key }}" value="{{ v }}" maxlength="253">
-        {% endif %}
-      {% endif %}
-      {% if f.help %}<small>{{ f.help }}</small>{% endif %}
-      </label>
+            step="{{ 'any' if f.kind == 'float' else 1 }}">
+        {%- elif f.kind == 'time' -%}
+          <input name="{{ f.key }}" type="time" value="{{ v }}" {{ 'disabled' if off }} {{ attrs }}>
+        {%- elif f.kind == 'url' -%}
+          <input name="{{ f.key }}" type="url" value="{{ v }}" maxlength="500" {{ 'disabled' if off }} {{ attrs }}>
+        {%- else -%}
+          <input name="{{ f.key }}" value="{{ v }}" maxlength="253" {{ 'disabled' if off }} {{ attrs }}>
+        {%- endif -%}
+      {% endcall %}
     {% endfor %}
     </div>
     {% if group == 'Gegenstelle' and ctype.key == 'iperf' %}
@@ -79,16 +88,23 @@
     <legend>Zuweisung</legend>
     <div class="grid-form">
       {% set sc = fv.scope or assignment.scope %}
-      <label>Gilt für
-        <select name="scope" id="scope-select">
+      {% call(attrs) field("scope", "Gilt für", error=fe.scope) %}
+        <select name="scope" {{ attrs }} data-scope-select>
           <option value="all" {{ 'selected' if sc == 'all' }}>Alle Probes</option>
           <option value="site" {{ 'selected' if sc == 'site' }}>Ein Standort</option>
           <option value="probe" {{ 'selected' if sc == 'probe' }}>Eine Probe</option>
-        </select></label>
-      <label data-scope="site" hidden>Standort <select name="site_id">{% for s in sites %}
-        <option value="{{ s.id }}" {{ 'selected' if sc == 'site' and s.id == assignment.scope_id }}>{{ s.name }}</option>{% endfor %}</select></label>
-      <label data-scope="probe" hidden>Probe <select name="probe_id">{% for p in probes %}
-        <option value="{{ p.id }}" {{ 'selected' if sc == 'probe' and p.id == assignment.scope_id }}>{{ p.hostname }} ({{ p.site_name }})</option>{% endfor %}</select></label>
+        </select>
+      {% endcall %}
+      <div class="field" data-scope="site" {{ 'hidden' if sc != 'site' }}>
+        <label for="f-site_id">Standort</label>
+        <select name="site_id" id="f-site_id">{% for s in sites %}
+          <option value="{{ s.id }}" {{ 'selected' if sc == 'site' and s.id == assignment.scope_id }}>{{ s.name }}</option>{% endfor %}</select>
+      </div>
+      <div class="field" data-scope="probe" {{ 'hidden' if sc != 'probe' }}>
+        <label for="f-probe_id">Probe</label>
+        <select name="probe_id" id="f-probe_id">{% for p in probes %}
+          <option value="{{ p.id }}" {{ 'selected' if sc == 'probe' and p.id == assignment.scope_id }}>{{ p.hostname }} ({{ p.site_name }})</option>{% endfor %}</select>
+      </div>
     </div>
     {% if ctype.key in ('iperf', 'speedtest') %}<p class="muted small">Tipp: Bandbreitentests belasten die Leitung. Bei vielen Probes je Standort einen Check pro Standort einer einzelnen Probe zuweisen.</p>{% endif %}
   </fieldset>

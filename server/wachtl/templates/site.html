@@ -2,7 +2,7 @@
 {% block title %}{{ site.name }}{% endblock %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</p>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
 <h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
 {% if site.description %}<p class="muted">{{ site.description }}</p>{% endif %}
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}

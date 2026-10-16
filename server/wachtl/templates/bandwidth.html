@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Bandbreite</p>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Bandbreite</nav>
 <h1>{{ check.name }} <span class="muted">· {{ probe.hostname }} ↔ {{ check.target }}</span></h1>
 <p class="muted">{{ 'iperf3' if check.type == 'iperf' else 'WAN-Messung' }} · {{ summary }}{% if params.window_start != '00:00' or params.window_end != '23:59' %} · nur {{ params.window_start }}–{{ params.window_end }} Uhr{% endif %}</p>
 
 <div class="actions">
-  <span class="range-buttons">{% for r in ranges %}<a class="button {{ 'active' if r == range_key }}" href="?range={{ r }}">{{ r }}</a>{% endfor %}</span>
+  <span class="range-buttons">{% for r in ranges %}<a class="button {{ 'active' if r == range_key }}" href="?range={{ r }}"{% if r == range_key %} aria-current="true"{% endif %}>{{ r }}</a>{% endfor %}</span>
   {% if has_role(user, 'operator') %}
     {% if pending %}<span class="muted">Messung beauftragt – Ergebnis erscheint nach Abschluss (Seite neu laden).</span>
     {% else %}
@@ -22,7 +22,7 @@
 <section class="cards">
   {% for d, label in (('down', 'Download'), ('up', 'Upload')) %}
   <div class="card kv">
-    <h3>{{ label }}</h3>
+    <h2 class="card-title">{{ label }}</h2>
     {% if stats[d] %}
     <dl>
       <dt>Median</dt><dd><strong>{{ stats[d].median|mbps }}</strong></dd>

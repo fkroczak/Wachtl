@@ -5,7 +5,7 @@
 <h1>Übersicht</h1>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
 
-<section class="cards">
+<section class="cards stats" aria-label="Kennzahlen">
   <div class="card stat"><span class="num">{{ sites|length }}</span><span>Standorte</span></div>
   <div class="card stat"><span class="num">{{ probes|selectattr('status','equalto','active')|list|length }}</span><span>Probes aktiv</span></div>
   <div class="card stat {{ 'bad' if alerts else '' }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></div>
@@ -18,7 +18,7 @@
   <tbody>
   {% for a in alerts %}
     <tr>
-      <td><span class="badge {{ a.severity }}">{{ a.severity }}</span></td>
+      <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
       <td>{{ a.summary or a.alertname }}</td>
       <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
       <td>{{ a.acked_by or '–' }}</td>

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ check.name }}{% if hop %} Hop {{ hop }}{% endif %} – {{ probe.hostname }}{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
-  {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</p>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
+  {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
 {% if hop %}
 <h1>Hop {{ hop }} <span class="muted">· {{ hop_ip or 'keine Antwort' }}</span></h1>
 <p class="muted">Auf dem Pfad zu {{ check.target }} ({{ check.name }}) · Ping alle {{ check.interval_s }} s. Verlust nur an diesem Hop, aber nicht an späteren, ist meist ICMP-Drosselung des Routers.</p>
@@ -16,7 +16,7 @@
 <div id="chart-panel" data-series-url="{{ url_for('api_admin.series', probe_id=probe.id, check_id=check.id, **q) }}"
      data-stats-url="{{ url_for('api_admin.stats', probe_id=probe.id, check_id=check.id, **q) }}">
   <div class="range-buttons">
-    {% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}">{{ r }}</button>{% endfor %}
+    {% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}" aria-pressed="{{ 'true' if r == '1h' else 'false' }}">{{ r }}</button>{% endfor %}
     <span id="chart-source" class="muted small"></span>
   </div>
   <div class="legend small"><span class="lg-avg"></span> Durchschnitt <span class="lg-band"></span> Min–Max <span class="lg-jitter"></span> Jitter <span class="lg-loss"></span> Paketverlust</div>

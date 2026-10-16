@@ -14,12 +14,12 @@
 </form>
 
 <section class="cards">
-  <div class="card kv"><h3>Gesamt</h3><dl>
+  <div class="card kv"><h2 class="card-title">Gesamt</h2><dl>
     <dt>Störungen</dt><dd><strong>{{ summary.total }}</strong></dd>
     <dt>davon aktiv</dt><dd>{{ summary.active }}</dd></dl></div>
-  <div class="card kv"><h3>Nach Ursache</h3><dl>
+  <div class="card kv"><h2 class="card-title">Nach Ursache</h2><dl>
     {% for key, c in summary.by_cause %}<dt>{{ c.label }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
-  <div class="card kv"><h3>Nach Standort</h3><dl>
+  <div class="card kv"><h2 class="card-title">Nach Standort</h2><dl>
     {% for name, c in summary.by_site[:8] %}<dt>{{ name }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
 </section>
 

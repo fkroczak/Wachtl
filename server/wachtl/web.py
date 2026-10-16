@@ -57,6 +57,14 @@ def fmt_ago(ts):
     return f"vor {d // 86400} Tagen"
 
 
+SEVERITY_LABELS = {"critical": "kritisch", "warning": "Warnung", "info": "Info"}
+
+
+@bp.app_template_filter("severity")
+def fmt_severity(v):
+    return SEVERITY_LABELS.get(v, v or "–")
+
+
 @bp.app_template_filter("ms")
 def fmt_ms(v):
     return "–" if v is None else (f"{v:.2f} ms" if v < 10 else f"{v:.1f} ms")
@@ -617,11 +625,15 @@ def _probe_names() -> dict[int, str]:
             q("SELECT p.id, p.hostname, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname")}
 
 
-def _check_form_context(ctype: str, check: dict | None, values: dict | None = None) -> dict:
+def _check_form_context(ctype: str, check: dict | None, values: dict | None = None,
+                        errors: list | None = None) -> dict:
     ct = checktypes.TYPES[ctype]
     params = checktypes.merged(ctype, json.loads(check["params"] or "{}") if check else None)
     if values:
         params.update(values)
+    # Fehler in der Reihenfolge der Felder im Formular, damit die Übersicht dem Lesefluss folgt
+    order = ["name", "target", "role", "interval_s", "timeout_ms"] + [f.key for f in ct.fields] + ["scope"]
+    errors = sorted(errors or [], key=lambda e: order.index(e.field) if getattr(e, "field", None) in order else len(order))
     groups: dict[str, list] = {}
     for f in ct.fields:
         groups.setdefault(f.group, []).append(f)
@@ -635,6 +647,9 @@ def _check_form_context(ctype: str, check: dict | None, values: dict | None = No
         "probes": q("SELECT p.id, p.hostname, p.iperf_server, s.name AS site_name FROM probes p "
                     "JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"),
         "intervals": repo.ALLOWED_INTERVALS, "assignment": assignment or {"scope": "all", "scope_id": None},
+        "visible": checktypes.visible_keys(ctype, params),
+        "errors": errors,
+        "field_errors": {e.field: e for e in reversed(errors) if getattr(e, "field", None)},
     }
 
 
@@ -676,10 +691,11 @@ def check_create():
         scope_id = int(f.get("probe_id", 0) or 0)
     names = _probe_names()
     params, errors = checktypes.parse_params(ctype, f, probe_ids=set(names))
+    FieldError = checktypes.FieldError
     if not name:
-        errors.append("Name fehlt.")
+        errors.append(FieldError("Name fehlt.", "name"))
     if scope not in ("all", "site", "probe") or (scope != "all" and not scope_id):
-        errors.append("Zuweisung unvollständig.")
+        errors.append(FieldError("Zuweisung unvollständig.", "scope"))
 
     target, role, interval, timeout = "", checktypes.ROLE_DEFAULT[ctype], 3600, 60000
     if ctype in ("ping", "path"):
@@ -690,27 +706,26 @@ def check_create():
         except ValueError:
             interval, timeout = -1, -1
         if not repo.valid_target(target) or (ctype == "path" and target == "gateway"):
-            errors.append("Ziel ist keine gültige IP-Adresse oder kein gültiger Hostname"
-                          + ("." if ctype == "path" else " und nicht 'gateway'."))
+            errors.append(FieldError("Ziel ist keine gültige IP-Adresse oder kein gültiger Hostname"
+                                     + ("." if ctype == "path" else " und nicht 'gateway'."), "target"))
         if interval not in repo.ALLOWED_INTERVALS:
-            errors.append("Ungültiges Intervall.")
+            errors.append(FieldError("Ungültiges Intervall.", "interval_s"))
         if not 100 <= timeout <= 5000:
-            errors.append("Timeout muss zwischen 100 und 5000 ms liegen.")
+            errors.append(FieldError("Timeout muss zwischen 100 und 5000 ms liegen.", "timeout_ms"))
         if ctype == "ping":
             role = f.get("role", "target")
             if role not in repo.CHECK_ROLES:
-                errors.append("Ungültige Rolle.")
+                errors.append(FieldError("Ungültige Rolle.", "role"))
     elif not errors:
         target = checktypes.target_for(ctype, params, names)
         interval = params["schedule_min"] * 60 if params["schedule_min"] else 3600
         timeout = params["timeout_s"] * 1000
         if ctype == "iperf" and params["peer"] == "probe" and scope == "probe" and scope_id == params["peer_probe_id"]:
-            errors.append("Eine Probe kann nicht gegen sich selbst messen.")
+            errors.append(FieldError("Eine Probe kann nicht gegen sich selbst messen.", "peer_probe_id"))
 
     if errors:
-        for e in errors:
-            flash(e, "error")
-        ctx = _check_form_context(ctype, existing, params)
+        # Fehler stehen gesammelt über dem Formular und jeweils am Feld (kein Flash)
+        ctx = _check_form_context(ctype, existing, params, errors)
         ctx["form"] = f
         return render_template("check_form.html", **ctx), 400
 

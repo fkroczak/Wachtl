@@ -154,6 +154,27 @@ ROLE_DEFAULT = {"ping": "target", "path": "target", "iperf": "target", "speedtes
 SCHEDULED_TYPES = ("iperf", "speedtest")
 
 
+class FieldError(str):
+    """Fehlermeldung mit Bezug auf ein Formularfeld (für Anzeige am Feld und aria-describedby)."""
+
+    field: str | None = None
+
+    def __new__(cls, message: str, field: str | None = None):
+        obj = super().__new__(cls, message)
+        obj.field = field
+        return obj
+
+
+def visible_keys(type_key: str, values: dict) -> set[str]:
+    """Felder, die bei diesen Werten sichtbar sind – wie das Formular-Skript, auch verschachtelt."""
+    fields = TYPES[type_key].fields
+    shown = {f.key for f in fields}
+    for _ in range(2):
+        shown = {f.key for f in fields
+                 if not f.show_if or (f.show_if[0] in shown and str(values.get(f.show_if[0])) in f.show_if[1])}
+    return shown
+
+
 def _visible(f: Field, values: dict) -> bool:
     if not f.show_if:
         return True
@@ -161,11 +182,11 @@ def _visible(f: Field, values: dict) -> bool:
     return str(values.get(other)) in allowed
 
 
-def parse_params(type_key: str, form: dict, *, probe_ids: set[int] | None = None) -> tuple[dict, list[str]]:
+def parse_params(type_key: str, form: dict, *, probe_ids: set[int] | None = None) -> tuple[dict, list[FieldError]]:
     """Formularwerte prüfen. Gibt (params, Fehler) zurück; unsichtbare Felder behalten ihren Standard."""
     ct = TYPES[type_key]
     values: dict = {}
-    errors: list[str] = []
+    errors: list[FieldError] = []
     # zuerst Auswahlfelder, damit show_if ausgewertet werden kann
     ordered = sorted(ct.fields, key=lambda f: 0 if f.kind == "choice" else 1)
     for f in ordered:
@@ -180,28 +201,28 @@ def parse_params(type_key: str, form: dict, *, probe_ids: set[int] | None = None
         try:
             values[f.key] = _convert(f, raw)
         except ValueError as exc:
-            errors.append(f"{f.label}: {exc}")
+            errors.append(FieldError(f"{f.label}: {exc}", f.key))
             values[f.key] = f.default
 
     if type_key == "iperf":
         if values["peer"] == "host" and not values["host"]:
-            errors.append("Host der Gegenstelle fehlt.")
+            errors.append(FieldError("Host der Gegenstelle fehlt.", "host"))
         if values["peer"] == "probe" and probe_ids is not None and values["peer_probe_id"] not in probe_ids:
-            errors.append("Bitte eine Probe als Gegenstelle auswählen.")
+            errors.append(FieldError("Bitte eine Probe als Gegenstelle auswählen.", "peer_probe_id"))
     if type_key == "speedtest":
         if values["method"] == "iperf" and not values["host"]:
-            errors.append("iperf3-Host fehlt.")
+            errors.append(FieldError("iperf3-Host fehlt.", "host"))
         if values["method"] == "http" and not values["down_url"] and not values["up_url"]:
-            errors.append("Mindestens eine Download- oder Upload-URL angeben.")
+            errors.append(FieldError("Mindestens eine Download- oder Upload-URL angeben.", "down_url"))
     if type_key in SCHEDULED_TYPES:
         if not values["weekdays"] or set(values["weekdays"]) - set("1234567"):
-            errors.append("Wochentage: nur Ziffern 1 bis 7.")
+            errors.append(FieldError("Wochentage: nur Ziffern 1 bis 7.", "weekdays"))
         else:
             values["weekdays"] = "".join(sorted(set(values["weekdays"])))
         if values["offset_min"] >= max(values["schedule_min"], 1) and values["schedule_min"]:
-            errors.append("Versatz muss kleiner als das Messintervall sein.")
+            errors.append(FieldError("Versatz muss kleiner als das Messintervall sein.", "offset_min"))
         if values["duration_s"] * (2 if values["direction"] == "both" else 1) + 10 > values["timeout_s"]:
-            errors.append("„Abbruch nach“ ist kürzer als die Testdauer.")
+            errors.append(FieldError("„Abbruch nach“ ist kürzer als die Testdauer.", "timeout_s"))
     return values, errors
 
 

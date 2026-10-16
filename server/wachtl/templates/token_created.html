@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Enrollment-Token{% endblock %}
 {% block content %}
-<p class="crumbs"><a href="{{ url_for('web.admin') }}#enrollment">Verwaltung</a> / Enrollment-Token</p>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}#enrollment">Verwaltung</a> / Enrollment-Token</nav>
 <h1>Enrollment-Token für {{ site.name }}</h1>
 <div class="flash warn">Der Token wird nur jetzt angezeigt. Er gilt {{ days }} Tage für {{ max_uses }} Probe{{ 'n' if max_uses > 1 }}.</div>
 {% if not pin %}<p class="flash error">WACHTL_SPKI_PIN ist nicht gesetzt – bitte das Server-Setup bzw. <code>setup.sh</code> erneut ausführen.</p>{% endif %}

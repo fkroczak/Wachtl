@@ -1,0 +1,58 @@
+{#- Formularfeld-Konvention (siehe docs/quality-guardrails.md, Abschnitt „Formulare“).
+
+  Ein Feld = sichtbares Label direkt über dem Eingabeelement, darunter Hilfetext und Fehlermeldung.
+  Label (for/id), Hilfe, Einheit und Fehler sind technisch verknüpft (aria-describedby, aria-invalid).
+  Das Eingabeelement schreibt der Aufrufer selbst und übernimmt die Attribute aus `attrs`:
+
+    {% from "_forms.html" import field %}
+    {% call(attrs) field("timeout_ms", "Timeout", help="…", unit="ms", error=field_errors.timeout_ms) %}
+      <input name="timeout_ms" type="number" {{ attrs }}>
+    {% endcall %}
+
+  Kontrollkästchen: check=True (Kästchen steht vor dem Label-Text).
+-#}
+
+{% macro _attrs(key, help, unit, error) -%}
+  {%- set ids = [] -%}
+  {%- if unit %}{% set _ = ids.append("f-" ~ key ~ "-unit") %}{% endif -%}
+  {%- if help %}{% set _ = ids.append("f-" ~ key ~ "-help") %}{% endif -%}
+  {%- if error %}{% set _ = ids.append("f-" ~ key ~ "-error") %}{% endif -%}
+  id="f-{{ key }}"{% if ids %} aria-describedby="{{ ids|join(' ') }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}
+{%- endmacro %}
+
+{% macro field(key, label, help=None, error=None, unit=None, check=False, show_if=None, hidden=False, wide=False) -%}
+{%- set attrs = _attrs(key, help, unit, error) -%}
+<div class="field{{ ' field-check' if check }}{{ ' field-wide' if wide }}{{ ' has-error' if error }}"
+  {%- if show_if %} data-show-if="{{ show_if }}"{% endif %}{% if hidden %} hidden{% endif %}>
+  {%- if check %}
+  <label for="f-{{ key }}">{{ caller(attrs) }} {{ label }}</label>
+  {%- else %}
+  <label for="f-{{ key }}">{{ label }}</label>
+  {%- if unit %}
+  <span class="unit-input">{{ caller(attrs) }}<span id="f-{{ key }}-unit">{{ unit }}</span></span>
+  {%- else %}
+  {{ caller(attrs) }}
+  {%- endif %}
+  {%- endif %}
+  {%- if help %}
+  <small id="f-{{ key }}-help" class="field-help">{{ help }}</small>
+  {%- endif %}
+  {%- if error %}
+  <p id="f-{{ key }}-error" class="field-error"><span aria-hidden="true">⚠ </span>{{ error }}</p>
+  {%- endif %}
+</div>
+{%- endmacro %}
+
+{#- Fehlerübersicht über einem Formular: wird beim Laden fokussiert (app.js) und verlinkt die Felder. -#}
+{% macro error_summary(errors) -%}
+{%- if errors %}
+<div class="error-summary" role="alert" tabindex="-1" data-error-summary>
+  <h2>{{ "Bitte einen Punkt korrigieren" if errors|length == 1 else "Bitte %d Punkte korrigieren"|format(errors|length) }}</h2>
+  <ul>
+    {%- for e in errors %}
+    <li>{% if e.field %}<a href="#f-{{ e.field }}">{{ e }}</a>{% else %}{{ e }}{% endif %}</li>
+    {%- endfor %}
+  </ul>
+</div>
+{%- endif %}
+{%- endmacro %}
