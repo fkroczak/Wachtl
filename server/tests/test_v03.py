@@ -283,3 +283,23 @@ class OutageTest(AppTestCase):
         s = outages.summarize(items)
         self.assertEqual(s["total"], 2)
         self.assertEqual(len(outages.load(now - 86400, min_duration=250)), 1)
+
+
+class LiveStatusTest(AppTestCase):
+    def test_probe_page_with_unreachable_targets(self):
+        """Ziel antwortet nie: es gibt 'up' und 'loss', aber keine Latenz – Seite darf nicht abstürzen."""
+        from unittest import mock
+
+        data = self.enroll()
+        self.make_user()
+        self.login()
+        results = {
+            "last_over_time(wachtl_ping_up[2m])": [{"metric": {"probe": str(data["probe_id"]), "check_id": "1"}, "value": [0, "0"]}],
+            "(1 - avg_over_time(wachtl_ping_up[5m])) * 100": [{"metric": {"probe": str(data["probe_id"]), "check_id": "1"}, "value": [0, "100"]}],
+        }
+        with mock.patch("wachtl.services.vm.instant", side_effect=lambda q, agg=False: results.get(q, [])):
+            r = self.client.get(f"/probes/{data['probe_id']}")
+            self.assertEqual(r.status_code, 200)
+            self.assertIn("100.0 %", r.get_data(as_text=True))
+            self.assertEqual(self.client.get("/sites/1").status_code, 200)
+            self.assertEqual(self.client.get("/").status_code, 200)

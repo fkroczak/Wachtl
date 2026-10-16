@@ -222,5 +222,5 @@ def live_status() -> dict[tuple[str, str], dict]:
         for item in instant(query):
             m = item["metric"]
             k = (m.get("probe", ""), m.get("check_id", ""))
-            status.setdefault(k, {})[key] = _num(item["value"][1])
+            status.setdefault(k, dict.fromkeys(queries))[key] = _num(item["value"][1])
     return status

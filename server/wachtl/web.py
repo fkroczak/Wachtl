@@ -57,19 +57,26 @@ def fmt_ago(ts):
     return f"vor {d // 86400} Tagen"
 
 
+def _missing(v) -> bool:
+    """None oder fehlender Wert (Jinja-Undefined, z. B. wenn ein Ziel gar nicht antwortet)."""
+    from jinja2 import Undefined
+
+    return v is None or isinstance(v, Undefined)
+
+
 @bp.app_template_filter("ms")
 def fmt_ms(v):
-    return "–" if v is None else (f"{v:.2f} ms" if v < 10 else f"{v:.1f} ms")
+    return "–" if _missing(v) else (f"{v:.2f} ms" if v < 10 else f"{v:.1f} ms")
 
 
 @bp.app_template_filter("pct")
 def fmt_pct(v):
-    return "–" if v is None else f"{v:.1f} %"
+    return "–" if _missing(v) else f"{v:.1f} %"
 
 
 @bp.app_template_filter("mbps")
 def fmt_mbps(v):
-    if v is None:
+    if _missing(v):
         return "–"
     return f"{v:.0f} Mbit/s" if v >= 100 else f"{v:.1f} Mbit/s"
 
