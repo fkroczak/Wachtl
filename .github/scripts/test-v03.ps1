@@ -64,13 +64,24 @@ if (-not $path) { throw 'Kein Pfad-Ergebnis von der Probe' }
 $summary.Add("Pfad: $($path.hops.Count) Hop(s), Ziel erreicht: $($path.reached), Hops: $(($path.hops | ForEach-Object { $_.ip }) -join ' > ')")
 if (-not $path.reached) { throw 'Pfad zu 127.0.0.1 nicht erreicht' }
 
-# Hop-Pings kommen an (Seite zeigt Verlust 0.0 % für 127.0.0.1)
-Start-Sleep 20
-$page = (Get-Page "/probes/$pid_/path/$pathCheck").Content
+# Hop-Pings kommen an (Seite zeigt Verlust für 127.0.0.1). VictoriaMetrics liefert die letzten 30 s
+# erst verzögert (search.latencyOffset), daher bis zu 2 Minuten warten.
+$loss = ''
+foreach ($i in 1..12) {
+    Start-Sleep 10
+    $page = (Get-Page "/probes/$pid_/path/$pathCheck").Content
+    $loss = [regex]::Match($page, '<td class="num ?">(\d+[.,]\d) %</td>').Groups[1].Value
+    if ($loss -ne '') { break }
+}
 if ($page -notmatch '127\.0\.0\.1') { throw 'Pfad-Seite zeigt den Hop nicht' }
-$loss = [regex]::Match($page, '<td class="num ?">(\d+[.,]\d) %</td>').Groups[1].Value
 $summary.Add("Pfad-Seite: Verlust Hop 1 = $loss %")
-if ($loss -eq '') { throw 'Keine Hop-Messwerte auf der Pfad-Seite' }
+if ($loss -eq '') {
+    $row = [regex]::Match($page, '(?s)<table class="hops">.*?</table>').Value
+    & (Join-Path $PSScriptRoot 'annotate.ps1') -Title 'Pfad-Seite' -Text (($summary -join "`n") + "`n" + $row)
+    & (Join-Path $PSScriptRoot 'annotate.ps1') -Title 'Probe-Log' -Text ((Get-Content C:\ProgramData\Wachtl\logs\*.log -Tail 80) -join "`n")
+    & (Join-Path $PSScriptRoot 'annotate.ps1') -Title 'web.log' -Text ((Get-Content C:\WachtlData\logs\web.log -Tail 60) -join "`n")
+    throw 'Keine Hop-Messwerte auf der Pfad-Seite'
+}
 
 # „Jetzt messen“
 Post-Form "/probes/$pid_/checks/$iperfCheck/run" @{} | Out-Null
@@ -84,7 +95,10 @@ foreach ($r in $runs) { $summary.Add("iperf3 $($r.direction): $($r.mbps) Mbit/s,
 $text = $summary -join "`n"
 Write-Host $text
 & (Join-Path $PSScriptRoot 'annotate.ps1') -Title 'Wachtl 0.3 E2E' -Text $text
-if ($runs.Count -lt 2) { Get-Content C:\ProgramData\Wachtl\logs\*.log -Tail 60; throw 'Keine iperf3-Ergebnisse' }
+if ($runs.Count -lt 2) {
+    & (Join-Path $PSScriptRoot 'annotate.ps1') -Title 'Probe-Log' -Text ((Get-Content C:\ProgramData\Wachtl\logs\*.log -Tail 80) -join "`n")
+    throw 'Keine iperf3-Ergebnisse'
+}
 if (@($runs | Where-Object { $_.error -or -not ($_.mbps -gt 0) }).Count) { throw 'iperf3-Messung fehlerhaft' }
 if (@($runs | Where-Object trigger -ne 'manual').Count) { throw 'Auslöser nicht „manual“' }
 (Get-Page "/probes/$pid_/bandwidth/$iperfCheck").Content | Out-Null
