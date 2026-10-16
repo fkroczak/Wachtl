@@ -4,6 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 RUN=${WACHTL_E2E_DIR:-$(mktemp -d)}
+mkdir -p "$RUN"
 PORT=${WACHTL_E2E_PORT:-5000}
 export WACHTL_SECRET_KEY=e2e WACHTL_DATABASE_URL="sqlite:///$RUN/e2e.db" WACHTL_RULES_DIR="$RUN/rules" \
   WACHTL_VM_RAW_URL=http://127.0.0.1:18428 WACHTL_VM_AGG_URL=http://127.0.0.1:18428 \
