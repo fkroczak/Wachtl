@@ -485,7 +485,7 @@ begin
   for I := 1 to 15 do
   begin
     Sleep(1000);
-    { {sys} enthält keine Leerzeichen – ohne Anführungszeichen, sonst verschluckt cmd.exe die Pipe }
+    // Systemordner enthält keine Leerzeichen – ohne Anführungszeichen, sonst verschluckt cmd.exe die Pipe
     Code := RunHidden(ExpandConstant('{cmd}'), '/C ' + Sc + ' query ' + ServiceName + ' | find "RUNNING" >nul');
     if Code = 0 then
       Break;
