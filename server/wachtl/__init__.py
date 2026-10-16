@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 def _env(key: str, default: str | None = None) -> str | None:
@@ -31,6 +31,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         PUBLIC_URL=_env("PUBLIC_URL", "https://wachtl.local"),
         SPKI_PIN=_env("SPKI_PIN", ""),
         PROBE_DIR=_env("PROBE_DIR", ""),
+        IPERF_PORT=int(_env("IPERF_PORT", "5201") or 0),
         RAW_QUERY_MAX_S=int(_env("RAW_QUERY_MAX_S", str(6 * 3600))),
         MAX_INGEST_BYTES=20 * 1024 * 1024,
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,

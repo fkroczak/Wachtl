@@ -10,3 +10,5 @@ VictoriaMetrics, vmalert, vmbackup,
 vmrestore (Community-Edition)            – Apache-2.0                          https://github.com/VictoriaMetrics/VictoriaMetrics
 Prometheus Alertmanager                  – Apache-2.0                          https://github.com/prometheus/alertmanager
 WinSW (Windows Service Wrapper)          – MIT                                 https://github.com/winsw/winsw
+iperf3 (Windows-Build von ar51an)        – BSD-3-Clause                        https://github.com/esnet/iperf
+                                                                               https://github.com/ar51an/iperf3-win-builds

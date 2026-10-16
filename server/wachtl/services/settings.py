@@ -33,6 +33,10 @@ BY_KEY = {f.key: f for f in FIELDS}
 
 def get() -> dict:
     values = {f.key: f.default for f in FIELDS}
+    # Vorgaben aus der Installation: Port der iperf3-Gegenstelle, 0 = bei der Installation abgeschaltet
+    installed = int(current_app.config.get("IPERF_PORT") or 0)
+    values["iperf_port"] = installed or 5201
+    values["iperf_enabled"] = bool(installed)
     for row in q("SELECT key, value FROM settings WHERE key LIKE ?", (PREFIX + "%",)):
         key = row["key"].removeprefix(PREFIX)
         f = BY_KEY.get(key)

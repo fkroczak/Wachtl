@@ -48,4 +48,42 @@ public sealed class GatewayResolver
 
         return null;
     }
+
+    /// <summary>
+    /// Lokale IPv4-Adressen aktiver Netzwerkkarten (für iperf3 zwischen Probes).
+    /// Karten mit Default-Gateway zuerst.
+    /// </summary>
+    public static List<string> LocalAddresses()
+    {
+        var withGateway = new List<string>();
+        var others = new List<string>();
+        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces())
+        {
+            if (nic.OperationalStatus != OperationalStatus.Up ||
+                nic.NetworkInterfaceType is NetworkInterfaceType.Loopback or NetworkInterfaceType.Tunnel)
+            {
+                continue;
+            }
+
+            var props = nic.GetIPProperties();
+            var hasGateway = props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork && !g.Address.Equals(IPAddress.Any));
+            foreach (var ua in props.UnicastAddresses)
+            {
+                if (ua.Address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(ua.Address))
+                {
+                    continue;
+                }
+
+                var bytes = ua.Address.GetAddressBytes();
+                if (bytes[0] == 169 && bytes[1] == 254)
+                {
+                    continue;
+                }
+
+                (hasGateway ? withGateway : others).Add(ua.Address.ToString());
+            }
+        }
+
+        return withGateway.Concat(others).Distinct().Take(8).ToList();
+    }
 }

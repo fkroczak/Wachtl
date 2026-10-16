@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>wachtl-probe</AssemblyName>
     <RootNamespace>Wachtl.Probe</RootNamespace>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Product>Wachtl Probe</Product>
     <Company>Wachtl</Company>
     <OutputType>Exe</OutputType>

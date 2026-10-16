@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Wachtl.Probe.Config;
@@ -10,16 +12,89 @@ public sealed class CheckConfig
     public string Role { get; init; } = "target";
     public int IntervalS { get; init; } = 1;
     public int TimeoutMs { get; init; } = 1000;
+    public Dictionary<string, JsonElement> Params { get; init; } = new();
+    public PeerConfig? Peer { get; init; }
 
     /// <summary>Ändert sich einer dieser Werte, wird der Check neu gestartet.</summary>
     [JsonIgnore]
-    public string Key => $"{Id}|{Type}|{Target}|{IntervalS}|{TimeoutMs}";
+    public string Key
+    {
+        get
+        {
+            var basic = $"{Id}|{Type}|{Target}|{IntervalS}|{TimeoutMs}";
+            if (Params.Count == 0 && Peer is null)
+            {
+                return basic;
+            }
+
+            var extra = string.Join(";", Params.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value.GetRawText()}"));
+            return $"{basic}|{extra}|{Peer?.Host}:{Peer?.Port}:{Peer?.Error}";
+        }
+    }
+
+    public int Int(string key, int fallback)
+    {
+        if (Params.TryGetValue(key, out var v))
+        {
+            if (v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d))
+            {
+                return (int)Math.Round(d);
+            }
+
+            if (v.ValueKind == JsonValueKind.String && int.TryParse(v.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var i))
+            {
+                return i;
+            }
+        }
+
+        return fallback;
+    }
+
+    public double Double(string key, double fallback)
+    {
+        if (Params.TryGetValue(key, out var v))
+        {
+            if (v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d))
+            {
+                return d;
+            }
+
+            if (v.ValueKind == JsonValueKind.String && double.TryParse(v.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var p))
+            {
+                return p;
+            }
+        }
+
+        return fallback;
+    }
+
+    public bool Bool(string key, bool fallback) =>
+        Params.TryGetValue(key, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False
+            ? v.GetBoolean()
+            : fallback;
+
+    public string Str(string key, string fallback) =>
+        Params.TryGetValue(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? fallback : fallback;
+}
+
+public sealed class PeerConfig
+{
+    public string? Host { get; init; }
+    public int? Port { get; init; }
+    public string? Error { get; init; }
+}
+
+public sealed class IperfServerConfig
+{
+    public bool Enabled { get; init; }
+    public int Port { get; init; } = 5201;
 }
 
 public sealed class ProbeConfig
 {
     public long ProbeId { get; init; }
     public List<CheckConfig> Checks { get; init; } = new();
+    public IperfServerConfig IperfServer { get; init; } = new();
     public int UploadIntervalS { get; init; } = 10;
     public int HeartbeatIntervalS { get; init; } = 30;
     public int ConfigPollS { get; init; } = 300;
@@ -48,12 +123,59 @@ public sealed class HeartbeatRequest
     public string Hostname { get; init; } = string.Empty;
     public long BufferItems { get; init; }
     public long UptimeS { get; init; }
+    public List<string> Addresses { get; init; } = new();
 }
 
 public sealed class HeartbeatResponse
 {
     public string ConfigEtag { get; init; } = string.Empty;
     public long ServerTime { get; init; }
+    public List<ProbeCommand> Commands { get; init; } = new();
+}
+
+public sealed class ProbeCommand
+{
+    public long Id { get; init; }
+    public string Type { get; init; } = string.Empty;
+    public long? CheckId { get; init; }
+}
+
+public sealed class PathHop
+{
+    public int Hop { get; init; }
+    public string? Ip { get; init; }
+    public double? RttMs { get; init; }
+}
+
+public sealed class PathResult
+{
+    public long CheckId { get; init; }
+    public long Ts { get; init; }
+    public string Reason { get; init; } = "schedule";
+    public bool Reached { get; init; }
+    public List<PathHop> Hops { get; init; } = new();
+}
+
+public sealed class BandwidthMeasurement
+{
+    public string Direction { get; init; } = "down";
+    public double? Mbps { get; set; }
+    public double? JitterMs { get; set; }
+    public double? LossPct { get; set; }
+    public long? Retransmits { get; set; }
+    public double? LatencyMs { get; set; }
+    public double? DurationS { get; set; }
+    public string Protocol { get; init; } = "tcp";
+    public string? Peer { get; init; }
+    public string? Error { get; set; }
+}
+
+public sealed class BandwidthResult
+{
+    public long CheckId { get; init; }
+    public long Ts { get; init; }
+    public string Trigger { get; init; } = "schedule";
+    public List<BandwidthMeasurement> Results { get; init; } = new();
 }
 
 /// <summary>Dauerhafter Zustand der Probe nach dem Enrollment.</summary>

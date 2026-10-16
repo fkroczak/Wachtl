@@ -47,6 +47,7 @@ services:
       WACHTL_INTERNAL_URL: http://app:8000
       WACHTL_TRUST_PROXY: "1"
       WACHTL_PROBE_DIR: /probe
+      WACHTL_IPERF_PORT: ${IPERF_PORT:-5201}
     volumes:
       - rules:/rules
       - amconfig:/amconfig
@@ -137,6 +138,17 @@ services:
       app:
         condition: service_healthy
     networks: [internal]
+    logging: *logging
+
+  # iperf3-Gegenstelle für die Probes; Port in .env (IPERF_PORT), im Web-UI unter Verwaltung › Messung abschaltbar
+  iperf3:
+    build: ./iperf3
+    image: wachtl-iperf3:local
+    restart: unless-stopped
+    ports:
+      - "${IPERF_PORT:-5201}:5201/tcp"
+      - "${IPERF_PORT:-5201}:5201/udp"
+    networks: [edge]
     logging: *logging
 
 networks:

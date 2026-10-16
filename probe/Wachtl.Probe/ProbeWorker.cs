@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Wachtl.Probe.Bandwidth;
 using Wachtl.Probe.Buffer;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
@@ -20,7 +21,8 @@ public sealed class ProbeWorker : BackgroundService
     private readonly ILogger<ProbeWorker> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly GatewayResolver _gateway;
-    private readonly Dictionary<string, PingRunner> _runners = new();
+    private readonly Dictionary<string, IAsyncDisposable> _runners = new();
+    private IperfServerHost? _iperfServer;
     private readonly SemaphoreSlim _configChanged = new(0, 1);
     private readonly object _runnerLock = new();
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow;
@@ -115,12 +117,19 @@ public sealed class ProbeWorker : BackgroundService
         }
     }
 
+    private static readonly string[] SupportedTypes = { "ping", "path", "iperf", "speedtest" };
+
     private void ApplyConfig(ProbeConfig config)
     {
         var wanted = config.Checks
-            .Where(c => c.Type == "ping")
+            .Where(c => SupportedTypes.Contains(c.Type))
             .GroupBy(c => c.Key)
             .ToDictionary(g => g.Key, g => g.First());
+        var unknown = config.Checks.Where(c => !SupportedTypes.Contains(c.Type)).Select(c => c.Type).Distinct().ToList();
+        if (unknown.Count > 0)
+        {
+            _logger.LogWarning("Check-Typen {Types} werden von dieser Probe-Version nicht unterstützt – Probe aktualisieren", string.Join(", ", unknown));
+        }
 
         lock (_runnerLock)
         {
@@ -135,23 +144,86 @@ public sealed class ProbeWorker : BackgroundService
             {
                 if (!_runners.ContainsKey(key))
                 {
-                    _runners[key] = new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>());
+                    _runners[key] = CreateRunner(check);
                 }
+            }
+
+            var iperf = config.IperfServer;
+            if (_iperfServer is not null && (!iperf.Enabled || _iperfServer.Port != iperf.Port))
+            {
+                _ = _iperfServer.DisposeAsync().AsTask();
+                _iperfServer = null;
+            }
+
+            if (iperf.Enabled && _iperfServer is null)
+            {
+                _iperfServer = new IperfServerHost(iperf.Port, _loggerFactory.CreateLogger<IperfServerHost>());
             }
 
             _config = config;
         }
 
-        _logger.LogInformation("Konfiguration {Etag} aktiv: {Count} Ping-Checks", config.Etag, wanted.Count);
+        _logger.LogInformation("Konfiguration {Etag} aktiv: {Count} Checks ({Types}), iperf3-Gegenstelle {Iperf}", config.Etag,
+            wanted.Count, string.Join(", ", wanted.Values.GroupBy(c => c.Type).Select(g => $"{g.Count()} {g.Key}")),
+            config.IperfServer.Enabled ? $"an Port {config.IperfServer.Port}" : "aus");
+    }
+
+    private IAsyncDisposable CreateRunner(CheckConfig check) => check.Type switch
+    {
+        "path" => new PathRunner(check, _buffer!, _gateway,
+            (result, token) => _api!.PostResultAsync("results/path", result, token),
+            _loggerFactory.CreateLogger<PathRunner>()),
+        "iperf" or "speedtest" => new BandwidthRunner(check, _state?.Proxy,
+            (result, token) => _api!.PostResultAsync("results/bandwidth", result, token),
+            _loggerFactory.CreateLogger<BandwidthRunner>()),
+        _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>()),
+    };
+
+    private void HandleCommands(IEnumerable<ProbeCommand> commands)
+    {
+        foreach (var command in commands)
+        {
+            object? runner;
+            lock (_runnerLock)
+            {
+                runner = _runners.Values.FirstOrDefault(r => r switch
+                {
+                    PathRunner p => p.Check.Id == command.CheckId,
+                    BandwidthRunner b => b.Check.Id == command.CheckId,
+                    _ => false,
+                });
+            }
+
+            switch (command.Type, runner)
+            {
+                case ("run_check", BandwidthRunner b):
+                    _logger.LogInformation("Auftrag vom Server: Check {Id} jetzt messen", command.CheckId);
+                    b.RunNow();
+                    break;
+                case ("retrace", PathRunner p):
+                    _logger.LogInformation("Auftrag vom Server: Pfad von Check {Id} neu ermitteln", command.CheckId);
+                    p.RequestRetrace();
+                    break;
+                default:
+                    _logger.LogWarning("Auftrag {Type} für Check {Id} kann nicht ausgeführt werden (Check nicht aktiv?)",
+                        command.Type, command.CheckId);
+                    break;
+            }
+        }
     }
 
     private async Task StopRunnersAsync()
     {
-        List<PingRunner> runners;
+        List<IAsyncDisposable> runners;
         lock (_runnerLock)
         {
             runners = _runners.Values.ToList();
             _runners.Clear();
+            if (_iperfServer is not null)
+            {
+                runners.Add(_iperfServer);
+                _iperfServer = null;
+            }
         }
 
         foreach (var runner in runners)
@@ -249,7 +321,13 @@ public sealed class ProbeWorker : BackgroundService
                     Hostname = Environment.MachineName,
                     BufferItems = _buffer!.Count(),
                     UptimeS = (long)(DateTimeOffset.UtcNow - _started).TotalSeconds,
+                    Addresses = GatewayResolver.LocalAddresses(),
                 }, ct).ConfigureAwait(false);
+
+                if (response.Commands.Count > 0)
+                {
+                    HandleCommands(response.Commands);
+                }
 
                 if (response.ConfigEtag != _config?.Etag && _configChanged.CurrentCount == 0)
                 {

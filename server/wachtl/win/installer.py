@@ -68,6 +68,9 @@ def parse_input(data: dict) -> dict:
     http_port = num("http_port", 80, 0, 65535, "HTTP-Port")
     if http_port and http_port == https_port:
         errors.append("HTTP- und HTTPS-Port müssen verschieden sein.")
+    iperf_port = num("iperf_port", 5201, 0, 65535, "iperf3-Port")
+    if iperf_port and iperf_port in (https_port, http_port):
+        errors.append("Der iperf3-Port muss sich von den Web-Ports unterscheiden.")
     raw_days = num("raw_days", 30, 1, 365, "Aufbewahrung Rohdaten (Tage)")
     agg_months = num("agg_months", 13, 1, 120, "Aufbewahrung Verlauf (Monate)")
     password = str(data.get("admin_password", ""))
@@ -84,7 +87,8 @@ def parse_input(data: dict) -> dict:
     errors += validate(notify)
     if errors:
         raise SetupError("\n".join(errors))
-    return {"hostnames": hostnames, "https_port": https_port, "http_port": http_port, "raw_days": raw_days,
+    return {"hostnames": hostnames, "https_port": https_port, "http_port": http_port, "iperf_port": iperf_port,
+            "raw_days": raw_days,
             "agg_months": agg_months, "admin_password": password, "data_dir": Path(data_dir), "notify": notify}
 
 
@@ -94,6 +98,8 @@ def check_ports(cfg: dict, layout: Layout | None = None, run: winsys.Runner | No
     wanted = [("HTTPS", cfg["https_port"], "0.0.0.0")]
     if cfg["http_port"]:
         wanted.append(("HTTP", cfg["http_port"], "0.0.0.0"))
+    if cfg.get("iperf_port"):
+        wanted.append(("iperf3", cfg["iperf_port"], "0.0.0.0"))
     internal = {**DEFAULTS, **(layout.env if layout else {})}
     for key in ("PORT_INTERNAL", "PORT_VM_RAW", "PORT_VM_AGG", "PORT_VMALERT", "PORT_ALERTMANAGER"):
         wanted.append((key.removeprefix("PORT_").lower(), int(internal[key]), "127.0.0.1"))
@@ -115,6 +121,7 @@ def write_configuration(layout: Layout, cfg: dict) -> str:
     env["WACHTL_PUBLIC_URL"] = public_url(cfg["hostnames"][0], cfg["https_port"])
     env["WACHTL_HTTPS_PORT"] = str(cfg["https_port"])
     env["WACHTL_HTTP_PORT"] = str(cfg["http_port"])
+    env["PORT_IPERF"] = str(cfg.get("iperf_port", 5201))
     env["RAW_RETENTION"] = f"{cfg['raw_days']}d"
     env["AGG_RETENTION"] = str(cfg["agg_months"])
     env["WACHTL_SECRET_KEY"] = env.get("WACHTL_SECRET_KEY") or secrets.token_urlsafe(48)

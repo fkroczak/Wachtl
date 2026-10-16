@@ -2,12 +2,12 @@
 ; Bauen: siehe build-server.ps1 (übergibt AppVersion und BuildDir)
 ;
 ; Unbeaufsichtigte Installation, z. B.:
-;   WachtlServerSetup-0.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Hostnames="wachtl.kunde.local,10.0.0.5"
-;       /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/DataDir="D:\Wachtl"] [/RawDays=30] [/AggMonths=13]
+;   WachtlServerSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Hostnames="wachtl.kunde.local,10.0.0.5"
+;       /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/IperfPort=5201] [/DataDir="D:\Wachtl"] [/RawDays=30] [/AggMonths=13]
 ;       [/EmailTo=… /EmailFrom=… /SmtpHost=mail:587 /SmtpUser=… /SmtpPassword=…] [/TeamsUrl=https://…]
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build\server"
@@ -49,7 +49,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 [Files]
 Source: "{#BuildDir}\python\*"; DestDir: "{app}\python"; Flags: recursesubdirs ignoreversion
 Source: "{#BuildDir}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs ignoreversion
-Source: "{#BuildDir}\bin\*"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "{#BuildDir}\bin\*"; DestDir: "{app}\bin"; Flags: recursesubdirs ignoreversion
 Source: "{#BuildDir}\service\WachtlServer.exe"; DestDir: "{app}\service"; Flags: ignoreversion
 Source: "{#BuildDir}\wachtl-server.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
@@ -258,9 +258,11 @@ begin
   AddressPage.Add('Servernamen / IP-Adressen:', False);
   AddressPage.Add('HTTPS-Port:', False);
   AddressPage.Add('HTTP-Port für die Umleitung auf HTTPS (0 = aus):', False);
+  AddressPage.Add('iperf3-Port für Bandbreitenmessungen der Probes (TCP und UDP, 0 = aus):', False);
   AddressPage.Values[0] := GetParam('Hostnames', DefaultHostnames());
   AddressPage.Values[1] := GetParam('HttpsPort', '443');
   AddressPage.Values[2] := GetParam('HttpPort', '80');
+  AddressPage.Values[3] := GetParam('IperfPort', '5201');
 
   AdminPage := CreateInputQueryPage(AddressPage.ID,
     'Administrator', 'Passwort für die Anmeldung als „admin“ im Web-UI',
@@ -329,7 +331,7 @@ end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  HttpsPort, HttpPort: Integer;
+  HttpsPort, HttpPort, IperfPort: Integer;
 begin
   Result := True;
   if CurPageID = AddressPage.ID then
@@ -346,9 +348,10 @@ begin
       Result := False;
       Exit;
     end;
-    if not IsNumberInRange(AddressPage.Values[1], 1, 65535) or not IsNumberInRange(AddressPage.Values[2], 0, 65535) then
+    if not IsNumberInRange(AddressPage.Values[1], 1, 65535) or not IsNumberInRange(AddressPage.Values[2], 0, 65535)
+       or not IsNumberInRange(AddressPage.Values[3], 0, 65535) then
     begin
-      MsgBox('Ports müssen Zahlen zwischen 1 und 65535 sein (HTTP: 0 = aus).', mbError, MB_OK);
+      MsgBox('Ports müssen Zahlen zwischen 1 und 65535 sein (HTTP und iperf3: 0 = aus).', mbError, MB_OK);
       Result := False;
       Exit;
     end;
@@ -359,6 +362,24 @@ begin
       MsgBox('HTTP- und HTTPS-Port müssen verschieden sein.', mbError, MB_OK);
       Result := False;
       Exit;
+    end;
+    IperfPort := StrToInt(Trim(AddressPage.Values[3]));
+    if (IperfPort > 0) and ((IperfPort = HttpsPort) or (IperfPort = HttpPort)) then
+    begin
+      MsgBox('Der iperf3-Port muss sich von den Web-Ports unterscheiden.', mbError, MB_OK);
+      Result := False;
+      Exit;
+    end;
+    if (IperfPort > 0) and PortInUse(IperfPort) then
+    begin
+      if MsgBox('Port ' + IntToStr(IperfPort) + ' wird bereits verwendet (läuft schon ein iperf3-Server?).' + #13#10 +
+                'Die iperf3-Gegenstelle auf diesem Server abschalten?', mbConfirmation, MB_YESNO) = IDYES then
+        AddressPage.Values[3] := '0'
+      else
+      begin
+        Result := False;
+        Exit;
+      end;
     end;
     if PortInUse(HttpsPort) then
     begin
@@ -463,27 +484,28 @@ function WriteInputFile(const FileName: String): Boolean;
 var
   L: TArrayOfString;
 begin
-  SetArrayLength(L, 20);
+  SetArrayLength(L, 21);
   L[0] := '{';
   L[1] := JsonPair('hostnames', AddressPage.Values[0], False);
   L[2] := '  "https_port": ' + Trim(AddressPage.Values[1]) + ',';
   L[3] := '  "http_port": ' + Trim(AddressPage.Values[2]) + ',';
-  L[4] := JsonPair('data_dir', GetDataDir(''), False);
-  L[5] := JsonPair('install_dir', ExpandConstant('{app}'), False);
-  L[6] := JsonPair('admin_password', AdminPage.Values[0], False);
-  L[7] := '  "raw_days": ' + Trim(RawDaysEdit.Text) + ',';
-  L[8] := '  "agg_months": ' + Trim(AggMonthsEdit.Text) + ',';
-  L[9] := '  "notify": {';
-  L[10] := '  ' + JsonPair('email_to', Trim(NotifyPage.Values[0]), False);
-  L[11] := '  ' + JsonPair('email_from', Trim(NotifyPage.Values[1]), False);
-  L[12] := '  ' + JsonPair('smtp_smarthost', Trim(NotifyPage.Values[2]), False);
-  L[13] := '  ' + JsonPair('smtp_username', Trim(NotifyPage.Values[3]), False);
-  L[14] := '  ' + JsonPair('smtp_password', NotifyPage.Values[4], False);
-  L[15] := '  ' + JsonPair('smtp_require_tls', 'true', False);
-  L[16] := '  ' + JsonPair('teams_webhook_url', Trim(NotifyPage.Values[5]), True);
-  L[17] := '  }';
-  L[18] := '}';
-  L[19] := '';
+  L[4] := '  "iperf_port": ' + Trim(AddressPage.Values[3]) + ',';
+  L[5] := JsonPair('data_dir', GetDataDir(''), False);
+  L[6] := JsonPair('install_dir', ExpandConstant('{app}'), False);
+  L[7] := JsonPair('admin_password', AdminPage.Values[0], False);
+  L[8] := '  "raw_days": ' + Trim(RawDaysEdit.Text) + ',';
+  L[9] := '  "agg_months": ' + Trim(AggMonthsEdit.Text) + ',';
+  L[10] := '  "notify": {';
+  L[11] := '  ' + JsonPair('email_to', Trim(NotifyPage.Values[0]), False);
+  L[12] := '  ' + JsonPair('email_from', Trim(NotifyPage.Values[1]), False);
+  L[13] := '  ' + JsonPair('smtp_smarthost', Trim(NotifyPage.Values[2]), False);
+  L[14] := '  ' + JsonPair('smtp_username', Trim(NotifyPage.Values[3]), False);
+  L[15] := '  ' + JsonPair('smtp_password', NotifyPage.Values[4], False);
+  L[16] := '  ' + JsonPair('smtp_require_tls', 'true', False);
+  L[17] := '  ' + JsonPair('teams_webhook_url', Trim(NotifyPage.Values[5]), True);
+  L[18] := '  }';
+  L[19] := '}';
+  L[20] := '';
   Result := SaveStringsToUTF8File(FileName, L, False);
 end;
 

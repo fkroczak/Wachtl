@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  WACHTL_VERSION: "0.2.0"
+  WACHTL_VERSION: "0.3.0"
 
 jobs:
   server:
@@ -75,6 +75,10 @@ jobs:
       - name: Probe-Setup unbeaufsichtigt installieren und anmelden lassen
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "Probe-Prüfung" -Command "./.github/scripts/test-probe.ps1"
+
+      - name: Pfad, Hop-Pings und iperf3 Ende-zu-Ende prüfen
+        shell: pwsh
+        run: ./.github/scripts/run-logged.ps1 -Title "E2E 0.3" -Command "./.github/scripts/test-v03.ps1"
 
       - name: Probe deinstallieren
         shell: pwsh

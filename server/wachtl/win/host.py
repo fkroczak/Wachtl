@@ -56,7 +56,7 @@ def build_specs(layout: Layout) -> list[ProcSpec]:
     py = str(layout.python)
     d = layout.data_dir
     app_env = layout.app_env()
-    return [
+    specs = [
         ProcSpec("vm-raw", [str(layout.binary("victoria-metrics")),
                             f"-storageDataPath={d / 'vm-raw'}",
                             f"-retentionPeriod={layout.env['RAW_RETENTION']}",
@@ -87,6 +87,11 @@ def build_specs(layout: Layout) -> list[ProcSpec]:
                              f"-external.url={layout.env['WACHTL_PUBLIC_URL']}/alerts",
                              "-loggerTimezone=Local"]),
     ]
+    if layout.port("IPERF") and layout.iperf_exe.exists():
+        # Gegenstelle für iperf3-Messungen der Probes (Check „Bandbreite intern“, Gegenstelle Wachtl-Server)
+        specs.append(ProcSpec("iperf3", [str(layout.iperf_exe), "-s", "-p", str(layout.port("IPERF"))],
+                              cwd=str(layout.iperf_exe.parent)))
+    return specs
 
 
 # -- Befehle ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ SID_SYSTEM = "*S-1-5-18"
 SID_ADMINS = "*S-1-5-32-544"
 FW_HTTPS = "Wachtl Server HTTPS"
 FW_HTTP = "Wachtl Server HTTP"
+FW_IPERF = "Wachtl Server iperf3"
 TASK_BACKUP = "Wachtl Server Backup"
 
 
@@ -149,10 +150,15 @@ def configure_firewall(layout: Layout, run: Runner) -> None:
     if layout.http_port:
         run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_HTTP}", "dir=in", "action=allow",
              "protocol=TCP", f"localport={layout.http_port}", "profile=any"])
+    if layout.port("IPERF"):
+        # iperf3 nutzt denselben Port für TCP-Steuerung und UDP-Tests
+        for proto in ("TCP", "UDP"):
+            run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_IPERF}", "dir=in", "action=allow",
+                 f"protocol={proto}", f"localport={layout.port('IPERF')}", "profile=any"])
 
 
 def remove_firewall(run: Runner) -> None:
-    for name in (FW_HTTPS, FW_HTTP):
+    for name in (FW_HTTPS, FW_HTTP, FW_IPERF):
         run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={name}"], check=False)
 
 

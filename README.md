@@ -51,7 +51,7 @@ Heatmaps, mTLS und automatische Probe-Updates.
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.2.0.exe` starten
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.3.0.exe` starten
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
 3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md)

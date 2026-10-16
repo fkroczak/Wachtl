@@ -11,12 +11,12 @@
 ;   2. Parameter: /Server= /Pin= /Token= /Proxy= /Hostname=
 ;
 ; Unbeaufsichtigt (z. B. per Softwareverteilung):
-;   WachtlProbeSetup-0.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin=… /Token=…
+;   WachtlProbeSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin=… /Token=…
 ; Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup ab (Code ≠ 0,
 ; Grund im /LOG). 10 = installiert, aber der Dienst startet nicht. /SUPPRESSMSGBOXES ist unbeaufsichtigt Pflicht.
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\..\dist\probe"
@@ -58,6 +58,8 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Source: "{#PublishDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PublishDir}\Install-Wachtl.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
+; iperf3 für Bandbreitenmessungen (Client und optional Gegenstelle), BSD-Lizenz
+Source: "{#PublishDir}\iperf3\*"; DestDir: "{app}\iperf3"; Flags: ignoreversion recursesubdirs
 ; Setup selbst ablegen – darüber lassen sich Einstellungen später ändern
 Source: "{srcexe}"; DestDir: "{app}"; DestName: "WachtlProbeSetup.exe"; Flags: external ignoreversion; Check: NotRunningFromApp
 
@@ -72,6 +74,7 @@ Filename: "{code:GetServer}"; Description: "Wachtl-Dashboard im Browser öffnen"
 [UninstallRun]
 Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "StopWachtl"
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule ""name=Wachtl Probe iperf3"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"
 
 [Code]
 const
@@ -458,7 +461,7 @@ begin
       Exit;
     end;
   RunHidden(Sc, 'config ' + ServiceName + ' start= delayed-auto obj= ' + Quote(ServiceAccount));
-  RunHidden(Sc, 'description ' + ServiceName + ' "Misst Latenz und Paketverlust und meldet sie an den Wachtl-Server."');
+  RunHidden(Sc, 'description ' + ServiceName + ' "Misst Latenz, Paketverlust, Pfade und Bandbreite und meldet sie an den Wachtl-Server."');
   RunHidden(Sc, 'failure ' + ServiceName + ' reset= 86400 actions= restart/10000/restart/30000/restart/60000');
   RunHidden(Sc, 'failureflag ' + ServiceName + ' 1');
 
@@ -470,6 +473,11 @@ begin
   { Logdateien dürfen alle Benutzer lesen (Startmenü-Verknüpfung), Token und Puffer nicht }
   ForceDirectories(DataDir() + '\logs');
   RunHidden(ExpandConstant('{sys}\icacls.exe'), Quote(DataDir() + '\logs') + ' /grant *S-1-5-32-545:(OI)(CI)RX /C /Q');
+  { iperf3-Gegenstelle: nur das Programm iperf3.exe darf eingehende Verbindungen annehmen.
+    Ob die Gegenstelle läuft, entscheidet das Web-UI (Probe › Einstellungen). }
+  RunHidden(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule "name=Wachtl Probe iperf3"');
+  RunHidden(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall add rule "name=Wachtl Probe iperf3" dir=in action=allow ' +
+            '"program=' + ExpandConstant('{app}\iperf3\iperf3.exe') + '" enable=yes profile=any');
   { Neu registriert: alte, noch nicht gesendete Messwerte gehören zur alten Registrierung }
   if IsEnrolled and EnrollDone then
   begin

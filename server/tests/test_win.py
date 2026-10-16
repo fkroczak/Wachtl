@@ -272,3 +272,21 @@ class HostSpecTest(InstallBase):
         self.assertIn("--cluster.listen-address=", specs["alertmanager"].args)
         self.assertIn("-remoteWrite.url=http://127.0.0.1:8429", specs["vmalert"].args)
         self.assertEqual(specs["web"].env["WACHTL_HTTPS_PORT"], "8443")
+        self.assertEqual(specs["web"].env["WACHTL_IPERF_PORT"], "5201")
+
+    def test_iperf_server_process_and_firewall(self):
+        _, run = self.do_install(iperf_port=5301)
+        flat = [" ".join(c) for c in run.calls]
+        self.assertTrue(any("name=Wachtl Server iperf3" in c and "protocol=UDP" in c and "localport=5301" in c
+                            for c in flat))
+        layout = Layout.load(self.data, self.inst)
+        layout.iperf_exe.parent.mkdir(parents=True, exist_ok=True)
+        layout.iperf_exe.write_bytes(b"")
+        specs = {s.name: s for s in host.build_specs(layout)}
+        self.assertEqual(specs["iperf3"].args[1:], ["-s", "-p", "5301"])
+        # 0 = aus: kein Prozess, keine Firewall-Regel
+        _, run = self.do_install(iperf_port=0)
+        self.assertFalse(any("iperf3" in " ".join(c) and "add" in c for c in run.calls))
+        self.assertNotIn("iperf3", {s.name for s in host.build_specs(Layout.load(self.data, self.inst))})
+        with self.assertRaises(installer.SetupError):
+            installer.parse_input({**INPUT, "data_dir": "D:\\x", "iperf_port": 8443})

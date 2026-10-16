@@ -1,5 +1,3 @@
-using System.Diagnostics;
-using System.Net;
 using System.Net.NetworkInformation;
 using Microsoft.Extensions.Logging;
 using Wachtl.Probe.Config;
@@ -10,9 +8,6 @@ namespace Wachtl.Probe.Checks;
 /// <summary>Führt einen Ping-Check in festem Intervall aus und schreibt die Ergebnisse in den Puffer.</summary>
 public sealed class PingRunner : IAsyncDisposable
 {
-    private static readonly byte[] Payload = new byte[32];
-    private static readonly TimeSpan JitterInterval = TimeSpan.FromSeconds(60);
-
     private readonly ISampleSink _sink;
     private readonly GatewayResolver _gateway;
     private readonly ILogger _logger;
@@ -34,9 +29,11 @@ public sealed class PingRunner : IAsyncDisposable
     {
         var interval = TimeSpan.FromSeconds(Math.Max(1, Check.IntervalS));
         var timeout = TimeSpan.FromMilliseconds(Math.Clamp(Check.TimeoutMs, 100, (int)interval.TotalMilliseconds));
-        var options = new PingOptions(ttl: 128, dontFragment: false);
+        var payload = new byte[Math.Clamp(Check.Int("size_bytes", 32), 0, 1472)];
+        var options = new PingOptions(ttl: Math.Clamp(Check.Int("ttl", 128), 1, 255), dontFragment: false);
+        var jitterInterval = TimeSpan.FromSeconds(Math.Clamp(Check.Int("jitter_window_s", 60), 10, 3600));
         var jitter = new JitterCalculator();
-        var nextJitter = DateTimeOffset.UtcNow + JitterInterval;
+        var nextJitter = DateTimeOffset.UtcNow + jitterInterval;
         var lastError = string.Empty;
 
         _logger.LogInformation("Ping-Check {Id} gestartet: {Target} alle {Interval} s", Check.Id, Check.Target, Check.IntervalS);
@@ -47,32 +44,35 @@ public sealed class PingRunner : IAsyncDisposable
             do
             {
                 var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                var (success, rtt, ttl, error) = await PingOnceAsync(ping, timeout, options, ct).ConfigureAwait(false);
+                var (address, resolveError) = await PingHelper.ResolveAsync(Check.Target, _gateway, ct).ConfigureAwait(false);
+                var reply = address is null
+                    ? new PingResult(false, 0, null, null, IPStatus.Unknown, resolveError)
+                    : await PingHelper.SendAsync(ping, address, timeout, payload, options, ct).ConfigureAwait(false);
 
-                _sink.Add(MetricLine.Format(MetricLine.PingUp, Check.Id, success ? 1 : 0, timestamp));
-                if (success)
+                _sink.Add(MetricLine.Format(MetricLine.PingUp, Check.Id, reply.Success ? 1 : 0, timestamp));
+                if (reply.Success)
                 {
-                    _sink.Add(MetricLine.Format(MetricLine.PingRtt, Check.Id, rtt, timestamp));
-                    if (ttl is int t)
+                    _sink.Add(MetricLine.Format(MetricLine.PingRtt, Check.Id, reply.RttMs, timestamp));
+                    if (reply.Ttl is int t)
                     {
                         _sink.Add(MetricLine.Format(MetricLine.PingTtl, Check.Id, t, timestamp));
                     }
 
-                    jitter.Add(rtt);
+                    jitter.Add(reply.RttMs);
                 }
 
-                if (error != lastError)
+                if (reply.Error != lastError)
                 {
-                    if (!string.IsNullOrEmpty(error))
+                    if (!string.IsNullOrEmpty(reply.Error))
                     {
-                        _logger.LogWarning("Ping {Target} (Check {Id}): {Error}", Check.Target, Check.Id, error);
+                        _logger.LogWarning("Ping {Target} (Check {Id}): {Error}", Check.Target, Check.Id, reply.Error);
                     }
                     else if (!string.IsNullOrEmpty(lastError))
                     {
                         _logger.LogInformation("Ping {Target} (Check {Id}) wieder erfolgreich", Check.Target, Check.Id);
                     }
 
-                    lastError = error;
+                    lastError = reply.Error;
                 }
 
                 if (DateTimeOffset.UtcNow >= nextJitter)
@@ -82,7 +82,7 @@ public sealed class PingRunner : IAsyncDisposable
                         _sink.Add(MetricLine.Format(MetricLine.PingJitter, Check.Id, j, timestamp));
                     }
 
-                    nextJitter += JitterInterval;
+                    nextJitter += jitterInterval;
                 }
             }
             while (await timer.WaitForNextTickAsync(ct).ConfigureAwait(false));
@@ -94,60 +94,6 @@ public sealed class PingRunner : IAsyncDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Ping-Check {Id} unerwartet beendet", Check.Id);
-        }
-    }
-
-    private async Task<(bool Success, double Rtt, int? Ttl, string Error)> PingOnceAsync(
-        Ping ping, TimeSpan timeout, PingOptions options, CancellationToken ct)
-    {
-        IPAddress? address;
-        if (Check.Target == "gateway")
-        {
-            address = _gateway.Get();
-            if (address is null)
-            {
-                return (false, 0, null, "kein Default-Gateway gefunden");
-            }
-        }
-        else if (!IPAddress.TryParse(Check.Target, out address))
-        {
-            try
-            {
-                var resolved = await Dns.GetHostAddressesAsync(Check.Target, System.Net.Sockets.AddressFamily.InterNetwork, ct)
-                    .ConfigureAwait(false);
-                address = resolved.FirstOrDefault();
-            }
-            catch (Exception ex) when (ex is System.Net.Sockets.SocketException or ArgumentException)
-            {
-                return (false, 0, null, "DNS-Auflösung fehlgeschlagen: " + ex.Message);
-            }
-
-            if (address is null)
-            {
-                return (false, 0, null, "DNS liefert keine IPv4-Adresse");
-            }
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-        try
-        {
-            var reply = await ping.SendPingAsync(address, timeout, Payload, options, ct).ConfigureAwait(false);
-            stopwatch.Stop();
-            if (reply.Status != IPStatus.Success)
-            {
-                return (false, 0, null, reply.Status.ToString());
-            }
-
-            // Windows liefert RoundtripTime nur in ganzen ms. Für LAN-Ziele (< 2 ms)
-            // nehmen wir die genauere Stoppuhr-Messung.
-            var rtt = reply.RoundtripTime >= 2
-                ? reply.RoundtripTime
-                : Math.Round(stopwatch.Elapsed.TotalMilliseconds, 3);
-            return (true, rtt, reply.Options?.Ttl, string.Empty);
-        }
-        catch (PingException ex)
-        {
-            return (false, 0, null, ex.InnerException?.Message ?? ex.Message);
         }
     }
 

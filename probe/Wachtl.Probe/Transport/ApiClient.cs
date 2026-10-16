@@ -195,5 +195,17 @@ public sealed class ApiClient : IDisposable
                ?? new HeartbeatResponse();
     }
 
+    /// <summary>Ergebnisse (Pfad, Bandbreite) als JSON senden.</summary>
+    public async Task PostResultAsync<T>(string path, T payload, CancellationToken ct)
+    {
+        using var request = Request(HttpMethod.Post, path);
+        request.Content = JsonContent.Create(payload, options: JsonOptions);
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await ErrorAsync(response, ct).ConfigureAwait(false);
+        }
+    }
+
     public void Dispose() => _http.Dispose();
 }

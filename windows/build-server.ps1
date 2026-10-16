@@ -10,15 +10,16 @@
     Voraussetzungen: Windows, Python 3.12 (für pip), Inno Setup 6 (wird sonst per choco installiert).
 
 .EXAMPLE
-    .\windows\build-server.ps1 -Version 0.2.0
+    .\windows\build-server.ps1 -Version 0.3.0
 #>
 param(
-    [string]$Version = '0.2.0',
+    [string]$Version = '0.3.0',
     [string]$PythonVersion = '3.12.10',
     [string]$VmVersion = 'v1.149.0',
     [string]$AlertmanagerVersion = '0.28.1',
     [string]$WinSWVersion = 'v2.12.0',
     [string]$ProbeDir = '',                       # optional: Ordner mit wachtl-probe.exe + Install-Wachtl.ps1
+    [string]$IperfUrl = 'https://github.com/ar51an/iperf3-win-builds/releases/download/3.21/iperf-3.21-win64.zip',
     [string]$Output = (Join-Path $PSScriptRoot '..\dist')
 )
 
@@ -114,6 +115,24 @@ Step "WinSW $WinSWVersion"
 $winsw = Get-Download "https://github.com/winsw/winsw/releases/download/$WinSWVersion/WinSW.NET461.exe"
 Copy-Item $winsw (Join-Path $Build 'service\WachtlServer.exe') -Force
 Write-Host "    SHA-256 WinSW: $((Get-FileHash -Algorithm SHA256 $winsw).Hash)"
+
+Step 'iperf3 (Gegenstelle für Bandbreitenmessungen der Probes)'
+$iperfTarget = Join-Path $Build 'bin\iperf3'
+if (Test-Path $iperfTarget) { Remove-Item -Recurse -Force $iperfTarget }
+New-Item -ItemType Directory -Force -Path $iperfTarget | Out-Null
+if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'iperf3\iperf3.exe'))) {
+    Copy-Item (Join-Path $ProbeDir 'iperf3\*') $iperfTarget -Recurse
+    Write-Host '    aus dem Probe-Paket übernommen'
+} else {
+    $iperfZip = Get-Download $IperfUrl
+    Write-Host "    SHA-256 iperf3: $((Get-FileHash -Algorithm SHA256 $iperfZip).Hash)"
+    Expand-To $iperfZip "$tmp\iperf3"
+    $iperfExe = Get-ChildItem "$tmp\iperf3" -Recurse -Filter iperf3.exe | Select-Object -First 1
+    if (-not $iperfExe) { throw 'iperf3.exe nicht im Archiv gefunden' }
+    Copy-Item (Join-Path $iperfExe.DirectoryName '*') $iperfTarget -Recurse
+}
+& (Join-Path $iperfTarget 'iperf3.exe') --version
+if ($LASTEXITCODE -ne 0) { throw 'iperf3.exe startet nicht' }
 
 Step 'Begleitdateien'
 Copy-Item (Join-Path $PSScriptRoot 'wachtl-server.cmd') $Build

@@ -27,6 +27,7 @@ DEFAULTS = {
     "PORT_VM_AGG": "8429",
     "PORT_VMALERT": "8880",
     "PORT_ALERTMANAGER": "9093",
+    "PORT_IPERF": "5201",           # iperf3-Gegenstelle für Probes, öffentlich (TCP+UDP); 0 = aus
     "BACKUP_KEEP_DAYS": "14",
 }
 SUBDIRS = ("config", "certs", "data", "vm-raw", "vm-agg", "rules", "alertmanager", "logs", "backups")
@@ -141,7 +142,12 @@ class Layout:
         return self.install_dir / "service" / f"{SERVICE_ID}.xml"
 
     def port(self, key: str) -> int:
-        return int(self.env[f"PORT_{key}"])
+        return int(self.env[f"PORT_{key}"] or 0)
+
+    @property
+    def iperf_exe(self) -> Path:
+        bin_dir = Path(os.environ.get("WACHTL_BIN_DIR", self.install_dir / "bin"))
+        return bin_dir / "iperf3" / f"iperf3{EXE}"
 
     @property
     def https_port(self) -> int:
@@ -186,6 +192,7 @@ class Layout:
             "WACHTL_TRUST_PROXY": "0",
             "WACHTL_COOKIE_SECURE": "1",
             "WACHTL_PROBE_DIR": str(self.install_dir / "probe"),
+            "WACHTL_IPERF_PORT": str(self.port("IPERF")),
             # nur für den HTTPS-Server (wachtl.win.serve)
             "WACHTL_HTTPS_PORT": str(self.https_port),
             "WACHTL_HTTP_PORT": str(self.http_port),
