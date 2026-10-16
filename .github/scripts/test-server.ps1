@@ -11,8 +11,13 @@ if (-not $ok) { Get-ChildItem C:\WachtlData\logs; Get-Content C:\WachtlData\logs
 Write-Host $r.Content
 $login = Invoke-WebRequest https://localhost:8443/login -SkipCertificateCheck -UseBasicParsing
 if ($login.StatusCode -ne 200) { throw 'Login-Seite fehlt' }
-$redir = Invoke-WebRequest http://localhost:8080/ -MaximumRedirection 0 -SkipHttpErrorCheck -UseBasicParsing
-if ($redir.StatusCode -ne 301) { throw 'HTTP-Umleitung fehlt' }
+# Umleitung HTTP -> HTTPS (ohne ihr zu folgen; Invoke-WebRequest wirft hier in PowerShell 7)
+$handler = [System.Net.Http.HttpClientHandler]::new()
+$handler.AllowAutoRedirect = $false
+$client = [System.Net.Http.HttpClient]::new($handler)
+$redir = $client.GetAsync('http://localhost:8080/').GetAwaiter().GetResult()
+Write-Host "HTTP: $([int]$redir.StatusCode) -> $($redir.Headers.Location)"
+if ([int]$redir.StatusCode -ne 301) { throw 'HTTP-Umleitung fehlt' }
 & "${env:ProgramFiles}\Wachtl Server\wachtl-server.cmd" status
 if ($LASTEXITCODE -ne 0) { throw 'Status meldet Fehler' }
 & "${env:ProgramFiles}\Wachtl Server\wachtl-server.cmd" backup
