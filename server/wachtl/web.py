@@ -518,7 +518,8 @@ def admin():
         assignments[a["check_id"]].append(repo.scope_label(a["scope"], a["scope_id"], site_map, probe_map))
     tokens = q(
         "SELECT t.*, s.name AS site_name FROM enrollment_tokens t JOIN sites s ON s.id = t.site_id "
-        "WHERE t.revoked = FALSE AND t.expires_at > ? AND t.uses < t.max_uses ORDER BY t.created_at DESC",
+        "WHERE t.revoked = FALSE AND t.expires_at > ? AND t.uses < t.max_uses AND t.probe_kind = 'probe' "
+        "ORDER BY t.created_at DESC",
         (repo.now(),),
     )
     return render_template(

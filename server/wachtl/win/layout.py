@@ -28,9 +28,10 @@ DEFAULTS = {
     "PORT_VMALERT": "8880",
     "PORT_ALERTMANAGER": "9093",
     "PORT_IPERF": "5201",           # iperf3-Gegenstelle für Probes, öffentlich (TCP+UDP); 0 = aus
+    "SERVER_PROBE": "1",            # Server misst selbst (Server-Probe); 0 = aus
     "BACKUP_KEEP_DAYS": "14",
 }
-SUBDIRS = ("config", "certs", "data", "vm-raw", "vm-agg", "rules", "alertmanager", "logs", "backups")
+SUBDIRS = ("config", "certs", "data", "vm-raw", "vm-agg", "rules", "alertmanager", "logs", "backups", "serverprobe")
 _LINE = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$")
 
 
@@ -193,6 +194,8 @@ class Layout:
             "WACHTL_COOKIE_SECURE": "1",
             "WACHTL_PROBE_DIR": str(self.install_dir / "probe"),
             "WACHTL_IPERF_PORT": str(self.port("IPERF")),
+            "WACHTL_SERVER_PROBE": "1" if self.env.get("SERVER_PROBE", "1") != "0" else "0",
+            "WACHTL_SERVER_PROBE_DIR": str(self.data_dir / "serverprobe"),
             # nur für den HTTPS-Server (wachtl.win.serve)
             "WACHTL_HTTPS_PORT": str(self.https_port),
             "WACHTL_HTTP_PORT": str(self.http_port),
@@ -202,6 +205,18 @@ class Layout:
             "WACHTL_KEY_FILE": str(self.key_file),
             "WACHTL_LOG_DIR": str(self.logs),
         }
+
+
+def server_probe_env(layout: "Layout") -> dict[str, str]:
+    """Umgebung der Server-Probe: über HTTPS mit Pin an den eigenen Server, iperf3 aus dem Programmordner."""
+    return {
+        "WACHTL_SERVER_PROBE": layout.app_env()["WACHTL_SERVER_PROBE"],
+        "WACHTL_SERVER_PROBE_URL": f"https://127.0.0.1:{layout.https_port}",
+        "WACHTL_SPKI_PIN": layout.env["WACHTL_SPKI_PIN"],
+        "WACHTL_SERVER_PROBE_DIR": str(layout.data_dir / "serverprobe"),
+        "WACHTL_IPERF_EXE": str(layout.iperf_exe),
+        "PYTHONUTF8": "1",
+    }
 
 
 def public_url(hostname: str, https_port: int) -> str:

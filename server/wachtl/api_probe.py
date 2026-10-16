@@ -68,15 +68,18 @@ def enroll():
         action = "probe.reenroll"
     else:
         probe_id = ins(
-            "INSERT INTO probes (site_id, hostname, os, version, token_hash, status, created_at) "
-            "VALUES (?, ?, ?, ?, 'pending', 'active', ?)",
-            (site["id"], hostname, str(data.get("os", ""))[:200], str(data.get("version", ""))[:50], ts),
+            "INSERT INTO probes (site_id, hostname, os, version, token_hash, status, kind, created_at) "
+            "VALUES (?, ?, ?, ?, 'pending', 'active', ?, ?)",
+            (site["id"], hostname, str(data.get("os", ""))[:200], str(data.get("version", ""))[:50],
+             et["probe_kind"] or "probe", ts),
         )
         action = "probe.enroll"
     probe_token = f"{probe_id}.{secret}"
     ex(
-        "UPDATE probes SET token_hash = ?, status = 'active', os = ?, version = ?, last_ip = ? WHERE id = ?",
-        (hash_token(probe_token), str(data.get("os", ""))[:200], str(data.get("version", ""))[:50], _client_ip(), probe_id),
+        "UPDATE probes SET token_hash = ?, status = 'active', kind = ?, deregistered_at = NULL, os = ?, version = ?, "
+        "last_ip = ? WHERE id = ?",
+        (hash_token(probe_token), et["probe_kind"] or "probe", str(data.get("os", ""))[:200],
+         str(data.get("version", ""))[:50], _client_ip(), probe_id),
     )
     ex("UPDATE enrollment_tokens SET uses = uses + 1 WHERE id = ?", (et["id"],))
     repo.audit(f"probe:{hostname}", action, f"probe:{probe_id}", f"Standort {site['name']}, IP {_client_ip()}")

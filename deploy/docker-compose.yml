@@ -48,9 +48,12 @@ services:
       WACHTL_TRUST_PROXY: "1"
       WACHTL_PROBE_DIR: /probe
       WACHTL_IPERF_PORT: ${IPERF_PORT:-5201}
+      WACHTL_SERVER_PROBE: ${SERVER_PROBE:-1}
+      WACHTL_SERVER_PROBE_DIR: /serverprobe
     volumes:
       - rules:/rules
       - amconfig:/amconfig
+      - serverprobe:/serverprobe
       - ./probe:/probe:ro   # WachtlProbeSetup-*.exe hier ablegen -> Download im Web-UI
     depends_on:
       postgres:
@@ -151,11 +154,37 @@ services:
     networks: [edge]
     logging: *logging
 
+  # Server-Probe: der Server misst selbst (Ping, Pfad, Bandbreite) – wie eine Windows-Probe über das Probe-API.
+  # Host-Netz, damit Gateway und Pfad die des Servers sind; spricht Traefik über https://127.0.0.1 mit SPKI-Pin an.
+  # Nur ausgehende Verbindungen, kein offener Port. Abschalten: SERVER_PROBE=0 in .env oder Probe im Web-UI deaktivieren.
+  serverprobe:
+    build: ../server
+    image: wachtl-app:local
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "wachtl.serverprobe"]
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    environment:
+      WACHTL_SERVER_PROBE: ${SERVER_PROBE:-1}
+      WACHTL_SERVER_PROBE_URL: https://127.0.0.1:443
+      WACHTL_SERVER_PROBE_DIR: /serverprobe
+      WACHTL_SPKI_PIN: ${WACHTL_SPKI_PIN}
+    volumes:
+      - serverprobe:/serverprobe
+    healthcheck:
+      disable: true
+    depends_on:
+      app:
+        condition: service_healthy
+    logging: *logging
+
 networks:
   edge:
   internal:
 
 volumes:
+  serverprobe:
   pgdata:
   vmraw:
   vmagg:

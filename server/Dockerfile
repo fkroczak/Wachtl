@@ -4,6 +4,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# ping und iperf3 für die Server-Probe (der Server misst selbst, Dienst "serverprobe")
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends iputils-ping iperf3 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -12,8 +17,9 @@ COPY wachtl ./wachtl
 COPY wsgi.py docker-entrypoint.sh ./
 
 RUN useradd --system --uid 10001 --home /app wachtl \
-    && mkdir -p /rules /amconfig \
-    && chown wachtl /rules /amconfig \
+    && mkdir -p /rules /amconfig /serverprobe \
+    && chown wachtl /rules /amconfig /serverprobe \
+    && chmod 700 /serverprobe \
     && chmod 755 docker-entrypoint.sh
 USER wachtl
 

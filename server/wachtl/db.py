@@ -41,7 +41,8 @@ class Database:
         return conn
 
     def _sql(self, sql: str) -> str:
-        return sql.replace("?", "%s") if self.is_postgres else sql
+        # psycopg wertet jedes % als Platzhalter – wörtliche % (LIKE 'notify.%') verdoppeln
+        return sql.replace("%", "%%").replace("?", "%s") if self.is_postgres else sql
 
     # -- Abfragen ---------------------------------------------------------
     def query(self, conn, sql: str, params: Iterable[Any] = ()) -> list[dict]:

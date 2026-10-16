@@ -267,7 +267,13 @@ class HostSpecTest(InstallBase):
         self.do_install()
         layout = Layout.load(self.data, self.inst)
         specs = {s.name: s for s in host.build_specs(layout)}
-        self.assertEqual(list(specs), ["vm-raw", "vm-agg", "alertmanager", "web", "vmalert"])
+        self.assertEqual(list(specs), ["vm-raw", "vm-agg", "alertmanager", "web", "vmalert", "serverprobe"])
+        probe_env = specs["serverprobe"].env
+        self.assertEqual(probe_env["WACHTL_SERVER_PROBE_URL"], "https://127.0.0.1:8443")
+        self.assertEqual(probe_env["WACHTL_SPKI_PIN"], layout.env["WACHTL_SPKI_PIN"])
+        self.assertEqual(probe_env["WACHTL_SERVER_PROBE_DIR"], specs["web"].env["WACHTL_SERVER_PROBE_DIR"])
+        layout.env["SERVER_PROBE"] = "0"
+        self.assertNotIn("serverprobe", {s.name for s in host.build_specs(layout)})
         self.assertIn("-retentionPeriod=14d", specs["vm-raw"].args)
         self.assertIn("--cluster.listen-address=", specs["alertmanager"].args)
         self.assertIn("-remoteWrite.url=http://127.0.0.1:8429", specs["vmalert"].args)

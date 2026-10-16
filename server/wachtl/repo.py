@@ -304,14 +304,16 @@ def probe_ini(server_url: str, pin: str, token: str = "", proxy: str = "") -> st
     )
 
 
-def create_enrollment_token(site_id: int, max_uses: int, days: int, created_by: str, description: str = "") -> str:
+def create_enrollment_token(site_id: int, max_uses: int, days: int, created_by: str, description: str = "",
+                            probe_kind: str = "probe") -> str:
     from .security import hash_token, new_secret
 
     token = "wachtl-" + new_secret(24)
     ins(
         "INSERT INTO enrollment_tokens (site_id, token_hash, description, expires_at, max_uses, uses, revoked, "
-        "created_by, created_at) VALUES (?, ?, ?, ?, ?, 0, FALSE, ?, ?)",
-        (site_id, hash_token(token), description[:200], now() + days * 86400, max_uses, created_by, now()),
+        "created_by, created_at, probe_kind) VALUES (?, ?, ?, ?, ?, 0, FALSE, ?, ?, ?)",
+        (site_id, hash_token(token), description[:200], now() + days * 86400, max_uses, created_by, now(),
+         probe_kind),
     )
     audit(created_by, "token.create", f"site:{site_id}", f"{max_uses} Nutzungen, {days} Tage")
     return token
