@@ -9,7 +9,37 @@
   <div class="card stat"><span class="num">{{ sites|length }}</span><span>Standorte</span></div>
   <div class="card stat"><span class="num">{{ probes|selectattr('status','equalto','active')|list|length }}</span><span>Probes aktiv</span></div>
   <div class="card stat {{ 'bad' if alerts else '' }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></div>
+  <a class="card stat {{ 'bad' if problems or offline else '' }}" href="#probleme"><span class="num">{{ problems|length + offline|length }}</span><span>Messungen mit Problemen</span></a>
 </section>
+
+<h2 id="probleme">Messungen mit Problemen</h2>
+{% if problems or offline %}
+<p class="muted">Alle Messungen, die gerade fehlschlagen, auffällig sind oder ausbleiben – Ping, Pfad, iperf3 und WAN.</p>
+<table>
+  <thead><tr><th>Zustand</th><th>Probe</th><th>Art</th><th>Check</th><th>Problem</th><th>Letztes Ergebnis</th></tr></thead>
+  <tbody>
+  {% for p in offline %}
+    <tr>
+      <td><span class="dot down"></span> offline</td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small">{{ p.site_name }}</span></td>
+      <td>Probe</td><td>–</td>
+      <td>Kein Heartbeat – keine der Messungen dieser Probe läuft</td>
+      <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
+    </tr>
+  {% endfor %}
+  {% for p, st in problems %}
+    <tr>
+      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small">{{ p.site_name }}</span></td>
+      <td>{{ KIND_LABELS[st.kind] }}</td>
+      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a></td>
+      <td>{{ st.detail }}</td>
+      <td>{{ st.ts|ago if st.ts else '–' }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
 
 <h2>Aktive Alarme</h2>
 {% if alerts %}
@@ -35,6 +65,7 @@
   <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}">
     <div><strong>{{ s.name }}</strong>{% if s.customer_no %} <span class="muted">· {{ s.customer_no }}</span>{% endif %}</div>
     <span>{{ site_stats[s.id].online }} / {{ site_stats[s.id].probes }} Probes online</span>
+    {% if site_stats[s.id].problems %}<span class="down-t small">{{ site_stats[s.id].problems }} Messungen mit Problemen</span>{% endif %}
   </a>
   {% endfor %}
 </div>
@@ -43,19 +74,19 @@
 <h2>Probes</h2>
 {% if probes %}
 <table>
-  <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Ziele ok / Warnung / gestört</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
+  <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
   <tbody>
   {% for p in probes %}
-    {% set st = per_probe.get(p.id|string, {'ok':0,'warn':0,'down':0}) %}
+    {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
     <tr>
       <td>
         {% if p.status != 'active' %}<span class="dot off"></span> deaktiviert
         {% elif probe_online(p) %}<span class="dot ok"></span> online
         {% else %}<span class="dot down"></span> offline{% endif %}
       </td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</td>
       <td>{{ p.site_name }}</td>
-      <td><span class="ok-t">{{ st.ok }}</span> / <span class="warn-t">{{ st.warn }}</span> / <span class="down-t">{{ st.down }}</span></td>
+      <td><span class="ok-t">{{ st.ok }}</span> / <span class="warn-t">{{ st.warn }}</span> / <span class="down-t">{{ st.down }}</span> / <span class="stale-t">{{ st.stale }}</span>{% if st.waiting %} <span class="muted small">(+{{ st.waiting }} warten)</span>{% endif %}</td>
       <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
       <td>{{ p.buffer_items or 0 }}</td>
       <td>{{ p.version or '–' }}</td>
@@ -64,4 +95,26 @@
   </tbody>
 </table>
 {% else %}<p class="muted">Noch keine Probes registriert.</p>{% endif %}
+
+<h2 id="bandbreite">Bandbreite</h2>
+{% if bandwidth %}
+<table>
+  <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>Art</th><th>Download</th><th>Upload</th><th>Letzte Messung</th></tr></thead>
+  <tbody>
+  {% for p, st in bandwidth %}
+    <tr>
+      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small">{{ p.site_name }}</span></td>
+      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ st.check.target }}</span></td>
+      <td>{{ KIND_LABELS[st.kind] }}</td>
+      {% for d in ('down', 'up') %}
+        {% set r = st.values[d] %}
+        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error }}">Fehler</span>{% elif r %}{{ r.mbps|mbps }}{% else %}–{% endif %}</td>
+      {% endfor %}
+      <td>{{ st.ts|ago if st.ts else st.detail }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Keine Bandbreiten-Checks. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung anlegen</a>.{% endif %}</p>{% endif %}
 {% endblock %}

@@ -109,13 +109,16 @@ table.matrix td.cell a { color: inherit; display: block; }
 td.cell.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); }
 td.cell.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); }
 td.cell.down { background: color-mix(in srgb, var(--bad) 22%, transparent); font-weight: 600; }
-td.cell.unknown, td.cell.na { color: var(--text-muted); }
+td.cell.unknown, td.cell.na, td.cell.waiting { color: var(--text-muted); }
+td.cell.stale { box-shadow: inset 0 0 0 2px var(--bad); color: var(--text-muted); }
 
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--off); }
 .dot.ok { background: var(--ok); }
 .dot.warn { background: var(--warn); }
 .dot.down { background: var(--bad); }
-.ok-t { color: var(--ok); } .warn-t { color: var(--warn); } .down-t { color: var(--bad); font-weight: 600; }
+.dot.stale { background: transparent; box-shadow: inset 0 0 0 2px var(--bad); }
+.dot.waiting { background: transparent; box-shadow: inset 0 0 0 2px var(--off); }
+.ok-t { color: var(--ok); } .warn-t { color: var(--warn); } .down-t { color: var(--bad); font-weight: 600; } .stale-t { color: var(--bad); }
 .badge { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600;
   background: var(--accent-soft); color: var(--accent); }
 .badge.critical { background: color-mix(in srgb, var(--bad) 12%, var(--surface)); color: var(--bad); }

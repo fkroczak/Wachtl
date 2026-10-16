@@ -15,10 +15,10 @@ from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
-from . import checktypes
+from . import checktypes, standardpaket
 from .services import alertgen
 from .services import alerts as alert_service
-from .services import notify, outages, pathanalysis, vm
+from .services import checkstatus, notify, outages, pathanalysis, vm
 from .services import settings as settings_service
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,17 @@ def inject():
         "ROLE_LABELS": ROLE_LABELS,
         "CHECK_ROLES": repo.CHECK_ROLES,
         "probe_online": repo.probe_online,
+        "check_url": check_url,
     }
+
+
+def check_url(probe: dict, check: dict) -> str:
+    """Detailseite eines Checks auf einer Probe – je nach Art Ziel, Pfad oder Bandbreite."""
+    if check["type"] == "path":
+        return url_for("web.path_view", probe_id=probe["id"], check_id=check["id"])
+    if check["type"] in checktypes.SCHEDULED_TYPES:
+        return url_for("web.bandwidth_view", probe_id=probe["id"], check_id=check["id"])
+    return url_for("web.target", probe_id=probe["id"], check_id=check["id"])
 
 
 @bp.app_template_filter("dt")
@@ -188,18 +198,32 @@ def overview():
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"
     )
     live, live_ok = _live()
-    per_probe: dict[str, dict[str, int]] = defaultdict(lambda: {"ok": 0, "warn": 0, "down": 0, "unknown": 0})
-    for (probe_id, _check), v in live.items():
-        per_probe[probe_id][_cell_state(v)] += 1
-    site_stats = {s["id"]: {"probes": 0, "online": 0} for s in sites}
+    active = [p for p in probes if p["status"] == "active"]
+    states = checkstatus.overview(active, live)
+    per_probe = {p["id"]: checkstatus.counts(states[p["id"]]) for p in active}
+    site_stats = {s["id"]: {"probes": 0, "online": 0, "problems": 0} for s in sites}
+    problems = []      # (Probe, CheckState) – jede Messung, die gerade nicht funktioniert
+    offline = []       # Probes ohne Heartbeat: ihre Checks liefern zwangsläufig nichts
+    bandwidth = []     # (Probe, CheckState) aller Bandbreiten-Checks
     for p in probes:
         site_stats[p["site_id"]]["probes"] += 1
-        if repo.probe_online(p) and p["status"] == "active":
+        if p["status"] != "active":
+            continue
+        if repo.probe_online(p):
             site_stats[p["site_id"]]["online"] += 1
+            for st in states[p["id"]]:
+                if st.problem:
+                    problems.append((p, st))
+        else:
+            offline.append(p)
+        site_stats[p["site_id"]]["problems"] += sum(1 for st in states[p["id"]] if st.problem)
+        bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.SCHEDULED_TYPES]
+    problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
     return render_template(
         "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
-        alerts=alerts, live_ok=live_ok,
+        alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth,
+        KIND_LABELS=checkstatus.KIND_LABELS,
     )
 
 
@@ -212,18 +236,19 @@ def site(site_id: int):
         "WHERE p.site_id = ? ORDER BY p.hostname",
         (site_id,),
     )
-    checks_by_probe = {p["id"]: {c["id"]: c for c in repo.checks_for_probe(p) if c["type"] == "ping"} for p in probes}
-    all_checks: dict[int, dict] = {}
-    for cmap in checks_by_probe.values():
-        all_checks.update(cmap)
     live, live_ok = _live()
-    matrix = {
-        (c_id, p["id"]): live.get((str(p["id"]), str(c_id)))
-        for c_id in all_checks for p in probes if c_id in checks_by_probe[p["id"]]
-    }
+    states = checkstatus.overview(probes, live)
+    all_checks: dict[int, dict] = {}
+    matrix = {}
+    for p in probes:
+        for st in states[p["id"]]:
+            all_checks.setdefault(st.check["id"], st.check)
+            matrix[(st.check["id"], p["id"])] = st
+    order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3}
     return render_template(
-        "site.html", site=s, probes=probes, checks=sorted(all_checks.values(), key=lambda c: c["id"]),
-        matrix=matrix, cell_state=_cell_state, live_ok=live_ok,
+        "site.html", site=s, probes=probes,
+        checks=sorted(all_checks.values(), key=lambda c: (order.get(c["type"], 9), c["id"])),
+        matrix=matrix, live_ok=live_ok, KIND_LABELS=checkstatus.KIND_LABELS,
     )
 
 
@@ -265,8 +290,11 @@ def probe(probe_id: int):
         if json.loads(a["labels"]).get("probe") == str(probe_id)
     ][:20]
     measure = settings_service.get()
+    latest_paths, latest_bw = checkstatus.latest_runs([probe_id])
+    states = checkstatus.probe_states(p, checks, live, latest_paths, latest_bw)
     return render_template(
         "probe.html", probe=p, rows=rows, paths=paths, bandwidth=bandwidth, cell_state=_cell_state,
+        states=states, state_counts=checkstatus.counts(states), KIND_LABELS=checkstatus.KIND_LABELS,
         live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
         default_iperf_port=measure["probe_iperf_port"],
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
@@ -501,7 +529,38 @@ def admin():
         notify_enabled=bool(current_app.config.get("AM_CONFIG")),
         check_types=checktypes.TYPES, summary=checktypes.summary, merged=checktypes.merged,
         measure=settings_service.get(), measure_fields=settings_service.FIELDS,
+        package=standardpaket.preview(current_app.config["PUBLIC_URL"]),
     )
+
+
+@bp.post("/admin/standard-package")
+@login_required("admin")
+def standard_package():
+    """Standardpaket anlegen: Ping, Traceroute, iperf3 und Speedtest mit einem Klick."""
+    scope = request.form.get("scope", "all")
+    scope_id = None
+    if scope == "site":
+        scope_id = int(request.form.get("site_id", 0) or 0)
+        if not q1("SELECT id FROM sites WHERE id = ?", (scope_id,)):
+            flash("Bitte einen Standort auswählen.", "error")
+            return redirect(url_for("web.admin") + "#standardpaket")
+    elif scope != "all":
+        abort(400)
+    keys = request.form.getlist("items")
+    if not keys:
+        flash("Bitte mindestens einen Check auswählen.", "error")
+        return redirect(url_for("web.admin") + "#standardpaket")
+    created, skipped = standardpaket.apply(keys, scope, scope_id, current_app.config["PUBLIC_URL"])
+    user = current_user()["username"]
+    for cid, item in created:
+        repo.audit(user, "check.create", f"check:{cid}", f"Standardpaket: {item.name}")
+    if created:
+        _regen_rules()
+        flash(f"Standardpaket: {len(created)} Checks angelegt ({', '.join(i.name for _, i in created)}). "
+              "Die Probes übernehmen sie mit dem nächsten Heartbeat.", "ok")
+    if skipped:
+        flash("Nicht angelegt: " + "; ".join(skipped) + ".", "ok" if created else "error")
+    return redirect(url_for("web.admin") + "#checks")
 
 
 @bp.post("/admin/measure")

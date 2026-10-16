@@ -63,10 +63,13 @@ def valid_probe_hostname(hostname: str) -> bool:
 
 # -- Checks und Konfiguration ----------------------------------------------
 def checks_for_probe(probe: dict) -> list[dict]:
-    """Alle aktiven Checks, die dieser Probe zugewiesen sind (global, Standort, Probe)."""
-    return q(
+    """Alle aktiven Checks, die dieser Probe zugewiesen sind (global, Standort, Probe).
+
+    Die Server-Probe misst kein iperf3 gegen den Wachtl-Server – das wäre eine Messung gegen sich selbst.
+    """
+    rows = q(
         """
-        SELECT DISTINCT c.id, c.name, c.type, c.target, c.role, c.interval_s, c.timeout_ms, c.params
+        SELECT DISTINCT c.id, c.name, c.type, c.target, c.role, c.interval_s, c.timeout_ms, c.params, c.created_at
         FROM checks c
         JOIN check_assignments a ON a.check_id = c.id
         WHERE c.enabled = TRUE
@@ -77,6 +80,16 @@ def checks_for_probe(probe: dict) -> list[dict]:
         """,
         (probe["site_id"], probe["id"]),
     )
+    if probe.get("kind") == "server":
+        rows = [c for c in rows if not is_server_iperf(c)]
+    return rows
+
+
+def is_server_iperf(check: dict) -> bool:
+    if check["type"] != "iperf":
+        return False
+    params = json.loads(check.get("params") or "{}")
+    return params.get("peer", "server") == "server"
 
 
 def _schedule_offset(probe_id: int, check_id: int, schedule_min: int, offset_min: int) -> int:

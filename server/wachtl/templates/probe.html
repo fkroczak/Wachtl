@@ -4,7 +4,7 @@
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
-<h1>{{ probe.hostname }}</h1>
+<h1>{{ probe.hostname }}{% if probe.kind == 'server' %} <span class="badge info">Wachtl-Server</span>{% endif %}</h1>
 
 <section class="cards">
   <div class="card kv">
@@ -41,6 +41,27 @@
   </form>
 </div>
 {% endif %}
+
+<h2 id="messungen">Alle Messungen</h2>
+{% if not probe_online(probe) and probe.status == 'active' %}<div class="flash error">Die Probe ist offline – ihre Messungen laufen gerade nicht.</div>{% endif %}
+{% if states %}
+<p class="muted"><span class="ok-t">{{ state_counts.ok }} ok</span> · <span class="warn-t">{{ state_counts.warn }} auffällig</span> ·
+  <span class="down-t">{{ state_counts.down }} gestört</span> · <span class="stale-t">{{ state_counts.stale }} ohne aktuelle Daten</span>
+  {% if state_counts.waiting %} · {{ state_counts.waiting }} warten auf die erste Messung{% endif %}</p>
+<table>
+  <thead><tr><th>Zustand</th><th>Art</th><th>Check</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th></tr></thead>
+  <tbody>{% for st in states %}
+    <tr>
+      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
+      <td>{{ KIND_LABELS[st.kind] }}</td>
+      <td><a href="{{ check_url(probe, st.check) }}">{{ st.check.name }}</a></td>
+      <td>{{ st.check.target }}</td>
+      <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}</td>
+      <td>{{ st.ts|ago if st.ts else '–' }}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
 
 <h2>Dauerpings</h2>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
