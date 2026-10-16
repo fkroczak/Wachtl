@@ -33,5 +33,8 @@
   {% endfor %}
   </tbody>
 </table>
-<p class="muted small">Bis 6 h aus den 1-s-Rohdaten, darüber aus 1-min-Aggregaten. Jitter = mittlere Differenz aufeinanderfolgender Antwortzeiten.</p>
+<ul class="muted small notes">
+  <li>Bis 6 Stunden zeigt die Tabelle Rohdaten im Sekundentakt. Bei längeren Zeiträumen zeigt sie Minutenwerte.</li>
+  <li>Jitter: wie stark zwei Antwortzeiten nacheinander im Mittel schwanken.</li>
+</ul>
 {% endblock %}

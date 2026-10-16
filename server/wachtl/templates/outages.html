@@ -2,7 +2,8 @@
 {% block title %}Ausfälle{% endblock %}
 {% block content %}
 <h1>Ausfälle</h1>
-<p class="muted">Störungen aus den Alarmen, nach Ursache eingeordnet. Gleichzeitige Folgestörungen (z. B. Internet weg, weil das Gateway weg ist) sind {{ 'eingeblendet' if show_all else 'ausgeblendet' }}.
+<p class="muted">Hier stehen alle Störungen aus den Alarmen, nach Ursache sortiert. Folgestörungen sind {{ 'eingeblendet' if show_all else 'ausgeblendet' }}.
+  Beispiel: Fällt das Gateway aus, ist auch das Internet weg. Das zählt nur einmal.
   {% if min_s %}Störungen unter {{ min_s|duration }} werden nicht gezeigt.{% endif %}</p>
 
 <form method="get" class="row">

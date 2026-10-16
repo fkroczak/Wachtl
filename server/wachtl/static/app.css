@@ -272,3 +272,4 @@ tr.firing td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
 .cause-wan { border-color: var(--warn); }
 .cause-loss { border-color: var(--ochre); }
 .cause-reference, .cause-target { border-color: var(--accent); }
+.notes { margin: 0.5rem 0; padding-left: 1.2rem; }

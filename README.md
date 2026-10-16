@@ -50,7 +50,7 @@ Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heat
 | `probe/setup/` | Client-Setup-Assistent (`WachtlProbe.iss`) |
 | `brand/` | Logo-Quelle und Generator für SVG, PNG, ICO und Assistenten-Bilder |
 | `server/wachtl/win/` | Windows-Laufzeit: Dienst-Supervisor, HTTPS-Server, Einrichtung, Backup |
-| `docs/` | Installationsanleitungen, Betrieb, Sicherheit, API |
+| `docs/` | Installationsanleitungen, Betrieb, Sicherheit, API, UI-Qualitäts-Guardrails |
 
 ## Schnellstart
 
@@ -67,7 +67,7 @@ Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heat
 ```bash
 cd server
 pip install -r requirements-dev.txt
-python -m pytest -q                              # 49 Tests (inkl. Windows-Logik im Trockenlauf)
+python -m pytest -q                              # Server-Tests inkl. Windows-Logik und UI-Guardrails
 
 # Lokal ohne Docker: Fake-VictoriaMetrics + SQLite
 python devtools/fake_vm.py 18428 &
@@ -79,6 +79,9 @@ flask --app wachtl init && flask --app wachtl run
 # Enrollment-Token im UI erzeugen, dann Demodaten einspielen:
 python devtools/simulate_probes.py http://127.0.0.1:5000 <token> 2
 ```
+
+Web-UI: Barrierefreiheit, Tastatur, Performance-Budgets und Formular-Konventionen stehen in
+[docs/quality-guardrails.md](docs/quality-guardrails.md); Browser-Tests unter `server/e2e` (`e2e/start-server.sh`, dann `npx playwright test`).
 
 ```powershell
 cd probe

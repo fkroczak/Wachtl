@@ -25,6 +25,57 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m pytest -q
 
+  ui-quality:
+    # Barrierefreiheit, Tastatur, Reflow und Performance-Budgets des Web-UI (docs/quality-guardrails.md).
+    # Blockierend: Playwright/axe und Lighthouse-Assertions mit Stufe "error". Nur Hinweis: Lesbarkeit.
+    name: UI-Qualität (axe, Tastatur, Lighthouse)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    env:
+      WACHTL_BASE_URL: http://127.0.0.1:5000
+      WACHTL_E2E_PASSWORD: e2e-admin-passwort
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/e2e/package-lock.json
+      - run: pip install -r requirements-dev.txt
+      - run: npm ci
+        working-directory: server/e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: server/e2e
+      - name: Wachtl mit Demodaten starten
+        run: WACHTL_E2E_DIR=$RUNNER_TEMP/wachtl e2e/start-server.sh
+      - name: Barrierefreiheit, Tastatur, Reflow (Playwright + axe-core)
+        run: npx playwright test
+        working-directory: server/e2e
+      - name: Lighthouse CI (3 Läufe je Seite, Median gegen Budgets)
+        working-directory: server/e2e
+        run: |
+          export WACHTL_COOKIE=$(node login-cookie.js)
+          npx lhci autorun --config=lighthouserc.cjs
+      - name: Lesbarkeit deutscher UI-Texte (nur Hinweis)
+        continue-on-error: true
+        run: |
+          export WACHTL_COOKIE=$(node e2e/login-cookie.js)
+          python devtools/readability.py --warn $(node -e 'const {BASE,PAGES}=require("./e2e/pages");console.log(PAGES.map(p=>BASE+p[1]).join(" "))')
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-quality-reports
+          path: |
+            server/e2e/playwright-report/
+            server/e2e/test-results/
+            server/e2e/.lighthouseci/
+            ${{ runner.temp }}/wachtl/*.log
+
   probe:
     name: Windows-Probe bauen (C#)
     runs-on: windows-latest
