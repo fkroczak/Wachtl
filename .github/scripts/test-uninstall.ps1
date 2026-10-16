@@ -7,12 +7,27 @@ param([Parameter(Mandatory)] [ValidateSet('Probe', 'Server')] [string]$Part)
 $ErrorActionPreference = 'Stop'
 $base = 'https://localhost:8443'
 $problems = [System.Collections.Generic.List[string]]::new()
+# absolute Pfade: der Inno-Deinstaller kopiert sich nach %TEMP% und startet von dort neu
+$logDir = (New-Item -ItemType Directory -Force -Path (Join-Path $PWD 'dist')).FullName
+
+function Invoke-Uninstaller([string]$Exe, [string[]]$Extra, [string]$Log) {
+    $p = Start-Process $Exe -Wait -PassThru -ArgumentList (@('/VERYSILENT', '/SUPPRESSMSGBOXES', "/LOG=`"$Log`"") + $Extra)
+    if ($p.ExitCode -ne 0) {
+        $tail = (Get-Content $Log -Tail 60 -ErrorAction SilentlyContinue) -join "`n"
+        & (Join-Path $PSScriptRoot 'annotate.ps1') -Title ([IO.Path]::GetFileName($Log)) -Text $tail
+        throw "Deinstallation fehlgeschlagen ($($p.ExitCode)), Log: $Log`n$tail"
+    }
+    # Inno wartet nicht immer auf die aus %TEMP% neu gestartete Kopie
+    foreach ($i in 1..30) {
+        if (-not (Get-Process -Name '_iu*', 'unins*' -ErrorAction SilentlyContinue)) { break }
+        Start-Sleep 1
+    }
+}
 
 function Csrf([string]$Html) { [regex]::Match($Html, 'name="csrf_token" value="([^"]+)"').Groups[1].Value }
 
 if ($Part -eq 'Probe') {
-    $p = Start-Process "${env:ProgramFiles}\Wachtl\unins000.exe" -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/LOG=dist\probe-uninstall.log'
-    if ($p.ExitCode -ne 0) { throw "Probe-Deinstallation fehlgeschlagen ($($p.ExitCode))" }
+    Invoke-Uninstaller "${env:ProgramFiles}\Wachtl\unins000.exe" @() (Join-Path $logDir 'probe-uninstall.log')
     Start-Sleep 3
     if (Get-Service Wachtl -ErrorAction SilentlyContinue) { $problems.Add('Dienst Wachtl') }
     if (Get-NetFirewallRule -DisplayName 'Wachtl Probe iperf3' -ErrorAction SilentlyContinue) { $problems.Add('Firewall-Regel Wachtl Probe iperf3') }
@@ -31,8 +46,7 @@ if ($Part -eq 'Probe') {
     else { Write-Host "CI-PROBE am Server abgemeldet, Status $($probe.status)" }
 }
 else {
-    $p = Start-Process "${env:ProgramFiles}\Wachtl Server\unins000.exe" -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/REMOVEDATA', '/LOG=dist\server-uninstall.log'
-    if ($p.ExitCode -ne 0) { throw "Server-Deinstallation fehlgeschlagen ($($p.ExitCode))" }
+    Invoke-Uninstaller "${env:ProgramFiles}\Wachtl Server\unins000.exe" @('/REMOVEDATA') (Join-Path $logDir 'server-uninstall.log')
     Start-Sleep 3
     if (Get-Service WachtlServer -ErrorAction SilentlyContinue) { $problems.Add('Dienst WachtlServer') }
     $rules = Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object DisplayName -like 'Wachtl Server*'
