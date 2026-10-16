@@ -19,7 +19,6 @@ catch {
 }
 if ($code -ne 0) {
     $text = (Get-Content $log -Tail $Tail -ErrorAction SilentlyContinue) -join "`n"
-    $text = $text.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-    Write-Host "::error title=$Title::$text"
+    & (Join-Path $PSScriptRoot 'annotate.ps1') -Title $Title -Text $text
     exit $code
 }
