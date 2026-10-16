@@ -38,6 +38,12 @@ Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
 
 Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heatmaps, mTLS und automatische Probe-Updates.
 
+## Download
+
+Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unter
+[`releases/`](releases/) – je Version ein Ordner mit `WachtlServerSetup-<Version>.exe`,
+`WachtlProbeSetup-<Version>.exe` und `SHA256SUMS.txt`. Auf GitHub die Datei öffnen und **Download raw file** wählen.
+
 ## Ordner
 
 | Pfad | Inhalt |

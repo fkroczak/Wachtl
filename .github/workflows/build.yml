@@ -172,6 +172,48 @@ jobs:
             dist/WachtlServerSetup-*.exe
             dist/probe/WachtlProbeSetup-*.exe
 
+  setups-ins-repo:
+    name: Setups ins Repository legen
+    runs-on: ubuntu-latest
+    needs: [windows-server]
+    # nur auf main und nur einmal je Version (releases/<Version>/ noch nicht vorhanden)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prüfen, ob diese Version schon im Repository liegt
+        id: check
+        run: |
+          if [ -d "releases/$WACHTL_VERSION" ]; then
+            echo "releases/$WACHTL_VERSION existiert bereits – nichts zu tun (für neue Setups Version erhöhen)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          name: wachtl-setups
+          path: setups
+      - name: Setups committen
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          dir="releases/$WACHTL_VERSION"
+          mkdir -p "$dir"
+          find setups -name '*.exe' -exec cp {} "$dir/" \;
+          ls -la "$dir"
+          for f in "$dir"/*.exe; do
+            size=$(stat -c %s "$f")
+            if [ "$size" -gt 99000000 ]; then echo "::error::$f ist größer als 99 MB (GitHub-Grenze 100 MB)"; exit 1; fi
+          done
+          (cd "$dir" && sha256sum *.exe > SHA256SUMS.txt)
+          cp docs/RELEASE-NOTES.md "$dir/LIESMICH.md"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$dir"
+          git commit -m "Setups $WACHTL_VERSION (geprüft in Lauf ${{ github.run_id }})"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
   release:
     name: Release veröffentlichen
     runs-on: ubuntu-latest
