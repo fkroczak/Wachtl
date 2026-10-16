@@ -19,11 +19,12 @@
         {% if not a.acked_by %}
         <form method="post" action="{{ url_for('web.alert_ack', event_id=a.id) }}" class="ack">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <select name="hours" aria-label="Dauer">
+          {% set what = a.summary or a.alertname %}
+          <select name="hours" aria-label="Stummschalten für (Alarm: {{ what }})">
             <option value="1">1 h</option><option value="4" selected>4 h</option><option value="24">24 h</option><option value="72">3 Tage</option>
           </select>
-          <input name="comment" placeholder="Kommentar" maxlength="500">
-          <button>Bestätigen</button>
+          <input name="comment" placeholder="Kommentar" maxlength="500" aria-label="Kommentar (Alarm: {{ what }})">
+          <button aria-label="Bestätigen: {{ what }}">Bestätigen</button>
         </form>
         {% endif %}
       </td>
