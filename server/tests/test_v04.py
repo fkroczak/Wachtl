@@ -180,3 +180,20 @@ class DeregisterTest(AppTestCase):
         self.assertEqual(r.get_json()["probe_id"], probe["probe_id"])
         row = q1("SELECT * FROM probes WHERE id = ?", (probe["probe_id"],))
         self.assertEqual((row["status"], row["deregistered_at"]), ("active", None))
+
+
+class CheckStatusApiTest(AppTestCase):
+    def test_lists_every_measurement(self):
+        probe = self.enroll("PC-API")
+        self.client.post("/api/probe/v1/heartbeat", headers={"Authorization": f"Bearer {probe['token']}"}, json={})
+        repo.create_check("WAN", "speed.cloudflare.com", "reference", 3600, 90000, "all", None, "speedtest",
+                          checktypes.merged("speedtest", {"schedule_min": 0}))
+        self.make_user(role="readonly", username="leser")
+        self.login("leser")
+        with mock.patch("wachtl.services.vm.live_status", return_value={}):
+            rows = self.client.get("/api/v1/check-status").get_json()
+        self.assertEqual({r["type"] for r in rows}, {"ping", "speedtest"})
+        self.assertTrue(all(r["hostname"] == "PC-API" and r["online"] for r in rows))
+        self.assertEqual({r["state"] for r in rows if r["type"] == "speedtest"}, {"waiting"})
+        probes = self.client.get("/api/v1/probes").get_json()
+        self.assertEqual(probes[0]["kind"], "probe")

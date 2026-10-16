@@ -2,12 +2,12 @@
 ; Bauen: siehe build-server.ps1 (übergibt AppVersion und BuildDir)
 ;
 ; Unbeaufsichtigte Installation, z. B.:
-;   WachtlServerSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Hostnames="wachtl.kunde.local,10.0.0.5"
+;   WachtlServerSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Hostnames="wachtl.kunde.local,10.0.0.5"
 ;       /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/IperfPort=5201] [/DataDir="D:\Wachtl"] [/RawDays=30] [/AggMonths=13]
 ;       [/EmailTo=… /EmailFrom=… /SmtpHost=mail:587 /SmtpUser=… /SmtpPassword=…] [/TeamsUrl=https://…]
 
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.4.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build\server"

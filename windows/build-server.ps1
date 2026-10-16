@@ -10,10 +10,10 @@
     Voraussetzungen: Windows, Python 3.12 (für pip), Inno Setup 6 (wird sonst per choco installiert).
 
 .EXAMPLE
-    .\windows\build-server.ps1 -Version 0.3.0
+    .\windows\build-server.ps1 -Version 0.4.0
 #>
 param(
-    [string]$Version = '0.3.0',
+    [string]$Version = '0.4.0',
     [string]$PythonVersion = '3.12.10',
     [string]$VmVersion = 'v1.149.0',
     [string]$AlertmanagerVersion = '0.28.1',
@@ -146,7 +146,7 @@ if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-probe.exe'))) {
 
 Step 'Selbsttest mit dem eingebetteten Python'
 $py = Join-Path $Build 'python\python.exe'
-& $py -c "import wachtl, wachtl.win.host, wachtl.win.serve, cheroot, cryptography, flask, yaml, requests; print('Module ok')"
+& $py -c "import wachtl, wachtl.win.host, wachtl.win.serve, wachtl.serverprobe.probe, cheroot, cryptography, flask, yaml, requests; print('Module ok')"
 if ($LASTEXITCODE -ne 0) { throw 'Eingebettetes Python findet die Module nicht' }
 # unchecked-hash: gültig unabhängig von Dateizeiten; Dienstkonto darf __pycache__ nicht schreiben
 & $py -m compileall -q --invalidation-mode unchecked-hash (Join-Path $Build 'app') $site | Out-Null

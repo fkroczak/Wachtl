@@ -16,7 +16,7 @@ automatisch (verzögert) und braucht keinen angemeldeten Benutzer.
 ## 1. Setup-Assistent (empfohlen)
 
 Im Web-UI unter **Verwaltung › Probes registrieren** einen Token erzeugen und **Paket herunterladen** wählen.
-Das ZIP enthält `WachtlProbeSetup-0.3.0.exe` und eine `wachtl-probe.ini` mit Server, Pin und Token.
+Das ZIP enthält `WachtlProbeSetup-0.4.0.exe` und eine `wachtl-probe.ini` mit Server, Pin und Token.
 Auf dem PC entpacken und das Setup als Administrator starten:
 
 | Seite | Inhalt |
@@ -33,16 +33,27 @@ legt immer der Server fest (Verwaltung › Checks) – am PC selbst gibt es daf�
 ### Unbeaufsichtigt (Softwareverteilung, GPO, Intune)
 
 ```powershell
-WachtlProbeSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
+WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
 Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup mit einem Code ≠ 0 ab
 (Grund im `/LOG`); 10 = installiert, aber der Dienst startet nicht. `/SUPPRESSMSGBOXES` ist unbeaufsichtigt Pflicht.
 Ohne `/Pin` wird unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen). Auf einem bereits registrierten PC
 aktualisiert ein unbeaufsichtigter Lauf nur das Programm. Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
-`WachtlProbeSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
+`WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
 
-Deinstallation: Apps › Wachtl Probe, oder `"C:\Program Files\Wachtl\unins000.exe" /VERYSILENT`.
+Deinstallation: Apps › Wachtl Probe, oder `"C:\Program Files\Wachtl\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES`.
+Der Deinstaller lässt nichts zurück, was von außen erreichbar wäre:
+
+1. Er meldet die Probe **am Server ab** – ihr Token ist dort sofort ungültig, im Dashboard steht sie als „deinstalliert“
+   (dort löschen, wenn der Verlauf nicht mehr gebraucht wird). Ist der Server nicht erreichbar, wird das Token trotzdem
+   gelöscht und der Deinstaller weist darauf hin.
+2. Er stoppt den Dienst „Wachtl“ und eine noch laufende iperf3-Gegenstelle der Probe.
+3. Er entfernt die Firewall-Regel „Wachtl Probe iperf3“ und **alle weiteren Regeln für `wachtl-probe.exe` und
+   `iperf3.exe` der Probe** – auch solche, die Windows selbst nach der Nachfrage „Zugriff zulassen“ angelegt hat.
+4. Er löscht das verschlüsselte Token (`state.json`) und die zwischengespeicherte Konfiguration immer; Puffer und Logs
+   auf Nachfrage, unbeaufsichtigt immer.
+5. Er prüft am Ende, dass Dienst und Firewall-Regel weg sind, und meldet sonst, was übrig ist (im `/LOG`).
 
 ## 2. Alternative: PowerShell-Skript
 
@@ -65,7 +76,7 @@ Mit Proxy zusätzlich `-Proxy "http://proxy.kunde.local:3128"`. Falls die Ausfü
 .\Install-Wachtl.ps1 -Action Logs         # Log live verfolgen
 .\Install-Wachtl.ps1 -Action Restart
 .\Install-Wachtl.ps1 -Action Update -SourceExe \\fileserver\it$\wachtl\wachtl-probe.exe
-.\Install-Wachtl.ps1 -Action Uninstall [-RemoveData]
+.\Install-Wachtl.ps1 -Action Uninstall [-RemoveData]   # wie der Deinstaller: Abmeldung, Firewall, Token; -RemoveData auch Puffer/Logs
 ```
 
 Logs: `C:\ProgramData\Wachtl\logs\probe-JJJJMMTT.log` (14 Tage).

@@ -104,6 +104,8 @@ thead th { font-weight: 600; color: var(--text-muted); font-size: 0.82rem; backg
 tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
 tr.disabled td { color: var(--text-muted); }
 .scroll { overflow-x: auto; }
+/* Fieldsets wachsen sonst mit breiten Tabellen mit (min-width: min-content) */
+fieldset.table-fieldset { min-width: 0; }
 table.matrix td.cell { text-align: center; min-width: 110px; }
 table.matrix td.cell a { color: inherit; display: block; }
 td.cell.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); }

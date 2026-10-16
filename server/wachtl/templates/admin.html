@@ -63,8 +63,9 @@
     Vorhandene Checks mit gleichem Ziel werden nicht doppelt angelegt; alles lässt sich später unter Checks ändern.</p>
   <form method="post" action="{{ url_for('web.standard_package') }}" class="settings-form" data-check-form>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <fieldset>
+    <fieldset class="table-fieldset">
       <legend>Checks</legend>
+      <div class="scroll">
       <table>
         <thead><tr><th><span class="sr-only">Auswahl</span></th><th>Check</th><th>Art</th><th>Ziel</th><th>Einstellungen</th><th>Wofür</th></tr></thead>
         <tbody>{% for e in package %}
@@ -80,6 +81,7 @@
           </tr>
         {% endfor %}</tbody>
       </table>
+      </div>
     </fieldset>
     <fieldset>
       <legend>Zuweisung</legend>

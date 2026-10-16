@@ -10,7 +10,7 @@ on:
     types: [published]
 
 env:
-  WACHTL_VERSION: "0.3.0"
+  WACHTL_VERSION: "0.4.0"
 
 jobs:
   server:
@@ -135,19 +135,20 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "E2E 0.3" -Command "./.github/scripts/test-v03.ps1"
 
-      - name: Probe deinstallieren
+      - name: Server-Probe, Standardpaket und Check-Status Ende-zu-Ende prüfen
         shell: pwsh
-        run: |
-          $p = Start-Process "${env:ProgramFiles}\Wachtl\unins000.exe" -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES'
-          if ($p.ExitCode -ne 0) { throw "Probe-Deinstallation fehlgeschlagen ($($p.ExitCode))" }
-          if (Get-Service Wachtl -ErrorAction SilentlyContinue) { throw 'Probe-Dienst noch vorhanden' }
+        run: ./.github/scripts/run-logged.ps1 -Title "E2E 0.4" -Command "./.github/scripts/test-v04.ps1"
+
+      - name: Probe deinstallieren (Abmeldung, Firewall, Token – nichts darf bleiben)
+        shell: pwsh
+        run: ./.github/scripts/run-logged.ps1 -Title "Probe-Deinstallation" -Command "./.github/scripts/test-uninstall.ps1 -Part Probe"
 
       - name: Logs bei Fehler
         if: failure()
         shell: pwsh
         run: |
           # GitHub zeigt höchstens 10 Annotationen je Schritt: die wichtigsten Logs zuerst
-          $files = @('C:\WachtlData\logs\web.log', 'C:\WachtlData\logs\supervisor.log')
+          $files = @('C:\WachtlData\logs\web.log', 'C:\WachtlData\logs\supervisor.log', 'C:\WachtlData\logs\serverprobe.log')
           $files += Get-ChildItem C:\ProgramData\Wachtl\logs -ErrorAction SilentlyContinue | ForEach-Object FullName
           $files += @('dist\probe-install.log', 'C:\WachtlData\logs\setup.log', 'dist\setup-install.log')
           foreach ($f in $files) {
@@ -158,12 +159,9 @@ jobs:
             & ./.github/scripts/annotate.ps1 -Title ([IO.Path]::GetFileName($f)) -Text $text
           }
 
-      - name: Deinstallieren
+      - name: Server deinstallieren (Dienst, Firewall, Ports, Daten – nichts darf bleiben)
         shell: pwsh
-        run: |
-          $p = Start-Process "${env:ProgramFiles}\Wachtl Server\unins000.exe" -Wait -PassThru -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES'
-          if ($p.ExitCode -ne 0) { throw "Deinstallation fehlgeschlagen ($($p.ExitCode))" }
-          if (Get-Service WachtlServer -ErrorAction SilentlyContinue) { throw 'Dienst noch vorhanden' }
+        run: ./.github/scripts/run-logged.ps1 -Title "Server-Deinstallation" -Command "./.github/scripts/test-uninstall.ps1 -Part Server"
 
       - uses: actions/upload-artifact@v4
         with:
