@@ -1,8 +1,9 @@
 # Wachtl
 
 Netzwerk-Monitoring für Kunden mit mehreren Standorten: Windows-PCs und -Server messen als Dienst
-Latenz und Paketverlust (Ping im 1-s-Takt), ein zentraler Server beim Kunden speichert, wertet aus,
-zeigt Graphen und alarmiert per E-Mail oder Microsoft Teams.
+Latenz, Paketverlust und Jitter (Ping im 1-s-Takt), den Pfad ins Internet Hop für Hop und die Bandbreite
+(iperf3 intern, HTTP/iperf3 ins WAN). Ein zentraler Server beim Kunden speichert, wertet aus, zeigt Graphen,
+erkennt Ausfälle mit Ursache und alarmiert per E-Mail oder Microsoft Teams. Alles ist im Web-UI einstellbar.
 
 Der Server läuft wahlweise als **Linux-VM mit Docker** oder als **Windows-Dienst** (Setup-Assistent, kein Docker).
 
@@ -17,7 +18,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
                                               Alertmanager ─▶ E-Mail / Teams, Historie zurück an Flask
 ```
 
-## Stand: 0.2
+## Stand: 0.3
 
 | Bereich | Enthalten |
 | --- | --- |
@@ -29,9 +30,13 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Probe-Installation | Setup-Assistent mit Verbindungs- und Pin-Prüfung, fertiges Paket aus dem Web-UI (Server, Pin, Token vorbelegt), unbeaufsichtigt per Parameter; alternativ `Install-Wachtl.ps1` |
 | Marke | Flaches Logo mit Wachtel-Umriss, Farben Wachtelbraun/Ocker/Weizen; Quelle `brand/render.py` |
 | Benachrichtigungen | E-Mail und Teams im Web-UI einstellbar, mit Testnachricht |
+| Pfade (0.3) | Traceroute + Dauerpings auf jeden Hop, MTR-Tabelle mit Bewertung (echter Verlust vs. ICMP-Drosselung, Latenzsprung), Pfadverlauf, Alarm bei Pfadwechsel |
+| Bandbreite (0.3) | iperf3 Probe ↔ Server und Probe ↔ Probe (TCP/UDP), WAN per HTTP oder iperf3; Zeitplan, Zeitfenster, Wochentage, „Jetzt messen“, Schwellwert-Alarm |
+| Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
-Nächste Phasen: Traceroute mit Routenvergleich, DNS-, HTTP/HTTPS- und TCP-Checks, iperf3, MTU, Berichte (PDF/CSV),
-Heatmaps, mTLS und automatische Probe-Updates.
+Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
+
+Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heatmaps, mTLS und automatische Probe-Updates.
 
 ## Ordner
 
