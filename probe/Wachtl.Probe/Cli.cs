@@ -59,6 +59,20 @@ public static class Cli
             result.Set("error", ex.Message);
             result.Write(ExitUsage);
             return ExitUsage;
+        }        catch (UnauthorizedAccessException)
+        {
+            const string message = "Keine Berechtigung – bitte als Administrator ausführen.";
+            Console.Error.WriteLine("Fehler: " + message);
+            result.Set("error", message);
+            result.Write(1);
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Fehler: " + ex.Message);
+            result.Set("error", ex.Message);
+            result.Write(1);
+            return 1;
         }
     }
 
@@ -307,6 +321,12 @@ public static class Cli
 
     private static int Status()
     {
+        if (Directory.Exists(StateStore.DataDir))
+        {
+            // ohne Adminrechte ist der Datenordner gesperrt – nicht fälschlich "nicht registriert" melden
+            _ = Directory.GetFiles(StateStore.DataDir);
+        }
+
         var state = StateStore.Load();
         if (state is null)
         {

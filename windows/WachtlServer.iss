@@ -52,6 +52,7 @@ Source: "{#BuildDir}\app\*"; DestDir: "{app}\app"; Flags: recursesubdirs ignorev
 Source: "{#BuildDir}\bin\*"; DestDir: "{app}\bin"; Flags: ignoreversion
 Source: "{#BuildDir}\service\WachtlServer.exe"; DestDir: "{app}\service"; Flags: ignoreversion
 Source: "{#BuildDir}\wachtl-server.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\THIRD-PARTY.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\wachtl.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs ignoreversion
@@ -61,7 +62,7 @@ Source: "{#BuildDir}\probe\*"; DestDir: "{app}\probe"; Flags: recursesubdirs ign
 Filename: "{group}\Wachtl Dashboard.url"; Section: "InternetShortcut"; Key: "URL"; String: "{code:GetUrl}"
 
 [Icons]
-Name: "{group}\Wachtl Status"; Filename: "{cmd}"; Parameters: "/k ""{app}\wachtl-server.cmd"" status"; WorkingDir: "{app}"; IconFilename: "{app}\wachtl.ico"
+Name: "{group}\Wachtl Status"; Filename: "{app}\wachtl-status.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\wachtl.ico"
 Name: "{group}\Zugangsdaten (setup-info.txt)"; Filename: "{code:GetDataDir}\setup-info.txt"
 Name: "{group}\Logdateien"; Filename: "{code:GetDataDir}\logs"
 Name: "{group}\Probe-Paket"; Filename: "{app}\probe"; Check: ProbeIncluded

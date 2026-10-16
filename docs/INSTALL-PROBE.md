@@ -36,8 +36,10 @@ legt immer der Server fest (Verwaltung › Checks) – am PC selbst gibt es daf�
 WachtlProbeSetup-0.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
-Exit-Code 0 = Probe läuft, 10 = installiert, aber Registrierung oder Dienststart fehlgeschlagen. Ohne `/Pin` wird
-unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen). Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
+Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup mit einem Code ≠ 0 ab
+(Grund im `/LOG`); 10 = installiert, aber der Dienst startet nicht. `/SUPPRESSMSGBOXES` ist unbeaufsichtigt Pflicht.
+Ohne `/Pin` wird unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen). Auf einem bereits registrierten PC
+aktualisiert ein unbeaufsichtigter Lauf nur das Programm. Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
 `WachtlProbeSetup-0.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
 
 Deinstallation: Apps › Wachtl Probe, oder `"C:\Program Files\Wachtl\unins000.exe" /VERYSILENT`.

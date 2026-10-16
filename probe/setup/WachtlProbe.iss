@@ -12,7 +12,8 @@
 ;
 ; Unbeaufsichtigt (z. B. per Softwareverteilung):
 ;   WachtlProbeSetup-0.2.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin=… /Token=…
-; Exit-Code 0 = Probe läuft, 10 = installiert, aber Registrierung oder Dienststart fehlgeschlagen.
+; Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup ab (Code ≠ 0,
+; Grund im /LOG). 10 = installiert, aber der Dienst startet nicht. /SUPPRESSMSGBOXES ist unbeaufsichtigt Pflicht.
 
 #ifndef AppVersion
   #define AppVersion "0.2.0"
@@ -56,12 +57,13 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 [Files]
 Source: "{#PublishDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PublishDir}\Install-Wachtl.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
 ; Setup selbst ablegen – darüber lassen sich Einstellungen später ändern
 Source: "{srcexe}"; DestDir: "{app}"; DestName: "WachtlProbeSetup.exe"; Flags: external ignoreversion; Check: NotRunningFromApp
 
 [Icons]
 Name: "{group}\Wachtl Probe – Einstellungen ändern"; Filename: "{app}\WachtlProbeSetup.exe"; IconFilename: "{app}\wachtl-probe.exe"
-Name: "{group}\Wachtl Probe – Status"; Filename: "{cmd}"; Parameters: "/k ""{app}\wachtl-probe.exe"" status"; IconFilename: "{app}\wachtl-probe.exe"
+Name: "{group}\Wachtl Probe – Status"; Filename: "{app}\wachtl-status.cmd"; IconFilename: "{app}\wachtl-probe.exe"
 Name: "{group}\Wachtl Probe – Logdateien"; Filename: "{commonappdata}\Wachtl\logs"
 
 [Run]
@@ -81,6 +83,7 @@ const
 
 var
   ModePage: TInputOptionWizardPage;
+  EnrolledKey: String;
   ServerPage, ProxyPage, TokenPage: TInputQueryWizardPage;
   IsEnrolled, ServiceExists, SetupOk, EnrollDone: Boolean;
   SetupError, SiteName, ProbeExe: String;
@@ -160,7 +163,7 @@ end;
 
 function DashboardKnown(): Boolean;
 begin
-  Result := SetupOk and (GetServer('') <> '');
+  Result := SetupOk and EnrollDone and (GetServer('') <> '');
 end;
 
 function NotRunningFromApp(): Boolean;
@@ -369,7 +372,12 @@ begin
         Result := False;
         Exit;
       end;
+    { Zurück und erneut Weiter: nicht noch einmal registrieren (verbraucht sonst den Token erneut) }
+    if EnrollDone and (EnrolledKey = GetServer('') + '|' + Trim(TokenPage.Values[0]) + '|' + Name) then
+      Exit;
     Result := Enroll();
+    if Result then
+      EnrolledKey := GetServer('') + '|' + Trim(TokenPage.Values[0]) + '|' + Name;
   end;
 end;
 
@@ -459,6 +467,17 @@ begin
   RunHidden(ExpandConstant('{sys}\icacls.exe'), Quote(DataDir()) + ' /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F ' +
             '/grant:r *S-1-5-32-544:(OI)(CI)F /grant:r ' + Quote(ServiceAccount + ':(OI)(CI)M') + ' /C /Q');
   RunHidden(ExpandConstant('{sys}\icacls.exe'), Quote(DataDir() + '\*') + ' /reset /T /C /Q');
+  { Logdateien dürfen alle Benutzer lesen (Startmenü-Verknüpfung), Token und Puffer nicht }
+  ForceDirectories(DataDir() + '\logs');
+  RunHidden(ExpandConstant('{sys}\icacls.exe'), Quote(DataDir() + '\logs') + ' /grant *S-1-5-32-545:(OI)(CI)RX /C /Q');
+  { Neu registriert: alte, noch nicht gesendete Messwerte gehören zur alten Registrierung }
+  if IsEnrolled and EnrollDone then
+  begin
+    DeleteFile(DataDir() + '\buffer.db');
+    DeleteFile(DataDir() + '\buffer.db-wal');
+    DeleteFile(DataDir() + '\buffer.db-shm');
+    DeleteFile(DataDir() + '\config.json');
+  end;
 
   WizardForm.StatusLabel.Caption := 'Dienst wird gestartet …';
   RunHidden(Sc, 'start ' + ServiceName);
@@ -466,7 +485,8 @@ begin
   for I := 1 to 15 do
   begin
     Sleep(1000);
-    Code := RunHidden(ExpandConstant('{cmd}'), '/C ' + Quote(Sc) + ' query ' + ServiceName + ' | find "RUNNING" >nul');
+    { {sys} enthält keine Leerzeichen – ohne Anführungszeichen, sonst verschluckt cmd.exe die Pipe }
+    Code := RunHidden(ExpandConstant('{cmd}'), '/C ' + Sc + ' query ' + ServiceName + ' | find "RUNNING" >nul');
     if Code = 0 then
       Break;
   end;
