@@ -6,6 +6,8 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
 
 env:
   WACHTL_VERSION: "0.3.0"
@@ -138,5 +140,9 @@ jobs:
         run: |
           files=$(find release -name '*.exe')
           sha256sum $files | sed 's#  .*/#  #' > SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" $files SHA256SUMS.txt --title "Wachtl ${GITHUB_REF_NAME#v}" \
-            --notes-file docs/RELEASE-NOTES.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" $files SHA256SUMS.txt --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" $files SHA256SUMS.txt --title "Wachtl ${GITHUB_REF_NAME#v}" \
+              --notes-file docs/RELEASE-NOTES.md
+          fi
