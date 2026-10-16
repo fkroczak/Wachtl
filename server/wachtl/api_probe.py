@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import hmac
+import ipaddress
+import json
 import logging
 import random
 import re
@@ -127,7 +130,8 @@ def heartbeat():
     ts = repo.now()
     buffer_items = int(data.get("buffer_items") or 0)
     ex(
-        "UPDATE probes SET last_seen = ?, last_ip = ?, version = ?, os = ?, buffer_items = ?, uptime_s = ? WHERE id = ?",
+        "UPDATE probes SET last_seen = ?, last_ip = ?, version = ?, os = ?, buffer_items = ?, uptime_s = ?, "
+        "addresses = ? WHERE id = ?",
         (
             ts,
             _client_ip(),
@@ -135,6 +139,7 @@ def heartbeat():
             str(data.get("os", g.probe["os"] or ""))[:200],
             buffer_items,
             int(data.get("uptime_s") or 0),
+            json.dumps(_addresses(data.get("addresses"))),
             g.probe["id"],
         ),
     )
@@ -145,7 +150,175 @@ def heartbeat():
     if random.random() < 0.01:  # gelegentlich aufräumen, ohne eigenen Scheduler
         repo.prune()
     _, etag = repo.probe_config(g.probe)
-    return jsonify(config_etag=etag, server_time=ts)
+    return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]))
+
+
+def _addresses(raw) -> list[str]:
+    """Lokale IPv4-Adressen der Probe (für iperf3 zwischen Probes); Link-Local und Loopback entfallen."""
+    out: list[str] = []
+    for value in raw if isinstance(raw, list) else []:
+        try:
+            ip = ipaddress.ip_address(str(value))
+        except ValueError:
+            continue
+        if ip.version == 4 and not (ip.is_loopback or ip.is_link_local or ip.is_unspecified) and str(ip) not in out:
+            out.append(str(ip))
+    return out[:8]
+
+
+def _own_check(check_id, types: tuple[str, ...]) -> dict:
+    check = repo.check_map_for_probe(g.probe).get(str(check_id))
+    if check is None or check["type"] not in types:
+        abort(422, "check_id gehört nicht zu dieser Probe")
+    return check
+
+
+def _result_ts(raw) -> int:
+    ts = repo.now()
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return ts
+    if value > 10**12:
+        value //= 1000
+    return value if ts - 8 * 86400 <= value <= ts + 300 else ts
+
+
+def _num(value, lo: float, hi: float) -> float | None:
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return None
+    return v if lo <= v <= hi else None
+
+
+def _hop_list(raw) -> list[dict]:
+    hops: list[dict] = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            hop = int(item.get("hop"))
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= hop <= ingest.MAX_HOPS:
+            continue
+        ip = None
+        if item.get("ip"):
+            try:
+                ip = str(ipaddress.ip_address(str(item["ip"])))
+            except ValueError:
+                ip = None
+        hops.append({"hop": hop, "ip": ip, "rtt_ms": _num(item.get("rtt_ms"), 0, 60000) if ip else None})
+    hops.sort(key=lambda h: h["hop"])
+    return hops
+
+
+def path_differs(old: list[dict], new: list[dict]) -> bool:
+    """Pfad gewechselt? Hops ohne Antwort zählen nicht als Wechsel (ICMP-Drosselung)."""
+    old_map = {h["hop"]: h["ip"] for h in old}
+    for h in new:
+        before = old_map.get(h["hop"])
+        if h["ip"] and before and h["ip"] != before:
+            return True
+    last_old = max((h["hop"] for h in old if h["ip"]), default=0)
+    last_new = max((h["hop"] for h in new if h["ip"]), default=0)
+    return bool(last_old and last_new and last_old != last_new)
+
+
+@bp.post("/results/path")
+@probe_auth
+def result_path():
+    data = request.get_json(silent=True) or {}
+    check = _own_check(data.get("check_id"), ("path",))
+    hops = _hop_list(data.get("hops"))
+    if not hops:
+        return jsonify(error="hops fehlen"), 400
+    ts = _result_ts(data.get("ts"))
+    reached = bool(data.get("reached"))
+    path_hash = hashlib.sha256(json.dumps([[h["hop"], h["ip"]] for h in hops]).encode()).hexdigest()[:16]
+    prev = q1(
+        "SELECT hops, path_hash FROM path_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
+        (g.probe["id"], check["id"]),
+    )
+    changed = bool(prev) and prev["path_hash"] != path_hash and path_differs(json.loads(prev["hops"]), hops)
+    if prev and not changed:
+        # gleicher Pfad: letzten Eintrag fortschreiben statt alle 10 Minuten eine neue Zeile.
+        # Hops, die diesmal nicht geantwortet haben, behalten ihre bekannte Adresse.
+        known = {h["hop"]: h["ip"] for h in json.loads(prev["hops"]) if h["ip"]}
+        hops = [h if h["ip"] or h["hop"] not in known else {**h, "ip": known[h["hop"]], "stale": True} for h in hops]
+        path_hash = hashlib.sha256(json.dumps([[h["hop"], h["ip"]] for h in hops]).encode()).hexdigest()[:16]
+        last = q1("SELECT id FROM path_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
+                  (g.probe["id"], check["id"]))
+        ex(
+            "UPDATE path_runs SET ts = ?, reached = ?, hops = ?, path_hash = ?, reason = ? WHERE id = ?",
+            (ts, reached, json.dumps(hops), path_hash, str(data.get("reason", ""))[:40], last["id"]),
+        )
+    else:
+        ins(
+            "INSERT INTO path_runs (probe_id, check_id, first_ts, ts, reason, reached, hops, path_hash, changed) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (g.probe["id"], check["id"], ts, ts, str(data.get("reason", ""))[:40], reached, json.dumps(hops), path_hash,
+             changed),
+        )
+    lines = [ingest.server_lines("wachtl_path_hops", g.probe, check, len(hops), ts, {}),
+             ingest.server_lines("wachtl_path_reached", g.probe, check, 1 if reached else 0, ts, {})]
+    if changed:
+        lines.append(ingest.server_lines("wachtl_path_change", g.probe, check, 1, ts, {}))
+        log.info("Probe %s: Pfad zu %s geändert", g.probe["hostname"], check["target"])
+    try:
+        vm.import_lines(lines)
+    except vm.VMError as exc:
+        log.warning("Pfad-Metriken nicht gespeichert: %s", exc)
+    return jsonify(changed=changed), 201
+
+
+BANDWIDTH_KINDS = ("iperf", "speedtest")
+
+
+@bp.post("/results/bandwidth")
+@probe_auth
+def result_bandwidth():
+    data = request.get_json(silent=True) or {}
+    check = _own_check(data.get("check_id"), BANDWIDTH_KINDS)
+    ts = _result_ts(data.get("ts"))
+    trigger = "manual" if data.get("trigger") == "manual" else "schedule"
+    results = data.get("results") if isinstance(data.get("results"), list) else []
+    lines: list[str] = []
+    stored = 0
+    for r in results[:4]:
+        if not isinstance(r, dict) or r.get("direction") not in ("up", "down"):
+            continue
+        mbps = _num(r.get("mbps"), 0, 1_000_000)
+        error = str(r.get("error") or "")[:500] or None
+        ins(
+            "INSERT INTO bandwidth_runs (probe_id, check_id, ts, kind, direction, peer, protocol, mbps, jitter_ms, "
+            "loss_pct, retransmits, latency_ms, duration_s, trigger, error) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                g.probe["id"], check["id"], ts, check["type"], r["direction"], str(r.get("peer") or "")[:200],
+                str(r.get("protocol") or "")[:10], mbps, _num(r.get("jitter_ms"), 0, 60000),
+                _num(r.get("loss_pct"), 0, 100), int(_num(r.get("retransmits"), 0, 10**12) or 0),
+                _num(r.get("latency_ms"), 0, 60000), _num(r.get("duration_s"), 0, 3600), trigger, error,
+            ),
+        )
+        stored += 1
+        extra = {"direction": r["direction"], "kind": check["type"]}
+        if mbps is not None and not error:
+            lines.append(ingest.server_lines("wachtl_bw_mbps", g.probe, check, mbps, ts, extra))
+            for key, metric in (("jitter_ms", "wachtl_bw_jitter_ms"), ("loss_pct", "wachtl_bw_loss_pct"),
+                                ("latency_ms", "wachtl_bw_latency_ms")):
+                v = _num(r.get(key), 0, 60000)
+                if v is not None:
+                    lines.append(ingest.server_lines(metric, g.probe, check, v, ts, extra))
+        lines.append(ingest.server_lines("wachtl_bw_ok", g.probe, check, 0 if error or mbps is None else 1, ts, extra))
+    if not stored:
+        return jsonify(error="keine gültigen Ergebnisse"), 400
+    try:
+        vm.import_lines(lines)
+    except vm.VMError as exc:
+        log.warning("Bandbreiten-Metriken nicht gespeichert: %s", exc)
+    return jsonify(stored=stored), 201
 
 
 # -- intern: Alertmanager-Webhook ------------------------------------------

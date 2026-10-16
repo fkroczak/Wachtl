@@ -183,3 +183,65 @@ pre.copy { background: var(--surface); border: 1px solid var(--border); border-r
 .steps h2 { margin-top: 0; }
 .kvlist { display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 1rem; }
 code.copy { user-select: all; background: var(--accent-soft); padding: 0.1rem 0.35rem; border-radius: 4px; word-break: break-all; }
+
+/* 0.3: Check-Formulare, Pfade, Bandbreite, Ausfälle */
+a.button { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.4rem 0.9rem; color: var(--text); }
+a.button:hover { border-color: var(--accent); text-decoration: none; }
+a.button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+a.button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.actions { flex-wrap: wrap; align-items: center; margin-bottom: 0.8rem; }
+.actions .range-buttons { margin-bottom: 0; }
+.settings-form fieldset { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 0.6rem 1rem 1rem; margin: 0 0 0.9rem; }
+.settings-form legend { font-weight: 600; padding: 0 0.3rem; }
+.grid-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.8rem 1rem; }
+.grid-form label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.85rem; color: var(--text-muted); }
+.grid-form label.check { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.4rem; color: var(--text);
+  grid-column: 1 / -1; }
+.grid-form label.check small { flex-basis: 100%; }
+.grid-form small { color: var(--text-muted); font-size: 0.76rem; }
+.grid-form input:not([type=checkbox]), .grid-form select { width: 100%; }
+.unit-input { display: flex; align-items: center; gap: 0.4rem; }
+.unit-input input { flex: 1; min-width: 0; }
+.unit-input span { color: var(--text-muted); white-space: nowrap; }
+
+.c-jitter { fill: none; stroke: var(--ochre); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.lg-jitter { border-top: 2px dashed var(--ochre); height: 0 !important; }
+.chart-small { height: 320px; }
+.c-down { stroke: var(--accent); fill: var(--accent); }
+.c-up { stroke: var(--ok); fill: var(--ok); }
+.c-bwline { fill: none !important; stroke-width: 1.4; stroke-opacity: 0.6; }
+.c-bwdot { stroke: var(--surface); stroke-width: 1; }
+.c-thr { stroke-width: 1; stroke-dasharray: 6 4; fill: none; stroke-opacity: 0.8; }
+.lg-down { background: var(--accent); }
+.lg-up { background: var(--ok); }
+.lg-thr { border-top: 2px dashed var(--text-muted); height: 0 !important; }
+
+.analysis { background: var(--surface); border: 1px solid var(--border); border-left: 6px solid var(--ok);
+  border-radius: var(--radius); padding: 0.4rem 1rem; margin-bottom: 1rem; }
+.analysis h2 { margin: 0.5rem 0 0.3rem; font-size: 1rem; }
+.analysis ul { margin: 0 0 0.5rem; padding-left: 1.2rem; }
+.analysis li { margin: 0.25rem 0; }
+.analysis-warn { border-left-color: var(--warn); }
+.analysis-bad { border-left-color: var(--bad); }
+.finding-bad { color: var(--bad); font-weight: 600; }
+.finding-warn { color: var(--warn); }
+.finding-info { color: var(--text-muted); }
+table.hops td.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.hop-real td { background: color-mix(in srgb, var(--bad) 7%, transparent); }
+tr.hop-ratelimit td { color: var(--text-muted); }
+tr.route-changed td { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.text-bad { color: var(--bad); font-weight: 600; }
+.text-muted { color: var(--text-muted); }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.badge.info { background: var(--accent-soft); color: var(--text-muted); }
+.card h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+tr.firing td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
+.cause { display: inline-block; padding: 0.05rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
+  border-left: 4px solid var(--off); background: var(--accent-soft); }
+.cause-probe { border-color: var(--off); }
+.cause-gateway { border-color: var(--bad); }
+.cause-wan { border-color: var(--warn); }
+.cause-loss { border-color: var(--ochre); }
+.cause-reference, .cause-target { border-color: var(--accent); }

@@ -23,6 +23,17 @@ def _probe_or_404(probe_id: int) -> dict | None:
     return q1("SELECT * FROM probes WHERE id = ?", (probe_id,))
 
 
+def _hop_arg() -> int | None:
+    """Optionaler Hop (Pfad-Checks); ungültige Werte -> ValueError."""
+    raw = request.args.get("hop")
+    if raw in (None, ""):
+        return None
+    hop = int(raw)
+    if not 1 <= hop <= 64:
+        raise ValueError(raw)
+    return hop
+
+
 @bp.get("/sites")
 @login_required(api=True)
 def sites():
@@ -44,7 +55,42 @@ def probes():
 @bp.get("/checks")
 @login_required(api=True)
 def checks():
-    return jsonify(q("SELECT id, name, type, target, role, interval_s, timeout_ms, enabled FROM checks ORDER BY id"))
+    rows = q("SELECT id, name, type, target, role, interval_s, timeout_ms, params, enabled FROM checks ORDER BY id")
+    for r in rows:
+        r["params"] = json.loads(r["params"] or "{}")
+    return jsonify(rows)
+
+
+@bp.get("/probes/<int:probe_id>/bandwidth")
+@login_required(api=True)
+def bandwidth(probe_id: int):
+    since = int(request.args.get("since", repo.now() - 30 * 86400) or 0)
+    return jsonify(q("SELECT * FROM bandwidth_runs WHERE probe_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 5000",
+                     (probe_id, since)))
+
+
+@bp.get("/probes/<int:probe_id>/paths")
+@login_required(api=True)
+def paths(probe_id: int):
+    rows = q("SELECT * FROM path_runs WHERE probe_id = ? ORDER BY ts DESC LIMIT 500", (probe_id,))
+    for r in rows:
+        r["hops"] = json.loads(r["hops"])
+    return jsonify(rows)
+
+
+@bp.post("/probes/<int:probe_id>/checks/<int:check_id>/run")
+@login_required("operator", api=True)
+def run_check(probe_id: int, check_id: int):
+    probe = _probe_or_404(probe_id)
+    if probe is None:
+        return jsonify(error="Probe nicht gefunden"), 404
+    check = repo.check_map_for_probe({**probe, "site_id": probe["site_id"]}).get(str(check_id))
+    if check is None or check["type"] not in ("iperf", "speedtest", "path"):
+        return jsonify(error="Check gehört nicht zur Probe oder ist kein Bandbreiten-/Pfad-Check"), 404
+    ctype = "retrace" if check["type"] == "path" else "run_check"
+    cid = repo.queue_command(probe_id, ctype, check_id, current_user()["username"])
+    repo.audit(current_user()["username"], f"probe.{ctype}", f"probe:{probe_id}", check["name"])
+    return jsonify(command_id=cid), 202
 
 
 @bp.get("/probes/<int:probe_id>/checks/<int:check_id>/series")
@@ -56,7 +102,11 @@ def series(probe_id: int, check_id: int):
     if range_key not in vm.RANGES:
         return jsonify(error=f"range muss einer von {list(vm.RANGES)} sein"), 400
     try:
-        return jsonify(vm.ping_series(probe_id, check_id, range_key))
+        hop = _hop_arg()
+    except ValueError:
+        return jsonify(error="hop muss zwischen 1 und 64 liegen"), 400
+    try:
+        return jsonify(vm.ping_series(probe_id, check_id, range_key, hop))
     except vm.VMError as exc:
         return jsonify(error=str(exc)), 502
 
@@ -67,7 +117,11 @@ def stats(probe_id: int, check_id: int):
     if _probe_or_404(probe_id) is None:
         return jsonify(error="Probe nicht gefunden"), 404
     try:
-        return jsonify(vm.ping_stats(probe_id, check_id))
+        hop = _hop_arg()
+    except ValueError:
+        return jsonify(error="hop muss zwischen 1 und 64 liegen"), 400
+    try:
+        return jsonify(vm.ping_stats(probe_id, check_id, hop))
     except vm.VMError as exc:
         return jsonify(error=str(exc)), 502
 

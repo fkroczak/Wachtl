@@ -17,6 +17,7 @@
   <nav>
     <a href="{{ url_for('web.overview') }}" class="{{ 'active' if request.endpoint == 'web.overview' }}">Übersicht</a>
     <a href="{{ url_for('web.alerts') }}" class="{{ 'active' if request.endpoint == 'web.alerts' }}">Alarme</a>
+    <a href="{{ url_for('web.outages_view') }}" class="{{ 'active' if request.endpoint == 'web.outages_view' }}">Ausfälle</a>
     {% if has_role(user, 'admin') %}
     <a href="{{ url_for('web.admin') }}" class="{{ 'active' if request.endpoint == 'web.admin' }}">Verwaltung</a>
     {% endif %}

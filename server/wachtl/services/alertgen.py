@@ -5,6 +5,7 @@ Gruppe 2: Alarmregeln mit den Schwellwerten aus der Tabelle ``alert_rules``.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
@@ -14,7 +15,7 @@ import requests
 import yaml
 from flask import current_app
 
-from .. import repo
+from .. import checktypes, repo
 from ..db import q
 
 log = logging.getLogger(__name__)
@@ -30,6 +31,14 @@ RECORDING_RULES = [
     ("wachtl:ping_rtt_ms:p50_1m", "quantile_over_time(0.5, wachtl_ping_rtt_ms[1m])"),
     ("wachtl:ping_loss_ratio_1m", "1 - avg_over_time(wachtl_ping_up[1m])"),
     ("wachtl:ping_jitter_ms:avg_1m", "avg_over_time(wachtl_ping_jitter_ms[1m])"),
+    ("wachtl:hop_rtt_ms:avg_1m", "avg_over_time(wachtl_hop_rtt_ms[1m])"),
+    ("wachtl:hop_rtt_ms:min_1m", "min_over_time(wachtl_hop_rtt_ms[1m])"),
+    ("wachtl:hop_rtt_ms:max_1m", "max_over_time(wachtl_hop_rtt_ms[1m])"),
+    ("wachtl:hop_rtt_ms:p50_1m", "quantile_over_time(0.5, wachtl_hop_rtt_ms[1m])"),
+    ("wachtl:hop_jitter_ms:avg_1m", "avg_over_time(wachtl_hop_jitter_ms[1m])"),
+    ("wachtl:hop_loss_ratio_1m", "1 - avg_over_time(wachtl_hop_up[1m])"),
+    ("wachtl:bw_mbps:last_1m", "last_over_time(wachtl_bw_mbps[1m])"),
+    ("wachtl:path_change:max_1m", "max_over_time(wachtl_path_change[1m])"),
 ]
 
 
@@ -115,6 +124,48 @@ def build_rules() -> dict:
             "Latenz {{ $value | printf \"%.0f\" }} ms zu {{ $labels.target }} von "
             "{{ $labels.probe_name }} ({{ $labels.site_name }})",
         )
+
+    if "jitter_high" in rules:
+        r = rules["jitter_high"]
+        add(
+            "WachtlJitterHigh",
+            "jitter_high",
+            f"avg_over_time(wachtl_ping_jitter_ms[{_fmt_s(max(r['window_s'], 120))}]) > {r['threshold']:g}",
+            "Jitter {{ $value | printf \"%.1f\" }} ms zu {{ $labels.target }} von "
+            "{{ $labels.probe_name }} ({{ $labels.site_name }})",
+        )
+
+    if "route_change" in rules:
+        r = rules["route_change"]
+        add(
+            "WachtlRouteChanged",
+            "route_change",
+            f"max_over_time(wachtl_path_change[{_fmt_s(max(r['threshold'], 60))}]) > 0",
+            "Pfad von {{ $labels.probe_name }} ({{ $labels.site_name }}) zu {{ $labels.target }} hat sich geändert",
+        )
+
+    # Bandbreite: Schwellwerte stehen je Check; "N Messungen in Folge unter Schwellwert"
+    if "bandwidth_low" in rules:
+        n = max(int(rules["bandwidth_low"]["threshold"]), 1)
+        for c in q("SELECT id, type, params FROM checks WHERE enabled = TRUE AND type IN ('iperf', 'speedtest')"):
+            p = checktypes.merged(c["type"], json.loads(c["params"] or "{}"))
+            if not p["schedule_min"]:
+                continue  # nur manuell: kein Zeitfenster für "in Folge"
+            window = _fmt_s(p["schedule_min"] * 60 * n + p["schedule_min"] * 30 + p["timeout_s"])
+            for direction, key, label in (("down", "min_down_mbps", "Download"), ("up", "min_up_mbps", "Upload")):
+                minimum = float(p.get(key) or 0)
+                if minimum <= 0:
+                    continue
+                sel = f'check_id="{c["id"]}",direction="{direction}"'
+                add(
+                    "WachtlBandwidthLow",
+                    "bandwidth_low",
+                    f"(max by ({BY_TARGET}, direction) (max_over_time(wachtl_bw_mbps{{{sel}}}[{window}])) < {minimum:g})"
+                    f" and (sum by ({BY_TARGET}, direction) (count_over_time(wachtl_bw_mbps{{{sel}}}[{window}])) >= {n})",
+                    f"{label} {{{{ $value | printf \"%.1f\" }}}} Mbit/s von {{{{ $labels.probe_name }}}} "
+                    f"({{{{ $labels.site_name }}}}) zu {{{{ $labels.target }}}} unter {minimum:g} Mbit/s",
+                    {"direction": direction},
+                )
 
     return {
         "groups": [

@@ -15,9 +15,11 @@ from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
+from . import checktypes
 from .services import alertgen
 from .services import alerts as alert_service
-from .services import notify, vm
+from .services import notify, outages, pathanalysis, vm
+from .services import settings as settings_service
 
 log = logging.getLogger(__name__)
 bp = Blueprint("web", __name__)
@@ -63,6 +65,25 @@ def fmt_ms(v):
 @bp.app_template_filter("pct")
 def fmt_pct(v):
     return "–" if v is None else f"{v:.1f} %"
+
+
+@bp.app_template_filter("mbps")
+def fmt_mbps(v):
+    if v is None:
+        return "–"
+    return f"{v:.0f} Mbit/s" if v >= 100 else f"{v:.1f} Mbit/s"
+
+
+@bp.app_template_filter("duration")
+def fmt_duration(seconds):
+    seconds = int(seconds or 0)
+    if seconds < 60:
+        return f"{seconds} s"
+    if seconds < 3600:
+        return f"{seconds // 60} min {seconds % 60:02d} s"
+    if seconds < 86400:
+        return f"{seconds // 3600} h {seconds % 3600 // 60:02d} min"
+    return f"{seconds // 86400} d {seconds % 86400 // 3600} h"
 
 
 @bp.app_template_filter("fromjson")
@@ -176,7 +197,7 @@ def site(site_id: int):
         "WHERE p.site_id = ? ORDER BY p.hostname",
         (site_id,),
     )
-    checks_by_probe = {p["id"]: {c["id"]: c for c in repo.checks_for_probe(p)} for p in probes}
+    checks_by_probe = {p["id"]: {c["id"]: c for c in repo.checks_for_probe(p) if c["type"] == "ping"} for p in probes}
     all_checks: dict[int, dict] = {}
     for cmap in checks_by_probe.values():
         all_checks.update(cmap)
@@ -191,20 +212,198 @@ def site(site_id: int):
     )
 
 
+def _probe_or_404(probe_id: int) -> dict:
+    return q1(
+        "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?", (probe_id,)
+    ) or abort(404)
+
+
+def _probe_check_or_404(probe: dict, check_id: int, types: tuple[str, ...]) -> dict:
+    c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    if c["type"] not in types:
+        abort(404)
+    return c
+
+
 @bp.get("/probes/<int:probe_id>")
 @login_required()
 def probe(probe_id: int):
-    p = q1(
-        "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?", (probe_id,)
-    ) or abort(404)
+    p = _probe_or_404(probe_id)
     checks = repo.checks_for_probe(p)
     live, live_ok = _live()
-    rows = [(c, live.get((str(p["id"]), str(c["id"])))) for c in checks]
+    rows = [(c, live.get((str(p["id"]), str(c["id"])))) for c in checks if c["type"] == "ping"]
+    paths = []
+    for c in (c for c in checks if c["type"] == "path"):
+        run = q1("SELECT * FROM path_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
+                 (probe_id, c["id"]))
+        paths.append((c, run, json.loads(run["hops"]) if run else []))
+    bandwidth = []
+    for c in (c for c in checks if c["type"] in checktypes.SCHEDULED_TYPES):
+        last = {d: q1("SELECT * FROM bandwidth_runs WHERE probe_id = ? AND check_id = ? AND direction = ? "
+                      "ORDER BY ts DESC, id DESC LIMIT 1", (probe_id, c["id"], d)) for d in ("down", "up")}
+        pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
+                     (probe_id, c["id"]))
+        params = checktypes.merged(c["type"], json.loads(c["params"] or "{}"))
+        bandwidth.append((c, last, pending, params))
     alerts = [
         a for a in q("SELECT * FROM alert_events ORDER BY starts_at DESC LIMIT 500")
         if json.loads(a["labels"]).get("probe") == str(probe_id)
     ][:20]
-    return render_template("probe.html", probe=p, rows=rows, cell_state=_cell_state, live_ok=live_ok, alerts=alerts)
+    measure = settings_service.get()
+    return render_template(
+        "probe.html", probe=p, rows=rows, paths=paths, bandwidth=bandwidth, cell_state=_cell_state,
+        live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
+        default_iperf_port=measure["probe_iperf_port"],
+        iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
+    )
+
+
+@bp.post("/probes/<int:probe_id>/settings")
+@login_required("admin")
+def probe_settings(probe_id: int):
+    p = _probe_or_404(probe_id)
+    enabled = request.form.get("iperf_server") == "on"
+    address = request.form.get("iperf_address", "").strip()
+    try:
+        port = int(request.form.get("iperf_port", 5201))
+    except ValueError:
+        port = 0
+    if not 1 <= port <= 65535:
+        flash("Port muss zwischen 1 und 65535 liegen.", "error")
+    elif address and not checktypes.valid_host(address):
+        flash("Adresse ist keine gültige IP-Adresse und kein Hostname.", "error")
+    else:
+        ex("UPDATE probes SET iperf_server = ?, iperf_port = ?, iperf_address = ? WHERE id = ?",
+           (enabled, port, address or None, probe_id))
+        repo.audit(current_user()["username"], "probe.settings", f"probe:{probe_id}",
+                   f"iperf3-Gegenstelle {'an' if enabled else 'aus'}, Port {port}, Adresse {address or 'automatisch'}")
+        flash(f"Einstellungen für {p['hostname']} gespeichert – die Probe übernimmt sie mit dem nächsten Heartbeat.", "ok")
+    return redirect(url_for("web.probe", probe_id=probe_id) + "#einstellungen")
+
+
+@bp.post("/probes/<int:probe_id>/checks/<int:check_id>/run")
+@login_required("operator")
+def check_run(probe_id: int, check_id: int):
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, ("iperf", "speedtest", "path"))
+    if str(check_id) not in repo.check_map_for_probe(p):
+        abort(404)
+    ctype = "retrace" if c["type"] == "path" else "run_check"
+    repo.queue_command(probe_id, ctype, check_id, current_user()["username"])
+    repo.audit(current_user()["username"], f"probe.{ctype}", f"probe:{probe_id}", c["name"])
+    beat = settings_service.get()["heartbeat_interval_s"]
+    flash(("Pfad wird neu ermittelt" if ctype == "retrace" else "Messung beauftragt")
+          + f" – die Probe holt den Auftrag mit dem nächsten Heartbeat ab (≤ {beat} s).", "ok")
+    nxt = request.form.get("next", "")
+    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.probe", probe_id=probe_id))
+
+
+@bp.get("/probes/<int:probe_id>/path/<int:check_id>")
+@login_required()
+def path_view(probe_id: int, check_id: int):
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, ("path",))
+    window = request.args.get("window", "5m")
+    if window not in vm.HOP_WINDOWS:
+        window = "5m"
+    runs = q("SELECT * FROM path_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 50",
+             (probe_id, check_id))
+    current = json.loads(runs[0]["hops"]) if runs else []
+    try:
+        measured, live_ok = vm.hop_table(probe_id, check_id, window), True
+    except vm.VMError as exc:
+        log.warning("Hop-Werte nicht abrufbar: %s", exc)
+        measured, live_ok = {}, False
+    rows = []
+    hop_numbers = sorted({h["hop"] for h in current} | set(measured))
+    trace = {h["hop"]: h for h in current}
+    for n in hop_numbers:
+        m = measured.get(n, {})
+        ip = m.get("ip") or (trace.get(n) or {}).get("ip")
+        rows.append({"hop": n, "ip": ip, "other_ips": m.get("other_ips", []), "loss": m.get("loss"),
+                     "avg": m.get("avg"), "min": m.get("min"), "max": m.get("max"), "last": m.get("last"),
+                     "jitter": m.get("jitter"), "sent": m.get("sent"),
+                     "trace_rtt": (trace.get(n) or {}).get("rtt_ms"),
+                     "segment": pathanalysis.segment(ip, n)})
+    analysis = pathanalysis.analyze(rows, c["target"])
+    history = []
+    for r in runs:
+        history.append({"run": r, "hops": json.loads(r["hops"])})
+    return render_template(
+        "path.html", probe=p, check=c, rows=rows, analysis=analysis, history=history, window=window,
+        windows=vm.HOP_WINDOWS, live_ok=live_ok, params=checktypes.merged("path", json.loads(c["params"] or "{}")),
+    )
+
+
+@bp.get("/probes/<int:probe_id>/path/<int:check_id>/hop/<int:hop>")
+@login_required()
+def hop_view(probe_id: int, check_id: int, hop: int):
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, ("path",))
+    if not 1 <= hop <= 64:
+        abort(404)
+    run = q1("SELECT hops FROM path_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
+             (probe_id, check_id))
+    ip = next((h["ip"] for h in json.loads(run["hops"]) if h["hop"] == hop), None) if run else None
+    return render_template("target.html", probe=p, check=c, hop=hop, hop_ip=ip, ranges=list(vm.RANGES),
+                           windows=vm.STAT_WINDOWS)
+
+
+BW_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
+
+
+@bp.get("/probes/<int:probe_id>/bandwidth/<int:check_id>")
+@login_required()
+def bandwidth_view(probe_id: int, check_id: int):
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, checktypes.SCHEDULED_TYPES)
+    range_key = request.args.get("range", "30d")
+    if range_key not in BW_RANGES:
+        range_key = "30d"
+    since = repo.now() - BW_RANGES[range_key]
+    runs = q("SELECT * FROM bandwidth_runs WHERE probe_id = ? AND check_id = ? AND ts >= ? ORDER BY ts DESC, id DESC "
+             "LIMIT 5000", (probe_id, check_id, since))
+    params = checktypes.merged(c["type"], json.loads(c["params"] or "{}"))
+    stats = {}
+    for d in ("down", "up"):
+        values = sorted(r["mbps"] for r in runs if r["direction"] == d and r["mbps"] is not None and not r["error"])
+        if values:
+            stats[d] = {"count": len(values), "min": values[0], "max": values[-1],
+                        "avg": sum(values) / len(values), "median": values[len(values) // 2]}
+    chart = {
+        "down": [[r["ts"] * 1000, r["mbps"]] for r in reversed(runs) if r["direction"] == "down" and r["mbps"] is not None],
+        "up": [[r["ts"] * 1000, r["mbps"]] for r in reversed(runs) if r["direction"] == "up" and r["mbps"] is not None],
+        "min_down": params.get("min_down_mbps") or 0, "min_up": params.get("min_up_mbps") or 0,
+        "start": since * 1000, "end": repo.now() * 1000,
+    }
+    pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
+                 (probe_id, check_id))
+    return render_template("bandwidth.html", probe=p, check=c, runs=runs[:200], stats=stats, chart=chart,
+                           params=params, range_key=range_key, ranges=list(BW_RANGES), pending=pending,
+                           summary=checktypes.summary(c, params))
+
+
+OUTAGE_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
+
+
+@bp.get("/outages")
+@login_required()
+def outages_view():
+    range_key = request.args.get("range", "7d")
+    if range_key not in OUTAGE_RANGES:
+        range_key = "7d"
+    site = request.args.get("site") or None
+    cause = request.args.get("cause") or None
+    show_all = request.args.get("all") == "1"
+    min_s = settings_service.get()["outage_min_s"]
+    items = outages.load(repo.now() - OUTAGE_RANGES[range_key], site, min_s, include_consequences=show_all)
+    if cause in outages.CAUSES:
+        items = [o for o in items if o.cause == cause]
+    return render_template(
+        "outages.html", items=items, summary=outages.summarize(items), causes=outages.CAUSES,
+        sites=q("SELECT * FROM sites ORDER BY name"), range_key=range_key, ranges=list(OUTAGE_RANGES),
+        site=site, cause=cause, show_all=show_all, min_s=min_s,
+    )
 
 
 @bp.post("/probes/<int:probe_id>/status")
@@ -235,7 +434,8 @@ def target(probe_id: int, check_id: int):
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?", (probe_id,)
     ) or abort(404)
     c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
-    return render_template("target.html", probe=p, check=c, ranges=list(vm.RANGES), windows=vm.STAT_WINDOWS)
+    return render_template("target.html", probe=p, check=c, hop=None, hop_ip=None, ranges=list(vm.RANGES),
+                           windows=vm.STAT_WINDOWS)
 
 
 # -- Alarme ---------------------------------------------------------------
@@ -284,7 +484,23 @@ def admin():
         intervals=repo.ALLOWED_INTERVALS, roles=ROLES, notify_settings=notify.get_settings(),
         probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]),
         notify_enabled=bool(current_app.config.get("AM_CONFIG")),
+        check_types=checktypes.TYPES, summary=checktypes.summary, merged=checktypes.merged,
+        measure=settings_service.get(), measure_fields=settings_service.FIELDS,
     )
+
+
+@bp.post("/admin/measure")
+@login_required("admin")
+def measure_update():
+    values, errors = settings_service.parse(request.form)
+    if errors:
+        for e in errors:
+            flash(e, "error")
+    else:
+        changed = settings_service.save(values)
+        repo.audit(current_user()["username"], "measure.update", detail=", ".join(f"{k}={values[k]}" for k in changed))
+        flash("Messeinstellungen gespeichert." if changed else "Keine Änderungen.", "ok")
+    return redirect(url_for("web.admin") + "#messung")
 
 
 @bp.post("/admin/sites")
@@ -396,43 +612,118 @@ def token_revoke(token_id: int):
     return redirect(url_for("web.admin") + "#enrollment")
 
 
+def _probe_names() -> dict[int, str]:
+    return {p["id"]: f"{p['hostname']} ({p['site_name']})" for p in
+            q("SELECT p.id, p.hostname, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname")}
+
+
+def _check_form_context(ctype: str, check: dict | None, values: dict | None = None) -> dict:
+    ct = checktypes.TYPES[ctype]
+    params = checktypes.merged(ctype, json.loads(check["params"] or "{}") if check else None)
+    if values:
+        params.update(values)
+    groups: dict[str, list] = {}
+    for f in ct.fields:
+        groups.setdefault(f.group, []).append(f)
+    assignment = None
+    if check:
+        assignment = q1("SELECT scope, scope_id FROM check_assignments WHERE check_id = ? ORDER BY id LIMIT 1",
+                        (check["id"],))
+    return {
+        "ctype": ct, "check": check, "params": params, "groups": groups,
+        "sites": q("SELECT * FROM sites ORDER BY name"),
+        "probes": q("SELECT p.id, p.hostname, p.iperf_server, s.name AS site_name FROM probes p "
+                    "JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"),
+        "intervals": repo.ALLOWED_INTERVALS, "assignment": assignment or {"scope": "all", "scope_id": None},
+    }
+
+
+@bp.get("/admin/checks/new/<ctype>")
+@login_required("admin")
+def check_new(ctype: str):
+    if ctype not in checktypes.TYPES:
+        abort(404)
+    return render_template("check_form.html", **_check_form_context(ctype, None))
+
+
+@bp.get("/admin/checks/<int:check_id>/edit")
+@login_required("admin")
+def check_edit(check_id: int):
+    c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    if c["type"] not in checktypes.TYPES:
+        abort(404)
+    return render_template("check_form.html", **_check_form_context(c["type"], c))
+
+
 @bp.post("/admin/checks")
 @login_required("admin")
 def check_create():
+    """Check anlegen oder (mit check_id) ändern – für alle Check-Typen."""
     f = request.form
-    name, target, role = f.get("name", "").strip(), f.get("target", "").strip(), f.get("role", "target")
-    try:
-        interval = int(f.get("interval_s", 1))
-        timeout = int(f.get("timeout_ms", 1000))
-    except ValueError:
-        interval, timeout = -1, -1
+    ctype = f.get("type", "ping")
+    if ctype not in checktypes.TYPES:
+        abort(400)
+    check_id = int(f.get("check_id", 0) or 0)
+    existing = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) if check_id else None
+    if check_id and (existing is None or existing["type"] != ctype):
+        abort(404)
+    name = f.get("name", "").strip()
     scope = f.get("scope", "all")
     scope_id = None
     if scope == "site":
         scope_id = int(f.get("site_id", 0) or 0)
     elif scope == "probe":
         scope_id = int(f.get("probe_id", 0) or 0)
-    errors = []
+    names = _probe_names()
+    params, errors = checktypes.parse_params(ctype, f, probe_ids=set(names))
     if not name:
         errors.append("Name fehlt.")
-    if not repo.valid_target(target):
-        errors.append("Ziel ist keine gültige IP-Adresse, kein Hostname und nicht 'gateway'.")
-    if role not in repo.CHECK_ROLES:
-        errors.append("Ungültige Rolle.")
-    if interval not in repo.ALLOWED_INTERVALS:
-        errors.append("Ungültiges Intervall.")
-    if not 100 <= timeout <= 5000:
-        errors.append("Timeout muss zwischen 100 und 5000 ms liegen.")
     if scope not in ("all", "site", "probe") or (scope != "all" and not scope_id):
         errors.append("Zuweisung unvollständig.")
+
+    target, role, interval, timeout = "", checktypes.ROLE_DEFAULT[ctype], 3600, 60000
+    if ctype in ("ping", "path"):
+        target = f.get("target", "").strip()
+        try:
+            interval = int(f.get("interval_s", 1))
+            timeout = int(f.get("timeout_ms", 1000))
+        except ValueError:
+            interval, timeout = -1, -1
+        if not repo.valid_target(target) or (ctype == "path" and target == "gateway"):
+            errors.append("Ziel ist keine gültige IP-Adresse oder kein gültiger Hostname"
+                          + ("." if ctype == "path" else " und nicht 'gateway'."))
+        if interval not in repo.ALLOWED_INTERVALS:
+            errors.append("Ungültiges Intervall.")
+        if not 100 <= timeout <= 5000:
+            errors.append("Timeout muss zwischen 100 und 5000 ms liegen.")
+        if ctype == "ping":
+            role = f.get("role", "target")
+            if role not in repo.CHECK_ROLES:
+                errors.append("Ungültige Rolle.")
+    elif not errors:
+        target = checktypes.target_for(ctype, params, names)
+        interval = params["schedule_min"] * 60 if params["schedule_min"] else 3600
+        timeout = params["timeout_s"] * 1000
+        if ctype == "iperf" and params["peer"] == "probe" and scope == "probe" and scope_id == params["peer_probe_id"]:
+            errors.append("Eine Probe kann nicht gegen sich selbst messen.")
+
     if errors:
         for e in errors:
             flash(e, "error")
+        ctx = _check_form_context(ctype, existing, params)
+        ctx["form"] = f
+        return render_template("check_form.html", **ctx), 400
+
+    user = current_user()["username"]
+    if existing:
+        repo.update_check(check_id, name, target, role, interval, timeout, scope, scope_id, params)
+        repo.audit(user, "check.update", f"check:{check_id}", f"{ctype} {target} {json.dumps(params, sort_keys=True)}")
+        flash(f"Check {name} gespeichert. Probes übernehmen die Änderung mit dem nächsten Heartbeat.", "ok")
     else:
-        cid = repo.create_check(name, target, role, interval, timeout, scope, scope_id)
-        repo.audit(current_user()["username"], "check.create", f"check:{cid}", f"{target} alle {interval} s")
+        check_id = repo.create_check(name, target, role, interval, timeout, scope, scope_id, ctype, params)
+        repo.audit(user, "check.create", f"check:{check_id}", f"{ctype} {target} alle {interval} s")
         flash(f"Check {name} angelegt. Probes übernehmen ihn mit dem nächsten Heartbeat.", "ok")
-        _regen_rules()
+    _regen_rules()
     return redirect(url_for("web.admin") + "#checks")
 
 

@@ -24,7 +24,7 @@ class NotifyTest(AppTestCase):
         self.assertEqual(hook["url"], "http://127.0.0.1:8427/api/internal/alertmanager")
         self.assertEqual(hook["http_config"]["authorization"]["credentials"], "hook-secret")
         self.assertNotIn("global", cfg)
-        self.assertEqual(len(cfg["inhibit_rules"]), 5)
+        self.assertEqual(len(cfg["inhibit_rules"]), 6)
 
     def test_email_and_teams(self):
         notify.save_settings({"email_to": "a@x.de, b@x.de", "email_from": "w@x.de", "smtp_smarthost": "mail:587",

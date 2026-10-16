@@ -10,7 +10,7 @@ import time
 from .db import ex, ins, q, q1
 
 CHECK_ROLES = {"gateway": "Gateway", "reference": "Referenz (Internet)", "target": "Ziel"}
-ALLOWED_INTERVALS = (1, 5, 10, 30, 60)
+ALLOWED_INTERVALS = (1, 2, 5, 10, 15, 30, 60, 120, 300)
 HOSTNAME_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
 PROBE_HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 
@@ -22,6 +22,9 @@ DEFAULT_ALERT_RULES = {
     "packet_loss_warning": ("Paketverlust Warnung (%)", 2, 300, 60, "warning"),
     "packet_loss_critical": ("Paketverlust kritisch (%)", 10, 300, 60, "critical"),
     "latency_high": ("Latenz Durchschnitt (ms)", 100, 300, 60, "warning"),
+    "jitter_high": ("Jitter Durchschnitt (ms)", 30, 300, 60, "warning"),
+    "route_change": ("Pfad geändert (Alarm bleibt Sekunden stehen)", 900, 0, 0, "info"),
+    "bandwidth_low": ("Bandbreite unter Schwellwert des Checks (Messungen in Folge)", 2, 0, 0, "warning"),
 }
 
 DEFAULT_CHECKS = (
@@ -76,27 +79,78 @@ def checks_for_probe(probe: dict) -> list[dict]:
     )
 
 
+def _schedule_offset(probe_id: int, check_id: int, schedule_min: int, offset_min: int) -> int:
+    """Fester Versatz je Probe und Check, damit nicht alle Probes zur selben Minute messen."""
+    if not schedule_min:
+        return 0
+    if offset_min >= 0:
+        return offset_min % schedule_min
+    digest = hashlib.sha256(f"{probe_id}:{check_id}".encode()).digest()
+    return int.from_bytes(digest[:4], "big") % schedule_min
+
+
+def probe_iperf_endpoint(peer: dict, default_port: int = 5201) -> tuple[str | None, int]:
+    """Adresse, unter der eine andere Probe ihren iperf3-Server anbietet."""
+    host = peer.get("iperf_address")
+    if not host:
+        addresses = json.loads(peer.get("addresses") or "[]")
+        host = addresses[0] if addresses else peer.get("last_ip")
+    return host, int(peer.get("iperf_port") or default_port)
+
+
 def probe_config(probe: dict) -> tuple[dict, str]:
     """Konfiguration für eine Probe und ihr ETag (Hash des Inhalts)."""
+    from . import checktypes
+    from .services import settings as settings_service
+
+    settings = settings_service.get()
+    server_iperf = None
     checks = []
     for c in checks_for_probe(probe):
-        checks.append(
-            {
-                "id": c["id"],
-                "type": c["type"],
-                "target": c["target"],
-                "role": c["role"],
-                "interval_s": c["interval_s"],
-                "timeout_ms": min(c["timeout_ms"], c["interval_s"] * 1000),
-                "params": json.loads(c["params"] or "{}"),
-            }
-        )
+        ctype = c["type"]
+        params = checktypes.merged(ctype, json.loads(c["params"] or "{}"))
+        item = {
+            "id": c["id"],
+            "type": ctype,
+            "target": c["target"],
+            "role": c["role"],
+            "interval_s": c["interval_s"],
+            "timeout_ms": min(c["timeout_ms"], c["interval_s"] * 1000),
+            "params": params,
+        }
+        if ctype in checktypes.SCHEDULED_TYPES:
+            params["offset_min"] = _schedule_offset(probe["id"], c["id"], params["schedule_min"], params["offset_min"])
+            peer_host, peer_port, peer_error = None, None, None
+            if ctype == "iperf" and params["peer"] == "server":
+                if server_iperf is None:
+                    server_iperf = settings_service.iperf_server_address(settings) or ("", 0)
+                peer_host, peer_port = server_iperf
+                if not peer_host:
+                    peer_error = "iperf3-Gegenstelle auf dem Wachtl-Server ist abgeschaltet"
+            elif ctype == "iperf" and params["peer"] == "probe":
+                peer = q1("SELECT * FROM probes WHERE id = ?", (params["peer_probe_id"],))
+                if peer is None:
+                    peer_error = "Gegenstellen-Probe existiert nicht mehr"
+                elif peer["id"] == probe["id"]:
+                    peer_error = "Probe kann nicht gegen sich selbst messen"
+                elif not peer["iperf_server"]:
+                    peer_error = f"Probe {peer['hostname']} ist nicht als iperf3-Gegenstelle eingerichtet"
+                else:
+                    peer_host, peer_port = probe_iperf_endpoint(peer, settings["probe_iperf_port"])
+            elif ctype == "iperf" or params.get("method") == "iperf":
+                peer_host, peer_port = params["host"], params["port"]
+            item["peer"] = {"host": peer_host, "port": peer_port, "error": peer_error}
+        checks.append(item)
     payload = {
         "probe_id": probe["id"],
         "checks": checks,
-        "upload_interval_s": 10,
-        "heartbeat_interval_s": 30,
-        "config_poll_s": 300,
+        "iperf_server": {
+            "enabled": bool(probe.get("iperf_server")),
+            "port": int(probe.get("iperf_port") or settings["probe_iperf_port"]),
+        },
+        "upload_interval_s": settings["upload_interval_s"],
+        "heartbeat_interval_s": settings["heartbeat_interval_s"],
+        "config_poll_s": settings["config_poll_s"],
     }
     etag = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
     payload["etag"] = etag
@@ -108,18 +162,62 @@ def check_map_for_probe(probe: dict) -> dict[str, dict]:
 
 
 def create_check(name: str, target: str, role: str, interval_s: int, timeout_ms: int,
-                 scope: str, scope_id: int | None) -> int:
+                 scope: str, scope_id: int | None, ctype: str = "ping", params: dict | None = None) -> int:
     ts = now()
     cid = ins(
         "INSERT INTO checks (name, type, target, role, interval_s, timeout_ms, params, enabled, created_at, updated_at) "
-        "VALUES (?, 'ping', ?, ?, ?, ?, '{}', TRUE, ?, ?)",
-        (name, target, role, interval_s, timeout_ms, ts, ts),
+        "VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, ?, ?)",
+        (name, ctype, target, role, interval_s, timeout_ms, json.dumps(params or {}, sort_keys=True), ts, ts),
     )
     ins(
         "INSERT INTO check_assignments (check_id, scope, scope_id) VALUES (?, ?, ?)",
         (cid, scope, scope_id),
     )
     return cid
+
+
+def update_check(check_id: int, name: str, target: str, role: str, interval_s: int, timeout_ms: int,
+                 scope: str, scope_id: int | None, params: dict) -> None:
+    ex(
+        "UPDATE checks SET name = ?, target = ?, role = ?, interval_s = ?, timeout_ms = ?, params = ?, updated_at = ? "
+        "WHERE id = ?",
+        (name, target, role, interval_s, timeout_ms, json.dumps(params, sort_keys=True), now(), check_id),
+    )
+    ex("DELETE FROM check_assignments WHERE check_id = ?", (check_id,))
+    ins("INSERT INTO check_assignments (check_id, scope, scope_id) VALUES (?, ?, ?)", (check_id, scope, scope_id))
+
+
+# -- Aufträge an Probes ------------------------------------------------------
+COMMAND_TYPES = ("run_check", "retrace")
+COMMAND_TTL_S = 3600
+
+
+def queue_command(probe_id: int, ctype: str, check_id: int | None, username: str) -> int:
+    if ctype not in COMMAND_TYPES:
+        raise ValueError(ctype)
+    pending = q1(
+        "SELECT id FROM probe_commands WHERE probe_id = ? AND type = ? AND check_id = ? AND delivered_at IS NULL",
+        (probe_id, ctype, check_id),
+    )
+    if pending:
+        return int(pending["id"])
+    return ins(
+        "INSERT INTO probe_commands (probe_id, type, check_id, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (probe_id, ctype, check_id, username, now()),
+    )
+
+
+def take_commands(probe_id: int) -> list[dict]:
+    """Offene Aufträge abholen und als zugestellt markieren (veraltete werden verworfen)."""
+    ts = now()
+    rows = q(
+        "SELECT id, type, check_id FROM probe_commands WHERE probe_id = ? AND delivered_at IS NULL AND created_at > ? "
+        "ORDER BY id",
+        (probe_id, ts - COMMAND_TTL_S),
+    )
+    if rows:
+        ex("UPDATE probe_commands SET delivered_at = ? WHERE probe_id = ? AND delivered_at IS NULL", (ts, probe_id))
+    return [{"id": r["id"], "type": r["type"], "check_id": r["check_id"]} for r in rows]
 
 
 # -- Seed -------------------------------------------------------------------
@@ -161,8 +259,15 @@ def scope_label(scope: str, scope_id, sites: dict, probes: dict) -> str:
     return f"Probe {probes.get(scope_id, {}).get('hostname', scope_id)}"
 
 
-def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730) -> None:
+def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, history_days: int | None = None) -> None:
     ts = now()
+    if history_days is None:
+        from .services import settings as settings_service
+
+        history_days = settings_service.get()["history_days"]
+    ex("DELETE FROM path_runs WHERE ts < ?", (ts - history_days * 86400,))
+    ex("DELETE FROM bandwidth_runs WHERE ts < ?", (ts - history_days * 86400,))
+    ex("DELETE FROM probe_commands WHERE created_at < ?", (ts - 7 * 86400,))
     ex("DELETE FROM ingest_batches WHERE received_at < ?", (ts - ingest_days * 86400,))
     ex("DELETE FROM audit_log WHERE ts < ?", (ts - audit_days * 86400,))
     ex("DELETE FROM alert_events WHERE status = 'resolved' AND ends_at < ?", (ts - alert_days * 86400,))

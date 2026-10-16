@@ -34,8 +34,12 @@ SECRET_FIELDS = {"smtp_password"}
 INHIBIT_RULES = [
     # Probe offline: keine Folgealarme dieser Probe
     {"source_matchers": ['alertname="WachtlProbeOffline"'],
-     "target_matchers": ['alertname=~"WachtlTargetDown|WachtlWanDown|WachtlPacketLoss.*|WachtlLatencyHigh"'],
+     "target_matchers": ['alertname=~"WachtlTargetDown|WachtlWanDown|WachtlPacketLoss.*|WachtlLatencyHigh'
+                         '|WachtlJitterHigh|WachtlBandwidthLow|WachtlRouteChanged"'],
      "equal": ["probe"]},
+    # Gateway oder WAN weg: Bandbreiten-, Jitter- und Pfadalarme derselben Probe sind Folgen
+    {"source_matchers": ['alertname=~"WachtlWanDown|WachtlTargetDown"', 'role=~"gateway|"'],
+     "target_matchers": ['alertname=~"WachtlBandwidthLow|WachtlJitterHigh|WachtlRouteChanged"'], "equal": ["probe"]},
     # Gateway weg: Internet- und Zielalarme derselben Probe unterdrücken
     {"source_matchers": ['alertname="WachtlTargetDown"', 'role="gateway"'],
      "target_matchers": ['role=~"reference|target"'], "equal": ["probe"]},

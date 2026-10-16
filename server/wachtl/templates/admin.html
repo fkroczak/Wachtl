@@ -3,7 +3,7 @@
 {% block content %}
 <h1>Verwaltung</h1>
 <nav class="subnav">
-  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#checks">Checks</a>
+  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#checks">Checks</a><a href="#messung">Messung</a>
   <a href="#alarme">Alarmregeln</a><a href="#benachrichtigungen">Benachrichtigungen</a><a href="#benutzer">Benutzer</a><a href="{{ url_for('web.audit') }}">Audit-Log</a>
 </nav>
 
@@ -58,38 +58,57 @@
 
 <section id="checks">
   <h2>Checks</h2>
-  <p class="muted">Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt. Änderungen erreichen die Probes mit dem nächsten Heartbeat (≤ 30 s).</p>
+  <p class="muted">Was die Probes messen. Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt.
+    Änderungen erreichen die Probes mit dem nächsten Heartbeat.</p>
+  <div class="actions">
+    {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
+  </div>
   <table>
-    <thead><tr><th>Name</th><th>Ziel</th><th>Rolle</th><th>Intervall</th><th>Timeout</th><th>Zuweisung</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th></th></tr></thead>
     <tbody>{% for c in checks %}
       <tr class="{{ '' if c.enabled else 'disabled' }}">
-        <td>{{ c.name }}</td><td>{{ c.target }}</td><td>{{ CHECK_ROLES[c.role] }}</td><td>{{ c.interval_s }} s</td><td>{{ c.timeout_ms }} ms</td>
+        <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
+        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
+        <td>{{ c.target }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
+        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
         <td>{{ assignments[c.id]|join(', ') }}</td>
         <td>{{ 'aktiv' if c.enabled else 'pausiert' }}</td>
         <td class="nowrap">
+          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}">Bearbeiten</a>
           <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Pausieren' if c.enabled else 'Aktivieren' }}</button></form>
           <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?">Löschen</button></form>
         </td>
       </tr>
-    {% endfor %}</tbody>
+    {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
   </table>
-  <form method="post" action="{{ url_for('web.check_create') }}" class="row">
+</section>
+
+<section id="messung">
+  <h2>Messung</h2>
+  <p class="muted">Allgemeine Einstellungen für alle Probes. Was gemessen wird, steht in den Checks; ob eine Probe iperf3-Gegenstelle ist, auf der Seite der Probe.</p>
+  <form method="post" action="{{ url_for('web.measure_update') }}" class="settings-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Name <input name="name" required maxlength="100" placeholder="z. B. Fileserver"></label>
-    <label>Ziel <input name="target" required maxlength="253" placeholder="IP, Hostname oder gateway"></label>
-    <label>Rolle <select name="role">{% for k, v in CHECK_ROLES.items() %}<option value="{{ k }}" {{ 'selected' if k == 'target' }}>{{ v }}</option>{% endfor %}</select></label>
-    <label>Intervall <select name="interval_s">{% for i in intervals %}<option value="{{ i }}">{{ i }} s</option>{% endfor %}</select></label>
-    <label>Timeout (ms) <input name="timeout_ms" type="number" min="100" max="5000" value="1000"></label>
-    <label>Zuweisung
-      <select name="scope" id="scope-select">
-        <option value="all">Alle Probes</option><option value="site">Ein Standort</option><option value="probe">Eine Probe</option>
-      </select>
-    </label>
-    <label data-scope="site" hidden>Standort <select name="site_id">{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>
-    <label data-scope="probe" hidden>Probe <select name="probe_id">{% for p in probes %}<option value="{{ p.id }}">{{ p.hostname }}</option>{% endfor %}</select></label>
-    <button class="primary">Check anlegen</button>
+    {% for group in measure_fields|groupby('group') %}
+    <fieldset>
+      <legend>{{ group.grouper }}</legend>
+      <div class="grid-form">
+      {% for f in group.list %}
+        {% set v = measure[f.key] %}
+        <label class="{{ 'check' if f.kind == 'bool' }}">
+          {% if f.kind == 'bool' %}<input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }}> {{ f.label }}
+          {% else %}{{ f.label }}
+            {% if f.kind == 'int' %}<span class="unit-input"><input name="{{ f.key }}" type="number" min="{{ f.min }}" max="{{ f.max }}" value="{{ v }}">{% if f.unit %}<span>{{ f.unit }}</span>{% endif %}</span>
+            {% else %}<input name="{{ f.key }}" value="{{ v }}" maxlength="253">{% endif %}
+          {% endif %}
+          {% if f.help %}<small>{{ f.help }}</small>{% endif %}
+        </label>
+      {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+    <button class="primary">Messeinstellungen speichern</button>
   </form>
 </section>
 
@@ -104,7 +123,7 @@
           <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="aktiv"></td>
           <td>{{ r.name }}</td>
           <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num"></td>
-          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
+          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
               {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num">{% endif %}</td>
           <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num"></td>
           <td><select name="severity_{{ r.kind }}">{% for sv in ('info','warning','critical') %}<option {{ 'selected' if sv == r.severity }}>{{ sv }}</option>{% endfor %}</select></td>

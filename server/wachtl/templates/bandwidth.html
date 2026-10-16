@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
+{% block content %}
+<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Bandbreite</p>
+<h1>{{ check.name }} <span class="muted">· {{ probe.hostname }} ↔ {{ check.target }}</span></h1>
+<p class="muted">{{ 'iperf3' if check.type == 'iperf' else 'WAN-Messung' }} · {{ summary }}{% if params.window_start != '00:00' or params.window_end != '23:59' %} · nur {{ params.window_start }}–{{ params.window_end }} Uhr{% endif %}</p>
+
+<div class="actions">
+  <span class="range-buttons">{% for r in ranges %}<a class="button {{ 'active' if r == range_key }}" href="?range={{ r }}">{{ r }}</a>{% endfor %}</span>
+  {% if has_role(user, 'operator') %}
+    {% if pending %}<span class="muted">Messung beauftragt – Ergebnis erscheint nach Abschluss (Seite neu laden).</span>
+    {% else %}
+    <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=check.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="primary">Jetzt messen</button></form>
+    {% endif %}
+  {% endif %}
+  {% if has_role(user, 'admin') %}<a class="button" href="{{ url_for('web.check_edit', check_id=check.id) }}">Einstellungen</a>{% endif %}
+</div>
+
+<section class="cards">
+  {% for d, label in (('down', 'Download'), ('up', 'Upload')) %}
+  <div class="card kv">
+    <h3>{{ label }}</h3>
+    {% if stats[d] %}
+    <dl>
+      <dt>Median</dt><dd><strong>{{ stats[d].median|mbps }}</strong></dd>
+      <dt>Durchschnitt</dt><dd>{{ stats[d].avg|mbps }}</dd>
+      <dt>Min / Max</dt><dd>{{ stats[d].min|mbps }} / {{ stats[d].max|mbps }}</dd>
+      <dt>Messungen</dt><dd>{{ stats[d].count }}</dd>
+      {% set thr = params.min_down_mbps if d == 'down' else params.min_up_mbps %}
+      <dt>Alarm unter</dt><dd>{{ thr|mbps if thr else 'aus' }}</dd>
+    </dl>
+    {% else %}<p class="muted">Keine Messungen im Zeitraum.</p>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+<div class="legend small"><span class="lg-down"></span> Download <span class="lg-up"></span> Upload <span class="lg-thr"></span> Alarmschwelle</div>
+<div id="bw-chart" class="chart chart-small"></div>
+<script type="application/json" id="bw-data">{{ chart|tojson }}</script>
+
+<h2>Messungen</h2>
+<table>
+  <thead><tr><th>Zeit</th><th>Richtung</th><th>Durchsatz</th><th>Protokoll</th><th>Latenz</th><th>Jitter</th><th>Verlust</th><th>Retransmits</th><th>Dauer</th><th>Auslöser</th></tr></thead>
+  <tbody>{% for r in runs %}
+    <tr>
+      <td class="nowrap">{{ r.ts|dt }}</td>
+      <td>{{ '↓ Download' if r.direction == 'down' else '↑ Upload' }}</td>
+      <td class="num">{% if r.error %}<span class="badge critical">Fehler</span> <span class="small">{{ r.error }}</span>{% else %}{{ r.mbps|mbps }}{% endif %}</td>
+      <td>{{ (r.protocol or '')|upper }}</td>
+      <td class="num">{{ r.latency_ms|ms }}</td>
+      <td class="num">{{ r.jitter_ms|ms }}</td>
+      <td class="num">{{ r.loss_pct|pct }}</td>
+      <td class="num">{{ r.retransmits if r.protocol == 'tcp' else '–' }}</td>
+      <td class="num">{{ '%.0f s'|format(r.duration_s) if r.duration_s else '–' }}</td>
+      <td>{{ 'manuell' if r.trigger == 'manual' else 'Zeitplan' }}</td>
+    </tr>
+  {% else %}<tr><td colspan="10" class="muted">Noch keine Messungen.</td></tr>{% endfor %}</tbody>
+</table>
+{% endblock %}

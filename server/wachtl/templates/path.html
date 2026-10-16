@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Pfad {{ check.target }} – {{ probe.hostname }}{% endblock %}
+{% block content %}
+<div data-autorefresh="30" hidden></div>
+<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Pfad</p>
+<h1>{{ check.name }} <span class="muted">· {{ probe.hostname }} → {{ check.target }}</span></h1>
+<p class="muted">Jeder Hop wird alle {{ check.interval_s }} s angepingt, der Pfad alle {{ params.trace_interval_min }} min neu ermittelt{{ ' und sofort bei Verlust am Ziel' if params.retrace_on_loss }}.</p>
+
+<div class="actions">
+  <span class="range-buttons">{% for w in windows %}<a class="button {{ 'active' if w == window }}" href="?window={{ w }}">{{ w }}</a>{% endfor %}</span>
+  {% if has_role(user, 'operator') %}
+  <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=check.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ request.full_path }}">
+    <button>Pfad jetzt neu ermitteln</button></form>
+  {% endif %}
+  {% if has_role(user, 'admin') %}<a class="button" href="{{ url_for('web.check_edit', check_id=check.id) }}">Einstellungen</a>{% endif %}
+</div>
+
+{% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
+
+<div class="analysis analysis-{{ analysis.verdict }}">
+  <h2>Bewertung</h2>
+  <ul>{% for f in analysis.findings %}<li class="finding-{{ f.level }}">{{ f.text }}</li>{% endfor %}</ul>
+</div>
+
+<table class="hops">
+  <thead><tr><th>Hop</th><th>Adresse</th><th>Bereich</th><th>Verlust</th><th>Letzte</th><th>Ø</th><th>Min</th><th>Max</th><th>Jitter</th><th>Pings</th><th></th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    {% set mark = analysis.hop_marks.get(r.hop) %}
+    <tr class="hop-{{ mark or 'normal' }}">
+      <td class="num">{{ r.hop }}</td>
+      <td>{% if r.ip %}<a href="{{ url_for('web.hop_view', probe_id=probe.id, check_id=check.id, hop=r.hop) }}">{{ r.ip }}</a>
+          {% if r.other_ips %}<br><span class="muted small">auch {{ r.other_ips|join(', ') }}</span>{% endif %}
+          {% else %}<span class="muted">* keine Antwort</span>{% endif %}</td>
+      <td class="small">{{ r.segment }}</td>
+      <td class="num {{ 'text-bad' if mark == 'real' else ('text-muted' if mark == 'ratelimit') }}">{{ r.loss|pct }}</td>
+      <td class="num">{{ r.last|ms }}</td>
+      <td class="num">{{ r.avg|ms }}</td>
+      <td class="num">{{ r.min|ms }}</td>
+      <td class="num">{{ r.max|ms }}</td>
+      <td class="num">{{ r.jitter|ms }}</td>
+      <td class="num">{{ (r.sent|int) if r.sent is not none else '–' }}</td>
+      <td class="small">{% if mark == 'real' %}<span class="badge critical">Verlust bis Ziel</span>
+        {% elif mark == 'ratelimit' %}<span class="badge info">ICMP-Drosselung</span>
+        {% elif mark == 'jump' %}<span class="badge warning">Latenzsprung</span>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="11" class="muted">Noch kein Pfad ermittelt. Die Probe meldet das erste Ergebnis kurz nach dem Start des Checks.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="muted small">Verlust und Latenz aus den Dauerpings der letzten {{ window }}. „Pings“ = gesendete Pings im Zeitraum. Ein Klick auf die Adresse zeigt den Verlauf des Hops.</p>
+
+<h2>Pfadverlauf</h2>
+{% if history %}
+<table>
+  <thead><tr><th>Von</th><th>Bis</th><th>Hops</th><th>Ziel erreicht</th><th>Pfad</th></tr></thead>
+  <tbody>{% for h in history %}
+    <tr class="{{ 'route-changed' if h.run.changed }}">
+      <td class="nowrap">{{ h.run.first_ts|dt }}{% if h.run.changed %} <span class="badge warning">Wechsel</span>{% endif %}</td>
+      <td class="nowrap">{{ 'aktuell' if loop.first else h.run.ts|dt }}</td>
+      <td class="num">{{ h.hops|length }}</td>
+      <td>{{ 'ja' if h.run.reached else 'nein' }}</td>
+      <td class="small mono">{% for hop in h.hops %}{{ hop.ip or '*' }}{{ ' → ' if not loop.last }}{% endfor %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Noch kein Verlauf.</p>{% endif %}
+{% endblock %}

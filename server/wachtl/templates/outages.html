@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Ausfälle{% endblock %}
+{% block content %}
+<h1>Ausfälle</h1>
+<p class="muted">Störungen aus den Alarmen, nach Ursache eingeordnet. Gleichzeitige Folgestörungen (z. B. Internet weg, weil das Gateway weg ist) sind {{ 'eingeblendet' if show_all else 'ausgeblendet' }}.
+  {% if min_s %}Störungen unter {{ min_s|duration }} werden nicht gezeigt.{% endif %}</p>
+
+<form method="get" class="row">
+  <label>Zeitraum <select name="range">{% for r in ranges %}<option {{ 'selected' if r == range_key }}>{{ r }}</option>{% endfor %}</select></label>
+  <label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></label>
+  <label>Ursache <select name="cause"><option value="">alle</option>{% for k, v in causes.items() %}<option value="{{ k }}" {{ 'selected' if cause == k }}>{{ v[0] }}</option>{% endfor %}</select></label>
+  <label class="check"><input type="checkbox" name="all" value="1" {{ 'checked' if show_all }}> Folgestörungen zeigen</label>
+  <button>Anzeigen</button>
+</form>
+
+<section class="cards">
+  <div class="card kv"><h3>Gesamt</h3><dl>
+    <dt>Störungen</dt><dd><strong>{{ summary.total }}</strong></dd>
+    <dt>davon aktiv</dt><dd>{{ summary.active }}</dd></dl></div>
+  <div class="card kv"><h3>Nach Ursache</h3><dl>
+    {% for key, c in summary.by_cause %}<dt>{{ c.label }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
+  <div class="card kv"><h3>Nach Standort</h3><dl>
+    {% for name, c in summary.by_site[:8] %}<dt>{{ name }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
+</section>
+
+<table>
+  <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th><th>Standort</th><th>Probe</th><th>Ziel</th><th>Meldung</th></tr></thead>
+  <tbody>{% for o in items %}
+    <tr class="{{ 'firing' if o.end is none }}">
+      <td class="nowrap">{{ o.start|dt }}</td>
+      <td class="nowrap">{{ o.duration|duration }}{% if o.end is none %} <span class="badge critical">aktiv</span>{% endif %}</td>
+      <td><span class="cause cause-{{ o.cause }}" title="{{ causes[o.cause][1] }}">{{ o.cause_label }}</span>
+        {% if o.consequence_of %}<br><span class="muted small">Folge von: {{ o.consequence_of }}</span>{% endif %}</td>
+      <td>{% if o.site %}<a href="{{ url_for('web.site', site_id=o.site|int) }}">{{ o.site_name }}</a>{% endif %}</td>
+      <td>{% if o.probe %}<a href="{{ url_for('web.probe', probe_id=o.probe|int) }}">{{ o.probe_name }}</a>{% endif %}</td>
+      <td>{{ o.target if o.cause not in ('probe', 'wan') else '' }}</td>
+      <td class="small">{{ o.summary }}</td>
+    </tr>
+  {% else %}<tr><td colspan="7" class="muted">Keine Ausfälle im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
+</table>
+<p class="muted small">Der Beginn ist der Zeitpunkt der Alarmauslösung – je nach Regel einige Sekunden nach dem ersten fehlgeschlagenen Ping.</p>
+{% endblock %}

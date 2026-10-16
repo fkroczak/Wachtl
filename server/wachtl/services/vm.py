@@ -68,70 +68,141 @@ def _num(v) -> float | None:
     return None if math.isnan(f) or math.isinf(f) else round(f, 3)
 
 
-def ping_series(probe_id: int, check_id: int, range_key: str) -> dict:
-    """Latenz (avg/min/max) und Paketverlust für den Graphen der Ziel-Detailseite."""
+def _metric_names(hop: int | None) -> dict[str, str]:
+    """Rohdaten- und Aggregat-Namen für Ziel-Pings bzw. Hop-Pings eines Pfad-Checks."""
+    kind = "hop" if hop is not None else "ping"
+    return {
+        "rtt": f"wachtl_{kind}_rtt_ms", "up": f"wachtl_{kind}_up", "jitter": f"wachtl_{kind}_jitter_ms",
+        "avg_1m": f"wachtl:{kind}_rtt_ms:avg_1m", "min_1m": f"wachtl:{kind}_rtt_ms:min_1m",
+        "max_1m": f"wachtl:{kind}_rtt_ms:max_1m", "p50_1m": f"wachtl:{kind}_rtt_ms:p50_1m",
+        "loss_1m": f"wachtl:{kind}_loss_ratio_1m", "jitter_1m": f"wachtl:{kind}_jitter_ms:avg_1m",
+    }
+
+
+def _hop_sel(probe_id: int, check_id: int, hop: int | None) -> str:
+    sel = _sel(probe_id, check_id)
+    return sel if hop is None else sel + f',hop="{int(hop):02d}"'
+
+
+def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = None) -> dict:
+    """Latenz (avg/min/max), Jitter und Paketverlust für den Graphen der Ziel- bzw. Hop-Detailseite."""
     span = RANGES.get(range_key, 3600)
     end = int(time.time())
     start = end - span
     use_agg = span > current_app.config["RAW_QUERY_MAX_S"]
     step = max(span // 600, 60 if use_agg else 1)
-    sel = _sel(probe_id, check_id)
+    sel = _hop_sel(probe_id, check_id, hop)
+    m = _metric_names(hop)
     w = f"{step}s"
+    jw = f"{max(step, 120)}s"  # Jitter kommt nur alle 60 s
     if use_agg:
         queries = {
-            "avg": f"avg_over_time(wachtl:ping_rtt_ms:avg_1m{{{sel}}}[{w}])",
-            "min": f"min_over_time(wachtl:ping_rtt_ms:min_1m{{{sel}}}[{w}])",
-            "max": f"max_over_time(wachtl:ping_rtt_ms:max_1m{{{sel}}}[{w}])",
-            "loss": f"avg_over_time(wachtl:ping_loss_ratio_1m{{{sel}}}[{w}]) * 100",
+            "avg": f"avg_over_time({m['avg_1m']}{{{sel}}}[{w}])",
+            "min": f"min_over_time({m['min_1m']}{{{sel}}}[{w}])",
+            "max": f"max_over_time({m['max_1m']}{{{sel}}}[{w}])",
+            "jitter": f"avg_over_time({m['jitter_1m']}{{{sel}}}[{jw}])",
+            "loss": f"avg_over_time({m['loss_1m']}{{{sel}}}[{w}]) * 100",
         }
         base = _cfg("VM_AGG_URL")
     else:
         queries = {
-            "avg": f"avg_over_time(wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-            "min": f"min_over_time(wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-            "max": f"max_over_time(wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-            "loss": f"(1 - avg_over_time(wachtl_ping_up{{{sel}}}[{w}])) * 100",
+            "avg": f"avg_over_time({m['rtt']}{{{sel}}}[{w}])",
+            "min": f"min_over_time({m['rtt']}{{{sel}}}[{w}])",
+            "max": f"max_over_time({m['rtt']}{{{sel}}}[{w}])",
+            "jitter": f"avg_over_time({m['jitter']}{{{sel}}}[{jw}])",
+            "loss": f"(1 - avg_over_time({m['up']}{{{sel}}}[{w}])) * 100",
         }
         base = _cfg("VM_RAW_URL")
     series = {}
     for key, query in queries.items():
+        # mehrere Hop-IPs (Lastverteilung) werden zusammengefasst
+        query = f"avg({query})" if hop is not None else query
         result = _get(base, "/api/v1/query_range", {"query": query, "start": start, "end": end, "step": step})
         values = result[0]["values"] if result else []
         series[key] = [[int(ts) * 1000, _num(v)] for ts, v in values]
     return {"range": range_key, "step_s": step, "source": "agg" if use_agg else "raw", "series": series}
 
 
-def ping_stats(probe_id: int, check_id: int) -> dict[str, dict]:
+def ping_stats(probe_id: int, check_id: int, hop: int | None = None) -> dict[str, dict]:
     """Min, Max, Durchschnitt, Median, Jitter, Verlust für 1 min bis 24 h."""
-    sel = _sel(probe_id, check_id)
+    sel = _hop_sel(probe_id, check_id, hop)
+    m = _metric_names(hop)
     stats: dict[str, dict] = {}
     for w in STAT_WINDOWS:
         if w == "24h":
             agg = True
             q = {
-                "min": f"min_over_time(wachtl:ping_rtt_ms:min_1m{{{sel}}}[24h])",
-                "max": f"max_over_time(wachtl:ping_rtt_ms:max_1m{{{sel}}}[24h])",
-                "avg": f"avg_over_time(wachtl:ping_rtt_ms:avg_1m{{{sel}}}[24h])",
-                "median": f"quantile_over_time(0.5, wachtl:ping_rtt_ms:p50_1m{{{sel}}}[24h])",
-                "jitter": f"avg_over_time(wachtl:ping_jitter_ms:avg_1m{{{sel}}}[24h])",
-                "loss": f"avg_over_time(wachtl:ping_loss_ratio_1m{{{sel}}}[24h]) * 100",
+                "min": f"min_over_time({m['min_1m']}{{{sel}}}[24h])",
+                "max": f"max_over_time({m['max_1m']}{{{sel}}}[24h])",
+                "avg": f"avg_over_time({m['avg_1m']}{{{sel}}}[24h])",
+                "median": f"quantile_over_time(0.5, {m['p50_1m']}{{{sel}}}[24h])",
+                "jitter": f"avg_over_time({m['jitter_1m']}{{{sel}}}[24h])",
+                "loss": f"avg_over_time({m['loss_1m']}{{{sel}}}[24h]) * 100",
             }
         else:
             agg = False
             q = {
-                "min": f"min_over_time(wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-                "max": f"max_over_time(wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-                "avg": f"avg_over_time(wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-                "median": f"quantile_over_time(0.5, wachtl_ping_rtt_ms{{{sel}}}[{w}])",
-                "jitter": f"avg_over_time(wachtl_ping_jitter_ms{{{sel}}}[{max_window(w)}])",
-                "loss": f"(1 - avg_over_time(wachtl_ping_up{{{sel}}}[{w}])) * 100",
+                "min": f"min_over_time({m['rtt']}{{{sel}}}[{w}])",
+                "max": f"max_over_time({m['rtt']}{{{sel}}}[{w}])",
+                "avg": f"avg_over_time({m['rtt']}{{{sel}}}[{w}])",
+                "median": f"quantile_over_time(0.5, {m['rtt']}{{{sel}}}[{w}])",
+                "jitter": f"avg_over_time({m['jitter']}{{{sel}}}[{max_window(w)}])",
+                "loss": f"(1 - avg_over_time({m['up']}{{{sel}}}[{w}])) * 100",
             }
         row = {}
         for key, query in q.items():
+            query = f"avg({query})" if hop is not None else query
             result = instant(query, agg=agg)
             row[key] = _num(result[0]["value"][1]) if result else None
         stats[w] = row
     return stats
+
+
+HOP_WINDOWS = ("1m", "5m", "15m", "1h", "6h", "24h")
+
+
+def hop_table(probe_id: int, check_id: int, window: str = "5m") -> dict[int, dict]:
+    """Je Hop: Verlust, Latenz (letzte/avg/min/max), Jitter und Anzahl Antworten – wie MTR."""
+    sel = _sel(probe_id, check_id)
+    agg = window == "24h"
+    if agg:
+        q = {
+            "loss": f"avg_over_time(wachtl:hop_loss_ratio_1m{{{sel}}}[24h]) * 100",
+            "avg": f"avg_over_time(wachtl:hop_rtt_ms:avg_1m{{{sel}}}[24h])",
+            "min": f"min_over_time(wachtl:hop_rtt_ms:min_1m{{{sel}}}[24h])",
+            "max": f"max_over_time(wachtl:hop_rtt_ms:max_1m{{{sel}}}[24h])",
+            "jitter": f"avg_over_time(wachtl:hop_jitter_ms:avg_1m{{{sel}}}[24h])",
+            "last": f"last_over_time(wachtl:hop_rtt_ms:avg_1m{{{sel}}}[10m])",
+        }
+    else:
+        q = {
+            "loss": f"(1 - avg_over_time(wachtl_hop_up{{{sel}}}[{window}])) * 100",
+            "avg": f"avg_over_time(wachtl_hop_rtt_ms{{{sel}}}[{window}])",
+            "min": f"min_over_time(wachtl_hop_rtt_ms{{{sel}}}[{window}])",
+            "max": f"max_over_time(wachtl_hop_rtt_ms{{{sel}}}[{window}])",
+            "jitter": f"avg_over_time(wachtl_hop_jitter_ms{{{sel}}}[{max_window(window)}])",
+            "last": f"last_over_time(wachtl_hop_rtt_ms{{{sel}}}[1m])",
+            "sent": f"count_over_time(wachtl_hop_up{{{sel}}}[{window}])",
+        }
+    hops: dict[int, dict] = {}
+    for key, query in q.items():
+        for item in instant(query, agg=agg):
+            labels = item["metric"]
+            try:
+                hop = int(labels.get("hop", ""))
+            except ValueError:
+                continue
+            entry = hops.setdefault(hop, {"ips": {}})
+            ip_entry = entry["ips"].setdefault(labels.get("hop_ip", ""), {})
+            ip_entry[key] = _num(item["value"][1])
+    # je Hop die IP mit den meisten Messungen als Hauptwert, weitere IPs als Lastverteilung anzeigen
+    for hop, entry in hops.items():
+        ips = entry["ips"]
+        main = max(ips, key=lambda ip: (ips[ip].get("sent") or 0, ips[ip].get("avg") is not None))
+        entry.update(ips[main])
+        entry["ip"] = main
+        entry["other_ips"] = sorted(ip for ip in ips if ip != main)
+    return hops
 
 
 def max_window(w: str) -> str:

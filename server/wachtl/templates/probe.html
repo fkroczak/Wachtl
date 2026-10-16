@@ -13,7 +13,8 @@
         {% elif probe_online(probe) %}<span class="dot ok"></span> online
         {% else %}<span class="dot down"></span> offline{% endif %}</dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
-      <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}</dd>
+      <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
+      <dt>iperf3-Gegenstelle</dt><dd>{{ ('aktiv, Port %d'|format(probe.iperf_port)) if probe.iperf_server else 'aus' }}</dd>
       <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
       <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
       <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>
@@ -40,7 +41,7 @@
 </div>
 {% endif %}
 
-<h2>Ziele</h2>
+<h2>Dauerpings</h2>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
 <table>
   <thead><tr><th>Status</th><th>Name</th><th>Ziel</th><th>Rolle</th><th>Intervall</th><th>Latenz 1 min</th><th>Verlust 5 min</th></tr></thead>
@@ -60,6 +61,70 @@
   {% endfor %}
   </tbody>
 </table>
+
+<h2>Pfade</h2>
+{% if paths %}
+<table>
+  <thead><tr><th>Name</th><th>Ziel</th><th>Hops</th><th>Ziel erreicht</th><th>Pfad seit</th><th>Zuletzt ermittelt</th><th></th></tr></thead>
+  <tbody>{% for c, run, hops in paths %}
+    <tr>
+      <td><a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
+      <td>{{ c.target }}</td>
+      <td>{{ hops|length if run else '–' }}</td>
+      <td>{% if run %}<span class="dot {{ 'ok' if run.reached else 'down' }}"></span> {{ 'ja' if run.reached else 'nein' }}{% else %}<span class="muted">noch kein Ergebnis</span>{% endif %}</td>
+      <td>{{ run.first_ts|dt if run else '–' }}</td>
+      <td>{{ run.ts|ago if run else '–' }}</td>
+      <td>{% if has_role(user, 'operator') %}<form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Neu ermitteln</button></form>{% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Keine Pfad-Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='path') }}">Pfad-Check anlegen</a>{% endif %}</p>{% endif %}
+
+<h2>Bandbreite</h2>
+{% if bandwidth %}
+<table>
+  <thead><tr><th>Name</th><th>Gegenstelle</th><th>Download</th><th>Upload</th><th>Letzte Messung</th><th>Zeitplan</th><th></th></tr></thead>
+  <tbody>{% for c, last, pending, params in bandwidth %}
+    {% set ref = last.down or last.up %}
+    <tr>
+      <td><a href="{{ url_for('web.bandwidth_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
+      <td>{{ c.target }}</td>
+      {% for d in ('down', 'up') %}
+        {% set r = last[d] %}
+        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error }}">Fehler</span>
+            {% elif r %}<span class="{{ 'text-bad' if (d == 'down' and params.min_down_mbps and r.mbps < params.min_down_mbps) or (d == 'up' and params.min_up_mbps and r.mbps < params.min_up_mbps) }}">{{ r.mbps|mbps }}</span>
+            {% else %}–{% endif %}</td>
+      {% endfor %}
+      <td>{{ ref.ts|ago if ref else 'noch keine' }}</td>
+      <td class="small">{{ ('alle %d min'|format(params.schedule_min)) if params.schedule_min else 'nur manuell' }}</td>
+      <td>{% if has_role(user, 'operator') %}
+        {% if pending %}<span class="muted small">beauftragt …</span>{% else %}
+        <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Jetzt messen</button></form>{% endif %}
+      {% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Keine Bandbreiten-Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='iperf') }}">iperf3-Check</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung</a> anlegen.{% endif %}</p>{% endif %}
+
+{% if has_role(user, 'admin') %}
+<h2 id="einstellungen">Einstellungen dieser Probe</h2>
+<form method="post" action="{{ url_for('web.probe_settings', probe_id=probe.id) }}" class="settings-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>iperf3-Gegenstelle</legend>
+    <div class="grid-form">
+      <label class="check"><input type="checkbox" name="iperf_server" {{ 'checked' if probe.iperf_server }}> Diese Probe nimmt iperf3-Messungen anderer Probes an
+        <small>Startet iperf3 als Server auf der Probe. Das Probe-Setup hat dafür eine Firewall-Regel angelegt.</small></label>
+      <label>Port <input name="iperf_port" type="number" min="1" max="65535" value="{{ probe.iperf_port or default_iperf_port }}"></label>
+      <label>Adresse für andere Probes <input name="iperf_address" value="{{ probe.iperf_address or '' }}" maxlength="253" placeholder="automatisch: {{ iperf_endpoint[0] or 'unbekannt' }}">
+        <small>Leer = erste lokale Adresse der Probe{% if addresses %} ({{ addresses|join(', ') }}){% endif %}.</small></label>
+    </div>
+  </fieldset>
+  <button class="primary">Speichern</button>
+</form>
+{% endif %}
 
 <h2>Letzte Alarme</h2>
 {% if alerts %}

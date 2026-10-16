@@ -62,7 +62,8 @@ class WebTest(AppTestCase):
         self.assertEqual(check["interval_s"], 5)
         bad = self.client.post("/admin/checks", data={"name": "X", "target": "nicht gültig!", "role": "target",
                                                       "interval_s": 1, "timeout_ms": 800, "scope": "all", "csrf_token": tok})
-        self.assertEqual(bad.status_code, 302)
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("Ziel ist keine gültige", bad.get_data(as_text=True))
         self.assertIsNone(q1("SELECT id FROM checks WHERE name = 'X'"))
         self.assertGreaterEqual(len(q("SELECT * FROM audit_log")), 3)
 
