@@ -6,6 +6,8 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+  release:
+    types: [published]
 
 env:
   WACHTL_VERSION: "0.3.0"
@@ -144,11 +146,14 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          $files = @('dist\setup-install.log', 'dist\probe-install.log')
-          $files += Get-ChildItem C:\WachtlData\logs, C:\ProgramData\Wachtl\logs -ErrorAction SilentlyContinue | ForEach-Object FullName
+          # GitHub zeigt höchstens 10 Annotationen je Schritt: die wichtigsten Logs zuerst
+          $files = @('C:\WachtlData\logs\web.log', 'C:\WachtlData\logs\supervisor.log')
+          $files += Get-ChildItem C:\ProgramData\Wachtl\logs -ErrorAction SilentlyContinue | ForEach-Object FullName
+          $files += @('dist\probe-install.log', 'C:\WachtlData\logs\setup.log', 'dist\setup-install.log')
           foreach ($f in $files) {
             if (-not (Test-Path $f)) { continue }
             $text = (Get-Content $f -Tail 60) -join "`n"
+            if ($text.Length -gt 3700) { $text = $text.Substring($text.Length - 3700) }
             Write-Host "==== $f"; Write-Host $text
             & ./.github/scripts/annotate.ps1 -Title ([IO.Path]::GetFileName($f)) -Text $text
           }
@@ -186,5 +191,9 @@ jobs:
         run: |
           files=$(find release -name '*.exe')
           sha256sum $files | sed 's#  .*/#  #' > SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" $files SHA256SUMS.txt --title "Wachtl ${GITHUB_REF_NAME#v}" \
-            --notes-file docs/RELEASE-NOTES.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" $files SHA256SUMS.txt --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" $files SHA256SUMS.txt --title "Wachtl ${GITHUB_REF_NAME#v}" \
+              --notes-file docs/RELEASE-NOTES.md
+          fi
