@@ -385,7 +385,7 @@ def bandwidth_view(probe_id: int, check_id: int):
     }
     pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
                  (probe_id, check_id))
-    return render_template("bandwidth.html", probe=p, check=c, runs=runs[:200], stats=stats, chart=chart,
+    return render_template("bandwidth.html", probe=p, check=c, runs=runs[:50], stats=stats, chart=chart,
                            params=params, range_key=range_key, ranges=list(BW_RANGES), pending=pending,
                            summary=checktypes.summary(c, params))
 

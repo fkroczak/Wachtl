@@ -41,7 +41,7 @@
 <div id="bw-chart" class="chart chart-small"></div>
 <script type="application/json" id="bw-data">{{ chart|tojson }}</script>
 
-<h2>Messungen</h2>
+<h2>Messungen <span class="muted small">(die letzten 50, alle per API /api/v1/probes/…/bandwidth)</span></h2>
 <table>
   <thead><tr><th>Zeit</th><th>Richtung</th><th>Durchsatz</th><th>Protokoll</th><th>Latenz</th><th>Jitter</th><th>Verlust</th><th>Retransmits</th><th>Dauer</th><th>Auslöser</th></tr></thead>
   <tbody>{% for r in runs %}
