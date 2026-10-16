@@ -33,7 +33,7 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Testen und veröffentlichen
         shell: pwsh
-        run: ./probe/build.ps1 -Version $env:WACHTL_VERSION -Output "${{ github.workspace }}/dist/probe"
+        run: ./.github/scripts/run-logged.ps1 -Title "Probe-Build" -Command "./probe/build.ps1 -Version $env:WACHTL_VERSION -Output '${{ github.workspace }}/dist/probe'"
       - uses: actions/upload-artifact@v4
         with:
           name: wachtl-probe-win-x64
@@ -54,7 +54,7 @@ jobs:
           path: dist/probe
       - name: Setup-Assistent bauen
         shell: pwsh
-        run: ./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist
+        run: ./.github/scripts/run-logged.ps1 -Title "Server-Setup-Build" -Command "./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist"
 
       - name: Unbeaufsichtigt installieren
         shell: pwsh
@@ -125,10 +125,19 @@ jobs:
         if: failure()
         shell: pwsh
         run: |
-          Get-ChildItem C:\WachtlData\logs -ErrorAction SilentlyContinue | ForEach-Object { "==== $($_.Name)"; Get-Content $_.FullName -Tail 50 }
-          Get-Content dist\setup-install.log -Tail 80 -ErrorAction SilentlyContinue
-          Get-Content dist\probe-install.log -Tail 80 -ErrorAction SilentlyContinue
-          Get-ChildItem C:\ProgramData\Wachtl\logs -ErrorAction SilentlyContinue | ForEach-Object { "==== $($_.Name)"; Get-Content $_.FullName -Tail 40 }
+          $parts = @()
+          foreach ($f in @('dist\setup-install.log', 'dist\probe-install.log')) {
+            if (Test-Path $f) { $parts += "==== $f"; $parts += Get-Content $f -Tail 60 }
+          }
+          foreach ($dir in @('C:\WachtlData\logs', 'C:\ProgramData\Wachtl\logs')) {
+            Get-ChildItem $dir -ErrorAction SilentlyContinue | ForEach-Object { $parts += "==== $($_.FullName)"; $parts += Get-Content $_.FullName -Tail 40 }
+          }
+          $text = ($parts -join "`n")
+          Write-Host $text
+          # als Annotation, damit die Logs auch über die API lesbar sind (max. ~60 KB)
+          if ($text.Length -gt 60000) { $text = $text.Substring($text.Length - 60000) }
+          $text = $text.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+          Write-Host "::error title=Logs::$text"
 
       - name: Deinstallieren
         shell: pwsh
