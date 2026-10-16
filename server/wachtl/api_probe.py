@@ -156,6 +156,24 @@ def heartbeat():
     return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]))
 
 
+@bp.post("/deregister")
+@probe_auth
+def deregister():
+    """Abmeldung durch den Deinstaller: Probe deaktivieren und ihr Token sofort ungültig machen.
+
+    Messwerte und Verlauf bleiben bis zum Ablauf der Aufbewahrung erhalten; im Dashboard erscheint
+    die Probe als „abgemeldet“ und kann dort gelöscht werden.
+    """
+    ts = repo.now()
+    ex("UPDATE probes SET status = 'disabled', token_hash = ?, deregistered_at = ?, iperf_server = FALSE WHERE id = ?",
+       ("deregistered:" + new_secret(16), ts, g.probe["id"]))
+    ex("DELETE FROM probe_commands WHERE probe_id = ? AND delivered_at IS NULL", (g.probe["id"],))
+    repo.audit(f"probe:{g.probe['hostname']}", "probe.deregister", f"probe:{g.probe['id']}",
+               f"Deinstallation, IP {_client_ip()}")
+    log.info("Probe %s (%s) hat sich abgemeldet", g.probe["id"], g.probe["hostname"])
+    return "", 204
+
+
 def _addresses(raw) -> list[str]:
     """Lokale IPv4-Adressen der Probe (für iperf3 zwischen Probes); Link-Local und Loopback entfallen."""
     out: list[str] = []

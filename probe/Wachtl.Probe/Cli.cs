@@ -19,7 +19,7 @@ public static class Cli
 {
     public const int ExitOk = 0, ExitUsage = 2, ExitPinMismatch = 3, ExitUnreachable = 4, ExitRejected = 5, ExitNotEnrolled = 6;
 
-    private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "--version", "help", "--help" };
+    private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "deregister", "--version", "help", "--help" };
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0]);
 
@@ -47,6 +47,7 @@ public static class Cli
                 "configure" => Configure(options, result),
                 "show-pin" => await ShowPinAsync(options),
                 "status" => Status(),
+                "deregister" => await DeregisterAsync(result),
                 "--version" => PrintVersion(),
                 _ => Help(),
             };
@@ -114,6 +115,63 @@ public static class Cli
         }
 
         return new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
+    }
+
+    // -- deregister ----------------------------------------------------------------------
+    /// <summary>
+    /// Bei der Deinstallation: Probe am Server abmelden (Token wird dort sofort ungültig) und das
+    /// lokal gespeicherte Token löschen. Ist der Server nicht erreichbar, wird das Token trotzdem gelöscht
+    /// (Exit-Code 4) – die Probe sollte dann im Dashboard gelöscht werden.
+    /// </summary>
+    private static async Task<int> DeregisterAsync(CliResult result)
+    {
+        var state = StateStore.Load();
+        if (state is null)
+        {
+            Console.WriteLine("Probe ist nicht registriert – nichts abzumelden.");
+            result.Set("deregistered", "0");
+            DeleteState();
+            return ExitNotEnrolled;
+        }
+
+        var code = ExitOk;
+        try
+        {
+            var token = StateStore.UnprotectToken(state.ProtectedToken);
+            using var api = new ApiClient(new Uri(state.ServerUrl), state.SpkiPin, state.Proxy, token);
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await api.DeregisterAsync(cts.Token);
+            Console.WriteLine($"Probe {state.ProbeId} bei {state.ServerUrl} abgemeldet – ihr Token ist ab sofort ungültig.");
+            result.Set("deregistered", "1");
+        }
+        catch (ApiException ex) when (ex.IsAuthError)
+        {
+            Console.WriteLine("Der Server kennt das Token nicht mehr (Probe bereits gelöscht oder deaktiviert).");
+            result.Set("deregistered", "1");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ApiException
+                                       or System.Security.Cryptography.CryptographicException or FormatException)
+        {
+            Console.Error.WriteLine($"Abmeldung am Server nicht möglich: {ex.Message}. Bitte die Probe im Dashboard löschen.");
+            result.Set("deregistered", "0");
+            result.Set("error", ex.Message);
+            code = ExitUnreachable;
+        }
+
+        DeleteState();
+        return code;
+    }
+
+    private static void DeleteState()
+    {
+        foreach (var path in new[] { StateStore.StatePath, StateStore.StatePath + ".tmp", StateStore.ConfigCachePath,
+                                     StateStore.ConfigCachePath + ".tmp" })
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
     }
 
     // -- enroll ------------------------------------------------------------------------
@@ -374,6 +432,7 @@ public static class Cli
               wachtl-probe.exe configure --proxy http://proxy:3128 | none
               wachtl-probe.exe show-pin --server https://wachtl.firma.local
               wachtl-probe.exe status
+              wachtl-probe.exe deregister         am Server abmelden und Token löschen (Deinstallation)
               wachtl-probe.exe --version
 
             Optional bei check/enroll/configure: --out ergebnis.ini (für den Setup-Assistenten)

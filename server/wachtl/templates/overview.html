@@ -80,7 +80,8 @@
     {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
     <tr>
       <td>
-        {% if p.status != 'active' %}<span class="dot off"></span> deaktiviert
+        {% if p.deregistered_at %}<span class="dot off"></span> deinstalliert
+        {% elif p.status != 'active' %}<span class="dot off"></span> deaktiviert
         {% elif probe_online(p) %}<span class="dot ok"></span> online
         {% else %}<span class="dot down"></span> offline{% endif %}
       </td>

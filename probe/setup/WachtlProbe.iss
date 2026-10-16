@@ -72,9 +72,25 @@ Name: "{group}\Wachtl Probe – Logdateien"; Filename: "{commonappdata}\Wachtl\l
 Filename: "{code:GetServer}"; Description: "Wachtl-Dashboard im Browser öffnen"; Flags: postinstall shellexec nowait skipifsilent unchecked; Check: DashboardKnown
 
 [UninstallRun]
+; Reihenfolge: zuerst am Server abmelden (Token wird dort ungültig), dann Dienst, Prozesse und Firewall-Regeln entfernen.
+Filename: "{app}\wachtl-probe.exe"; Parameters: "deregister --out ""{commonappdata}\Wachtl\deregister.ini"""; Flags: runhidden waituntilterminated; RunOnceId: "Deregister"
 Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "StopWachtl"
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"
+; nur die eigene iperf3.exe beenden (falls die Gegenstelle noch läuft), keine fremden iperf3-Prozesse
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule ""name=Wachtl Probe iperf3"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"
+; auch Regeln, die Windows selbst für diese Programme angelegt hat (Nachfrage „Zugriff zulassen“)
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\iperf3\iperf3.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallIperf"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\wachtl-probe.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallProbe"
+
+[UninstallDelete]
+; Token (verschlüsselt) und zwischengespeicherte Konfiguration immer entfernen – auch wenn Puffer und Logs bleiben
+Type: files; Name: "{commonappdata}\Wachtl\state.json"
+Type: files; Name: "{commonappdata}\Wachtl\state.json.tmp"
+Type: files; Name: "{commonappdata}\Wachtl\config.json"
+Type: files; Name: "{commonappdata}\Wachtl\config.json.tmp"
+Type: dirifempty; Name: "{app}\iperf3"
+Type: dirifempty; Name: "{app}"
 
 [Code]
 const
@@ -557,14 +573,57 @@ end;
 
 { ---------- Deinstallation ---------- }
 
+{ Nach der Deinstallation prüfen, dass nichts zurückbleibt, was von außen erreichbar wäre. }
+function Leftovers(): String;
+var
+  Code: Integer;
+begin
+  Result := '';
+  if Exec(ExpandConstant('{sys}\sc.exe'), 'query Wachtl', '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0) then
+    Result := Result + '- Dienst „Wachtl“ ist noch vorhanden (Neustart nötig?)' + #13#10;
+  if Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall show rule "name=Wachtl Probe iperf3"', '', SW_HIDE,
+          ewWaitUntilTerminated, Code) and (Code = 0) then
+    Result := Result + '- Firewall-Regel „Wachtl Probe iperf3“ ist noch vorhanden' + #13#10;
+end;
+
+function DeregisterInfo(): String;
+var
+  Ini: String;
+begin
+  Ini := ExpandConstant('{commonappdata}\Wachtl\deregister.ini');
+  Result := '';
+  if FileExists(Ini) and (GetIniString('result', 'deregistered', '', Ini) <> '1') then
+    Result := 'Der Wachtl-Server war nicht erreichbar – die Probe bitte im Dashboard löschen, ' +
+              'damit ihr Eintrag verschwindet. (Ihr Token wurde auf diesem PC gelöscht.)';
+end;
+
+var
+  UninstallNote: String;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
-  Dir: String;
+  Dir, Rest: String;
 begin
   Dir := ExpandConstant('{commonappdata}\Wachtl');
-  if (CurUninstallStep = usPostUninstall) and DirExists(Dir) and not UninstallSilent() then
-    if MsgBox('Auch Registrierung, Puffer und Logdateien löschen?' + #13#10#13#10 + Dir + #13#10#13#10 +
-              'Bei „Nein“ kann die Probe später ohne neuen Token wieder installiert werden.',
-              mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+  if CurUninstallStep <> usPostUninstall then
+    Exit;
+  UninstallNote := DeregisterInfo();
+  DeleteFile(Dir + '\deregister.ini');
+  { Puffer und Logs: unbeaufsichtigt immer entfernen, sonst nachfragen (Standard: entfernen) }
+  if DirExists(Dir) then
+    if UninstallSilent() or
+       (MsgBox('Auch gepufferte Messwerte und Logdateien löschen?' + #13#10#13#10 + Dir + #13#10#13#10 +
+               'Das Token der Probe ist bereits gelöscht. Bei „Nein“ bleiben nur Puffer und Logs zur Fehlersuche liegen.',
+               mbConfirmation, MB_YESNO or MB_DEFBUTTON1) = IDYES) then
       DelTree(Dir, True, True, True);
+  Rest := Leftovers();
+  if Rest <> '' then
+    Log('Wachtl Probe: nach der Deinstallation noch vorhanden:' + #13#10 + Rest);
+  if not UninstallSilent() then
+  begin
+    if Rest <> '' then
+      MsgBox('Nicht alles konnte entfernt werden:' + #13#10 + Rest, mbError, MB_OK)
+    else if UninstallNote <> '' then
+      MsgBox(UninstallNote, mbInformation, MB_OK);
+  end;
 end;

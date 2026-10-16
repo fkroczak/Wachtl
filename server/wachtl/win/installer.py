@@ -248,17 +248,46 @@ def upgrade(data_dir: str | None, run: winsys.Runner, start: bool = True) -> dic
 
 
 def uninstall(run: winsys.Runner, remove_data: bool = False) -> dict:
+    """Dienst, Firewall-Regeln, geplante Sicherung entfernen und prüfen, dass nichts offen bleibt.
+
+    Die Server-Probe ist ein Teilprozess des Dienstes und endet mit ihm; sie hat keine eigenen Regeln.
+    """
     try:
         layout = Layout.load()
     except FileNotFoundError:
         layout = None
+    programs: list[Path] = []
     if layout is not None:
         winsys.uninstall_service(layout, run)
-    winsys.remove_firewall(run)
+        # Regeln, die Windows beim ersten Start für python.exe/iperf3.exe angeboten hat, gleich mit entfernen
+        programs = [layout.python, layout.iperf_exe] + [layout.binary(n) for n in
+                                                         ("victoria-metrics", "vmalert", "alertmanager")]
+    winsys.remove_firewall(run, programs)
     winsys.remove_backup_task(run)
     if remove_data and layout is not None and layout.data_dir.exists():
         shutil.rmtree(layout.data_dir, ignore_errors=True)
-    return {"ok": True}
+    leftovers = [] if run.dry_run else check_removed(layout, run)
+    for item in leftovers:
+        log.warning("Nach der Deinstallation noch vorhanden: %s", item)
+    return {"ok": True, "leftovers": leftovers, "error": "\n".join(leftovers)}
+
+
+def check_removed(layout: Layout | None, run: winsys.Runner) -> list[str]:
+    """Was nach der Deinstallation noch da ist und ein Risiko wäre: Dienst, Firewall-Regeln, offene Ports."""
+    left = []
+    if winsys.service_state(run) is not None:
+        left.append("Dienst WachtlServer (wird nach einem Neustart entfernt)")
+    for name in (winsys.FW_HTTPS, winsys.FW_HTTP, winsys.FW_IPERF):
+        if winsys.firewall_rule_exists(name, run):
+            left.append(f"Firewall-Regel „{name}“")
+    if winsys.backup_task_exists(run):
+        left.append(f"Geplante Aufgabe „{winsys.TASK_BACKUP}“")
+    if layout is not None:
+        ports = {layout.https_port, layout.http_port, layout.port("IPERF")} - {0}
+        for port in sorted(ports):
+            if winsys.port_open(port):
+                left.append(f"Port {port} ist noch offen ({winsys.owner_of_port(port, run)})")
+    return left
 
 
 def _setup_log(data_dir: Path | None) -> None:

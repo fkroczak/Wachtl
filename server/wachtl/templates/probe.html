@@ -10,7 +10,8 @@
   <div class="card kv">
     <dl>
       <dt>Status</dt><dd>
-        {% if probe.status != 'active' %}<span class="dot off"></span> deaktiviert
+        {% if probe.deregistered_at %}<span class="dot off"></span> abgemeldet (deinstalliert am {{ probe.deregistered_at|dt }})
+        {% elif probe.status != 'active' %}<span class="dot off"></span> deaktiviert
         {% elif probe_online(probe) %}<span class="dot ok"></span> online
         {% else %}<span class="dot down"></span> offline{% endif %}</dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>

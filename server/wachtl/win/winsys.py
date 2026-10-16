@@ -157,9 +157,16 @@ def configure_firewall(layout: Layout, run: Runner) -> None:
                  f"protocol={proto}", f"localport={layout.port('IPERF')}", "profile=any"])
 
 
-def remove_firewall(run: Runner) -> None:
+def remove_firewall(run: Runner, programs: list[Path] | None = None) -> None:
+    """Eigene Regeln entfernen; mit ``programs`` auch Regeln, die Windows für diese Programme angelegt hat."""
     for name in (FW_HTTPS, FW_HTTP, FW_IPERF):
         run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={name}"], check=False)
+    for program in programs or []:
+        run(["netsh", "advfirewall", "firewall", "delete", "rule", "name=all", f"program={program}"], check=False)
+
+
+def firewall_rule_exists(name: str, run: Runner) -> bool:
+    return run(["netsh", "advfirewall", "firewall", "show", "rule", f"name={name}"], check=False).returncode == 0
 
 
 # -- tägliche Sicherung ---------------------------------------------------------------
@@ -171,6 +178,10 @@ def schedule_backup(layout: Layout, run: Runner, at: str = "02:15") -> None:
 
 def remove_backup_task(run: Runner) -> None:
     run(["schtasks", "/Delete", "/F", "/TN", TASK_BACKUP], check=False)
+
+
+def backup_task_exists(run: Runner) -> bool:
+    return run(["schtasks", "/Query", "/TN", TASK_BACKUP], check=False).returncode == 0
 
 
 # -- Hilfen -----------------------------------------------------------------------------

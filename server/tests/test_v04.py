@@ -150,3 +150,33 @@ class StandardPackageTest(AppTestCase):
         created, skipped = standardpaket.apply(["ping_server"], "all", None, "https://wachtl.local")
         self.assertEqual(created, [])
         self.assertIn("Hostname", skipped[0])
+
+
+class DeregisterTest(AppTestCase):
+    def test_uninstaller_invalidates_token(self):
+        probe = self.enroll("PC-weg")
+        auth = {"Authorization": f"Bearer {probe['token']}"}
+        site = q1("SELECT site_id FROM probes")["site_id"]
+        repo.queue_command(probe["probe_id"], "retrace", 1, "test")
+        r = self.client.post("/api/probe/v1/deregister", headers=auth, json={})
+        self.assertEqual(r.status_code, 204)
+        row = q1("SELECT * FROM probes WHERE id = ?", (probe["probe_id"],))
+        self.assertEqual(row["status"], "disabled")
+        self.assertIsNotNone(row["deregistered_at"])
+        self.assertEqual(self.client.get("/api/probe/v1/config", headers=auth).status_code, 401)
+        self.assertEqual(self.client.post("/api/probe/v1/deregister", headers=auth).status_code, 401)
+        self.assertEqual(q("SELECT * FROM probe_commands WHERE delivered_at IS NULL"), [])
+        self.assertTrue(q1("SELECT * FROM audit_log WHERE action = 'probe.deregister'"))
+        # Reaktivieren im Web-UI geht nicht (kein gültiges Token mehr) – Neuinstallation registriert neu
+        self.make_user()
+        self.login()
+        self.client.post(f"/probes/{probe['probe_id']}/status", data={"csrf_token": self.session_csrf(),
+                                                                       "action": "enable"})
+        self.assertEqual(q1("SELECT status FROM probes WHERE id = ?", (probe["probe_id"],))["status"], "disabled")
+        html = self.client.get(f"/probes/{probe['probe_id']}").get_data(as_text=True)
+        self.assertIn("abgemeldet", html)
+        token = self.make_token(site, token="neu")
+        r = self.client.post("/api/probe/v1/enroll", json={"enrollment_token": token, "hostname": "PC-weg"})
+        self.assertEqual(r.get_json()["probe_id"], probe["probe_id"])
+        row = q1("SELECT * FROM probes WHERE id = ?", (probe["probe_id"],))
+        self.assertEqual((row["status"], row["deregistered_at"]), ("active", None))

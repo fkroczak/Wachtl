@@ -453,6 +453,11 @@ def outages_view():
 @login_required("admin")
 def probe_status(probe_id: int):
     new = "disabled" if request.form.get("action") == "disable" else "active"
+    p = q1("SELECT deregistered_at FROM probes WHERE id = ?", (probe_id,)) or abort(404)
+    if new == "active" and p["deregistered_at"]:
+        flash("Die Probe wurde deinstalliert und hat kein gültiges Token mehr – zum erneuten Messen neu installieren.",
+              "error")
+        return redirect(url_for("web.probe", probe_id=probe_id))
     ex("UPDATE probes SET status = ? WHERE id = ?", (new, probe_id))
     repo.audit(current_user()["username"], f"probe.{new}", f"probe:{probe_id}")
     flash("Probe deaktiviert – ihr Token wird abgelehnt." if new == "disabled" else "Probe aktiviert.", "ok")

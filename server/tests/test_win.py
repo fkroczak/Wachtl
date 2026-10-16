@@ -154,6 +154,27 @@ class InstallerTest(InstallBase):
             installer.uninstall(run2, remove_data=True)
         self.assertFalse(self.data.exists())
         self.assertTrue(any(c[:3] == ["netsh", "advfirewall", "firewall"] for c in run2.calls))
+        flat = [" ".join(c) for c in run2.calls]
+        # auch Regeln, die Windows selbst für die Programme angelegt hat
+        self.assertTrue(any("name=all" in c and "program=" in c and "python" in c for c in flat))
+        self.assertTrue(any("schtasks /Delete" in c for c in flat))
+
+    def test_uninstall_reports_leftovers(self):
+        self.do_install()
+
+        class StubbornRunner(winsys.Runner):
+            """Tut so, als hielte sich eine Firewall-Regel und die geplante Aufgabe."""
+            def __call__(self, args, check=True):
+                self.calls.append(list(args))
+                stays = (args[:5] == ["netsh", "advfirewall", "firewall", "show", "rule"]
+                         and args[5] == f"name={winsys.FW_IPERF}") or args[:2] == ["schtasks", "/Query"]
+                return subprocess.CompletedProcess(args, 0 if stays else 1, "", "")
+
+        with mock.patch.dict(os.environ, {"WACHTL_INSTALL_DIR": str(self.inst)}), \
+                mock.patch.object(winsys, "port_open", return_value=False):
+            res = installer.uninstall(StubbornRunner())
+        self.assertEqual(res["leftovers"], [f"Firewall-Regel „{winsys.FW_IPERF}“", f"Geplante Aufgabe „{winsys.TASK_BACKUP}“"])
+        self.assertIn("iperf3", res["error"])
 
     def test_check_ports_reports_busy_port(self):
         with socket.socket() as s:
