@@ -6,6 +6,9 @@
 ## Neu in 0.7
 
 - **Probes geführt einrichten**: Verwaltung › „Probes einrichten (geführt)“ fragt in vier Schritten alles Wichtige ab – Standort, Messungen (Standardpaket, bereits angehakt), Alarmierung per E-Mail oder Teams und die Anzahl der PCs – und bietet danach direkt das fertige Setup an. Alle Werte sind mit Standards vorbelegt; bei einem Fehler wird nichts halb angelegt.
+- **Graph wie Smokeping/HOP7**: Rauch-Bänder (80 % und mittlere 50 % der Pings), Median-Linie gefärbt nach Paketverlust, Latenzschwelle, Zeiten über der Alarmschwelle hinterlegt, Verluststreifen unter der Zeitachse, Störungsmeldungen als Markierung. Tooltip mit Median und Streuung, Bedienung per Tastatur, Zoom durch Aufziehen.
+- **Standort als Dashboard**: Kennzahlen (Probes online, Probleme, Alarme, Meldungen, Internet, Bandbreite) und je Probe ein Widget mit Kurzwerten und Mini-Graph der letzten Stunde. Probes mit Fehlern stehen oben, rot umrandet, mit dem Problem im Klartext.
+- **Alles verlinkt**: Standorte, Probes, Ziele, Alarme, Meldungen und Audit-Einträge führen überall zur passenden Seite; ein Test sorgt dafür, dass das so bleibt.
 - **Ruhigere, neutrale Farben**: Grautöne mit einer zurückhaltenden Akzentfarbe statt Braun/Ocker, hell und dunkel.
 
 ## Neu in 0.6

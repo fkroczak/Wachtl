@@ -15,7 +15,7 @@ Verantwortlich: wer das UI ändert. Ausnahmen trägt der PR-Autor unten ein und 
 | Formular-Fehlerzustand: Fehlerübersicht mit `role="alert"`, `aria-invalid` + verknüpfte Meldung, Reihenfolge wie im Formular | `test_ui_quality.py` | „Server-Tests“ | ja |
 | Farbkontraste aller Design-Tokens in hell und dunkel (Text 4,5:1, Feldränder/Fokus/Grafik 3:1) | `test_ui_quality.py` | „Server-Tests“ | ja |
 | axe-core, WCAG 2.2 A/AA + Best Practices, 15 Seiten + Anmeldung + Formular im Fehlerzustand, hell und dunkel | `server/e2e/tests/a11y.spec.js` | „UI-Qualität“ | ja, 0 Verstöße |
-| Tastatur: Skip-Link, Anmeldung, Navigation, sichtbarer Fokus, Check-Formular mit Fehlern finden und beheben, Zeitraum-Buttons | `server/e2e/tests/keyboard.spec.js` | „UI-Qualität“ | ja |
+| Tastatur: Skip-Link, Anmeldung, Navigation, sichtbarer Fokus, Check-Formular mit Fehlern finden und beheben, Zeitraum-Buttons, Latenzgraph per Pfeiltasten mit Ansage | `server/e2e/tests/keyboard.spec.js` | „UI-Qualität“ | ja |
 | Reflow bei 320 und 640 CSS-px (≙ 400 % / 200 % Zoom), Gesetz der Nähe bei 1280/768/320 px, Auto-Refresh verwirft keine Eingaben | `server/e2e/tests/layout.spec.js` | „UI-Qualität“ | ja |
 | Lighthouse (mobil, 3 Läufe, Median) gegen Budgets | `server/e2e/lighthouserc.cjs` | „UI-Qualität“ | ja (Stufe `error`), Warnungen nur sichtbar |
 | Lesbarkeit deutscher Hinweistexte | `server/devtools/readability.py --warn` | „UI-Qualität“ | nein, GitHub-Annotation |

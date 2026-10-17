@@ -58,7 +58,7 @@ body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.45; 
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 /* Links im Fließtext nicht nur über die Farbe erkennbar (WCAG 1.4.1) */
-p a, li a, dd a, .flash a, .crumbs a { text-decoration: underline; text-underline-offset: 0.15em; }
+p a, li a, dd a, h1 a, .flash a, .crumbs a { text-decoration: underline; text-underline-offset: 0.15em; }
 :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
 .topbar :focus-visible { outline-color: var(--bar-text); }
 main:focus { outline: none; }
