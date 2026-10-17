@@ -3,6 +3,21 @@
 Die Befehle in diesem Dokument gelten für die Linux-Variante. Windows: siehe [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md)
 (Abschnitte Verwaltung und Update); Sicherheitskonzept und Alarme gelten für beide.
 
+## Größe und Speicherplatz
+
+Richtwerte bei je 10 Zielen pro Probe (Pings im 1-s-Takt, Pfad-Checks mit Hop-Pings), 30 Tage Rohdaten und 13 Monate
+Verlauf. Hochgerechnet aus dem Basiswert 25 Probes ≈ 10 GB; der Platz wächst linear mit Probes × Zielen × Aufbewahrung.
+
+| Probes | CPU / RAM | Platz für Messwerte | Server |
+| --- | --- | --- | --- |
+| bis 25 | 2 vCPU, 4 GB | 10 GB | Windows oder Linux |
+| bis 100 | 4 vCPU, 8 GB | 40 GB | Windows (SQLite) oder Linux |
+| bis 300 | 8 vCPU, 16 GB | 120 GB | Linux mit PostgreSQL |
+
+Läuft die Platte voll, nimmt VictoriaMetrics keine Werte mehr an; die Probes puffern 7 Tage, danach gehen Messwerte
+verloren. Der Windows-Setup-Assistent warnt bei weniger als 20 GB freiem Platz. Vor einem großen Rollout den
+tatsächlichen Verbrauch nach einigen Tagen im Datenordner (`vm-raw`, `vm-agg`) prüfen und hochrechnen.
+
 ## Backup
 
 | Was | Wie | Wichtig weil |

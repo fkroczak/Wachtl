@@ -8,7 +8,7 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 | Punkt | Wert |
 | --- | --- |
 | Betriebssystem | Windows Server 2016, 2019, 2022 oder 2025 (x64), auch Windows 10/11 für Tests |
-| Hardware | 2 vCPU, 4 GB RAM, 10 GB frei im Datenordner (25 Probes × 10 Ziele) |
+| Hardware | bis 25 Probes: 2 vCPU, 4 GB RAM, 10 GB frei · bis 100 Probes: 4 vCPU, 8 GB RAM, 40 GB frei (Richtwerte bei je 10 Zielen, 30 Tage Rohdaten; Details: [BETRIEB.md](BETRIEB.md#größe-und-speicherplatz)) |
 | Rechte | lokaler Administrator für die Installation |
 | Ports | eingehend 443 (HTTPS) und optional 80 (Umleitung) – frei wählbar, falls IIS sie belegt |
 | Sonstiges | nichts – Python, Datenbank und alle Dienste bringt das Setup mit, kein Docker, kein IIS |
@@ -106,7 +106,7 @@ Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
 
 | | Linux (Docker) | Windows |
 | --- | --- | --- |
-| Datenbank | PostgreSQL | SQLite (für bis zu 25 Probes mehr als ausreichend) |
+| Datenbank | PostgreSQL | SQLite (bis etwa 100 Probes; darüber die Linux-Variante mit PostgreSQL) |
 | TLS | Traefik | im Collector (cheroot), TLS ≥ 1.2, HSTS |
 | Prozesse | ein Container je Dienst | ein Windows-Dienst, der alle Teilprozesse überwacht und neu startet |
 | Einrichtung | `setup.sh` | Setup-Assistent |

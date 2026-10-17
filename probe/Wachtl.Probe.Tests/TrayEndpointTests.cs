@@ -209,6 +209,15 @@ public sealed class TrayEndpointTests : IDisposable
     }
 
     [Fact]
+    public void RateLimiterCountsPerKey()
+    {
+        var rate = new RateLimiter(1, TimeSpan.FromHours(1));
+        Assert.True(rate.TryAcquire(Now, "KUNDE\\a"));
+        Assert.False(rate.TryAcquire(Now, "kunde\\A"));
+        Assert.True(rate.TryAcquire(Now, "KUNDE\\b"));
+    }
+
+    [Fact]
     public void RateLimiterWindowSlides()
     {
         var rate = new RateLimiter(2, TimeSpan.FromHours(1));

@@ -24,7 +24,8 @@ log = logging.getLogger("wachtl.serverprobe.tray")
 
 DEFAULT_PORT = 47251
 MAX_BODY = 16 * 1024
-RATE_LIMIT = 30                 # Meldungen je Stunde
+RATE_LIMIT = 30                 # Meldungen je Stunde und Benutzer …
+RATE_LIMIT_TOTAL = 300          # … und je Rechner (Terminalserver mit vielen Benutzern)
 MAX_PENDING = 200
 PENDING_FILE = "reports-pending.json"
 
@@ -122,20 +123,25 @@ class TrayService:
                  hostname: str, ready: Callable[[], bool] = lambda: True, clock: Callable[[], float] = time.time):
         self.status_fn, self.send, self.pending, self.hostname = status, send, pending, hostname
         self.ready, self.clock = ready, clock
-        self.recent: deque[float] = deque()
+        self.recent: dict[str, deque[float]] = {}
         self.rate_lock = threading.Lock()
 
     def status(self) -> dict:
         return {**self.status_fn(), "pending_reports": self.pending.count()}
 
-    def rate_ok(self) -> bool:
+    def rate_ok(self, user: str) -> bool:
         now = self.clock()
         with self.rate_lock:
-            while self.recent and self.recent[0] < now - 3600:
-                self.recent.popleft()
-            if len(self.recent) >= RATE_LIMIT:
+            for key in list(self.recent):          # abgelaufene Treffer weg, damit die Tabelle nicht wächst
+                hits = self.recent[key]
+                while hits and hits[0] < now - 3600:
+                    hits.popleft()
+                if not hits:
+                    del self.recent[key]
+            mine = self.recent.setdefault(user.lower(), deque())
+            if len(mine) >= RATE_LIMIT or sum(map(len, self.recent.values())) >= RATE_LIMIT_TOTAL:
                 return False
-            self.recent.append(now)
+            mine.append(now)
             return True
 
     def report(self, payload) -> tuple[int, dict]:
@@ -145,7 +151,7 @@ class TrayService:
             return 400, {"error": str(exc)}
         if not self.ready():
             return 409, {"error": "Wachtl ist noch nicht am Server registriert."}
-        if not self.rate_ok():
+        if not self.rate_ok(fields["user"]):
             return 429, {"error": "Zu viele Meldungen – bitte später erneut versuchen."}
         report = {"report_id": str(uuid.uuid4()), **fields, "hostname": self.hostname}
         try:

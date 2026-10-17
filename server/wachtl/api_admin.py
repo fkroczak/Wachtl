@@ -107,11 +107,11 @@ def series(probe_id: int, check_id: int):
     except ValueError:
         return jsonify(error="hop muss zwischen 1 und 64 liegen"), 400
     try:
-        end = _int_arg("end")
+        at = _int_arg("at")
     except ValueError:
-        return jsonify(error="end muss eine Unix-Zeit in Sekunden sein"), 400
+        return jsonify(error="at muss eine Unix-Zeit in Sekunden sein"), 400
     try:
-        return jsonify(vm.ping_series(probe_id, check_id, range_key, hop, end))
+        return jsonify(vm.ping_series(probe_id, check_id, range_key, hop, at))
     except vm.VMError as exc:
         return jsonify(error=str(exc)), 502
 

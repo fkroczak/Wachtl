@@ -328,7 +328,8 @@ begin
 
   StoragePage := CreateInputDirPage(NotifyPage.ID,
     'Daten und Aufbewahrung', 'Wo sollen Datenbank, Messwerte, Zertifikat und Sicherungen liegen?',
-    'Für 25 Probes mit je 10 Zielen reichen etwa 5 GB. Der Ordner wird auf SYSTEM, Administratoren ' +
+    'Richtwert bei je 10 Zielen und 30 Tagen Rohdaten: 25 Probes ≈ 10 GB, 100 ≈ 40 GB, 300 ≈ 120 GB. ' +
+    'Der Ordner wird auf SYSTEM, Administratoren ' +
     'und das Dienstkonto beschränkt.', False, '');
   StoragePage.Add('Datenordner:');
   StoragePage.Values[0] := GetParam('DataDir', ExpandConstant('{commonappdata}\Wachtl Server'));
@@ -370,6 +371,7 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   HttpsPort, HttpPort, IperfPort: Integer;
+  FreeBytes, TotalBytes: Int64;
 begin
   Result := True;
   if CurPageID = AddressPage.ID then
@@ -477,7 +479,14 @@ begin
     begin
       MsgBox('Aufbewahrung: Rohdaten 1–365 Tage, Verlauf 1–120 Monate.', mbError, MB_OK);
       Result := False;
-    end;
+    end
+    else if GetSpaceOnDisk64(ExtractFileDrive(Trim(StoragePage.Values[0])) + '\', FreeBytes, TotalBytes) and
+            (FreeBytes < Int64(20) * 1024 * 1024 * 1024) then
+      { volle Platte = VictoriaMetrics nimmt nichts mehr an, die Probes puffern nur 7 Tage }
+      Result := MsgBox('Auf ' + ExtractFileDrive(Trim(StoragePage.Values[0])) + ' sind nur ' +
+                       IntToStr(FreeBytes div (1024 * 1024 * 1024)) + ' GB frei. Für 25 Probes werden etwa 10 GB, ' +
+                       'für 100 Probes etwa 40 GB gebraucht.' + #13#10#13#10 + 'Trotzdem fortfahren?',
+                       mbConfirmation, MB_YESNO) = IDYES;
   end;
 end;
 

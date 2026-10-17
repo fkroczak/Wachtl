@@ -196,12 +196,12 @@ class ReportsJsonTest(AppTestCase):
             return []
 
         with mock.patch("wachtl.services.vm._get", side_effect=fake_get):
-            r = self.client.get(f"/api/v1/probes/{self.a['probe_id']}/checks/1/series?range=1h&end={self.now - 3600}")
+            r = self.client.get(f"/api/v1/probes/{self.a['probe_id']}/checks/1/series?range=1h&at={self.now - 5400}")
         self.assertEqual(r.status_code, 200)
         self.assertEqual(captured["end"], self.now - 3600)
         self.assertEqual(captured["start"], self.now - 7200)
         self.assertEqual(r.get_json()["end"], self.now - 3600)
-        self.assertEqual(self.client.get(f"/api/v1/probes/{self.a['probe_id']}/checks/1/series?end=x").status_code,
+        self.assertEqual(self.client.get(f"/api/v1/probes/{self.a['probe_id']}/checks/1/series?at=x").status_code,
                          400)
 
 

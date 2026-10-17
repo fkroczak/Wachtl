@@ -39,7 +39,7 @@ Der Dienst lauscht ausschließlich auf der Loopback-Adresse.
 Schutz gegen Webseiten im Browser (CSRF, DNS-Rebinding): jede Anfrage braucht die Kopfzeile `X-Wachtl-Tray: 1`,
 `POST` zusätzlich `Content-Type: application/json` (beides erzwingt im Browser einen CORS-Preflight, den der Dienst nie
 erlaubt), und der `Host` muss `127.0.0.1:<port>` oder `localhost:<port>` sein. Sonst `403`. Körper höchstens 16 KB,
-höchstens 30 Meldungen je Stunde (sonst `429`).
+höchstens 30 Meldungen je Stunde und Benutzer und 300 je Rechner (sonst `429`).
 
 ### `GET /tray/v1/status`
 

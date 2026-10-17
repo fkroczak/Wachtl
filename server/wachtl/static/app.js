@@ -270,7 +270,6 @@
 
 
   // ?at=<Unix-Sekunden>: Fenster um eine Störungsmeldung herum statt bis jetzt
-  const RANGE_S = { "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800, "30d": 2592000 };
   const at = parseInt(panel.dataset.at || "", 10) || null;
 
   async function loadReports(from, to) {
@@ -290,12 +289,9 @@
     try {
       const url = new URL(panel.dataset.seriesUrl, window.location.href);
       url.searchParams.set("range", range);
-      const span = RANGE_S[range] || 3600;
-      const now = Math.floor(Date.now() / 1000);
-      if (at) url.searchParams.set("end", Math.min(now, at + Math.floor(span / 2)));
-      const data = await getJSON(url.toString());
-      const end = data.end || (at ? Math.min(now, at + Math.floor(span / 2)) : now);
-      data.reports = await loadReports(data.start || end - span, end);
+      if (at) url.searchParams.set("at", at);
+      const data = await getJSON(url.toString());   // Fenster (start/end) berechnet der Server
+      data.reports = await loadReports(data.start, data.end);
       render(data);
     } catch (e) {
       errorBox.textContent = "Graph konnte nicht geladen werden: " + e.message;

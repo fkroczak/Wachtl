@@ -123,10 +123,10 @@ public static class TrayReportParser
         root.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String ? el.GetString() : null;
 }
 
-/// <summary>Gleitendes Fenster: höchstens <c>limit</c> Meldungen je <c>window</c>.</summary>
+/// <summary>Gleitendes Fenster: höchstens <c>limit</c> Meldungen je <c>window</c> und Schlüssel (z. B. Benutzer).</summary>
 public sealed class RateLimiter
 {
-    private readonly Queue<DateTimeOffset> _hits = new();
+    private readonly Dictionary<string, Queue<DateTimeOffset>> _hits = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lock = new();
 
     public RateLimiter(int limit, TimeSpan window)
@@ -139,22 +139,37 @@ public sealed class RateLimiter
 
     public TimeSpan Window { get; }
 
-    /// <summary>Zählt einen Treffer und gibt true zurück, solange das Limit nicht erreicht ist.</summary>
-    public bool TryAcquire(DateTimeOffset now)
+    /// <summary>Zählt einen Treffer und gibt true zurück, solange das Limit für diesen Schlüssel nicht erreicht ist.</summary>
+    public bool TryAcquire(DateTimeOffset now, string key = "")
     {
         lock (_lock)
         {
-            while (_hits.Count > 0 && now - _hits.Peek() >= Window)
+            // abgelaufene Treffer aller Schlüssel entfernen, damit die Tabelle nicht wächst
+            foreach (var k in _hits.Keys.ToList())
             {
-                _hits.Dequeue();
+                var q = _hits[k];
+                while (q.Count > 0 && now - q.Peek() >= Window)
+                {
+                    q.Dequeue();
+                }
+
+                if (q.Count == 0)
+                {
+                    _hits.Remove(k);
+                }
             }
 
-            if (_hits.Count >= Limit)
+            if (!_hits.TryGetValue(key, out var hits))
+            {
+                hits = _hits[key] = new Queue<DateTimeOffset>();
+            }
+
+            if (hits.Count >= Limit)
             {
                 return false;
             }
 
-            _hits.Enqueue(now);
+            hits.Enqueue(now);
             return true;
         }
     }

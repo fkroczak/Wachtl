@@ -85,15 +85,15 @@ def _hop_sel(probe_id: int, check_id: int, hop: int | None) -> str:
 
 
 def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = None,
-                end: int | None = None) -> dict:
+                at: int | None = None) -> dict:
     """Latenz (avg/min/max), Jitter und Paketverlust für den Graphen der Ziel- bzw. Hop-Detailseite.
 
-    ``end`` (Unix-Sekunden, Standard jetzt) verschiebt das Fenster in die Vergangenheit, z. B. um den
-    Zeitpunkt einer Störungsmeldung herum.
+    ``at`` (Unix-Sekunden) legt das Fenster mittig um diesen Zeitpunkt, z. B. eine Störungsmeldung;
+    ohne ``at`` endet es jetzt.
     """
     span = RANGES.get(range_key, 3600)
     now = int(time.time())
-    end = now if end is None else max(min(int(end), now), now - 400 * 86400)
+    end = now if at is None else max(min(int(at) + span // 2, now), now - 400 * 86400)
     start = end - span
     use_agg = span > current_app.config["RAW_QUERY_MAX_S"]
     step = max(span // 600, 60 if use_agg else 1)

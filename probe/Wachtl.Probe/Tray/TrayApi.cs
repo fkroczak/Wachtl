@@ -27,7 +27,8 @@ public sealed class TrayApi
 {
     public const string StatusPath = "/tray/v1/status";
     public const string ReportPath = "/tray/v1/report";
-    public const int ReportsPerHour = 30;
+    public const int ReportsPerHour = 30;          // je Benutzer
+    public const int ReportsPerHourTotal = 300;    // je PC, auch für Terminalserver mit vielen Benutzern
 
     /// <summary>So lange wartet der Tray auf die sofortige Zustellung, danach wird gepuffert.</summary>
     public static readonly TimeSpan ImmediateSendTimeout = TimeSpan.FromSeconds(10);
@@ -37,6 +38,7 @@ public sealed class TrayApi
     private readonly PendingReports _pending;
     private readonly Func<ServerReport, CancellationToken, Task<ReportSendResult>> _send;
     private readonly RateLimiter _rate;
+    private readonly RateLimiter _rateTotal = new(ReportsPerHourTotal, TimeSpan.FromHours(1));
     private readonly Func<DateTimeOffset> _clock;
     private readonly string _hostname;
     private readonly ILogger? _logger;
@@ -147,7 +149,7 @@ public sealed class TrayApi
             return TrayHttpResponse.Error(400, error ?? "Ungültige Meldung.");
         }
 
-        if (!_rate.TryAcquire(_clock()))
+        if (!_rate.TryAcquire(_clock(), report.User) || !_rateTotal.TryAcquire(_clock()))
         {
             return TrayHttpResponse.Error(429, "Zu viele Meldungen. Bitte später erneut versuchen oder die IT direkt anrufen.");
         }

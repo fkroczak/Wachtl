@@ -74,6 +74,7 @@ def test_nicht_registriert_und_ratenlimit(tmp_path):
     svc = service(tmp_path, lambda r: None)
     assert all(svc.report(good())[0] == 202 for _ in range(30))
     assert svc.report(good())[0] == 429
+    assert svc.report(good(user="KUNDE\\anderer"))[0] == 202   # Limit gilt je Benutzer
     assert svc.report({"category": "slow"})[0] == 400   # Validierung zählt nicht gegen das Limit
 
 
