@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
+{% from "_links.html" import check_target with context %}
 {% block content %}
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Bandbreite</nav>
-<h1>{{ check.name }} <span class="muted">· {{ probe.hostname }} ↔ {{ check.target }}</span></h1>
+<h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> ↔ {{ check_target(check) }}</span></h1>
 <p class="muted">{{ 'iperf3' if check.type == 'iperf' else 'WAN-Messung' }} · {{ summary }}{% if params.window_start != '00:00' or params.window_end != '23:59' %} · nur {{ params.window_start }}–{{ params.window_end }} Uhr{% endif %}</p>
 
 <div class="actions">

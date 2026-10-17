@@ -23,6 +23,7 @@ const PAGES = [
   ["Ausfälle", "/outages"],
   ["Meldungen", "/meldungen?status=all"],
   ["Verwaltung", "/admin"],
+  ["Probes einrichten", "/admin/einrichtung"],
   ["Check-Formular Ping", "/admin/checks/new/ping"],
   ["Check-Formular iperf3", "/admin/checks/new/iperf"],
   ["Check-Formular WAN", "/admin/checks/new/speedtest"],

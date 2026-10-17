@@ -6,7 +6,7 @@
 <table>
   <thead><tr><th>Zeit</th><th>Wer</th><th>Aktion</th><th>Objekt</th><th>Details</th></tr></thead>
   <tbody>{% for r in rows %}
-    <tr><td class="nowrap">{{ r.ts|dt }}</td><td>{{ r.username or '–' }}</td><td><code>{{ r.action }}</code></td><td>{{ r.object or '' }}</td><td>{{ r.detail or '' }}</td></tr>
+    <tr><td class="nowrap">{{ r.ts|dt }}</td><td>{{ r.username or '–' }}</td><td><code>{{ r.action }}</code></td><td>{% set link = links.get(r.object) %}{% if link %}<a href="{{ link }}">{{ r.object }}</a>{% else %}{{ r.object or '' }}{% endif %}</td><td>{{ r.detail or '' }}</td></tr>
   {% else %}<tr><td colspan="5" class="muted">Keine Einträge.</td></tr>{% endfor %}</tbody>
 </table>
 {% endblock %}

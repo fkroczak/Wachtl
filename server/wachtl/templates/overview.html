@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
 {% from "_reports.html" import report_table with context %}
+{% from "_links.html" import alert_links, check_target with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <h1>Übersicht</h1>
@@ -22,7 +23,7 @@
   {% for p in offline %}
     <tr>
       <td><span class="dot down"></span> offline</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small">{{ p.site_name }}</span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
       <td>Probe</td><td>–</td>
       <td>Kein Heartbeat – keine der Messungen dieser Probe läuft</td>
       <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
@@ -31,7 +32,7 @@
   {% for p, st in problems %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small">{{ p.site_name }}</span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
       <td>{{ KIND_LABELS[st.kind] }}</td>
       <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a></td>
       <td>{{ st.detail }}</td>
@@ -57,7 +58,7 @@
   {% for a in alerts %}
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
-      <td>{{ a.summary or a.alertname }}</td>
+      <td>{{ a.summary or a.alertname }}{% set refs = alert_links(a) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
       <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
       <td>{{ a.acked_by or '–' }}</td>
     </tr>
@@ -77,7 +78,7 @@
   </a>
   {% endfor %}
 </div>
-{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.admin') }}#standorte">Jetzt anlegen</a>{% endif %}</p>{% endif %}
+{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.setup_wizard') }}">Geführt einrichten</a>{% endif %}</p>{% endif %}
 
 <h2>Probes</h2>
 {% if probes %}
@@ -94,7 +95,7 @@
         {% else %}<span class="dot down"></span> offline{% endif %}
       </td>
       <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</td>
-      <td>{{ p.site_name }}</td>
+      <td><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></td>
       <td><span class="ok-t">{{ st.ok }}</span> / <span class="warn-t">{{ st.warn }}</span> / <span class="down-t">{{ st.down }}</span> / <span class="stale-t">{{ st.stale }}</span>{% if st.waiting %} <span class="muted small">(+{{ st.waiting }} warten)</span>{% endif %}</td>
       <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
       <td>{{ p.buffer_items or 0 }}</td>
@@ -103,7 +104,7 @@
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p class="muted">Noch keine Probes registriert.</p>{% endif %}
+{% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
 <h2 id="bandbreite">Bandbreite</h2>
 {% if bandwidth %}
@@ -113,8 +114,8 @@
   {% for p, st in bandwidth %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small">{{ p.site_name }}</span></td>
-      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ st.check.target }}</span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
+      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
       <td>{{ KIND_LABELS[st.kind] }}</td>
       {% for d in ('down', 'up') %}
         {% set r = st.values[d] %}

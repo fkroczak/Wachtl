@@ -6,7 +6,7 @@
   {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
 {% if hop %}
 <h1>Hop {{ hop }} <span class="muted">· {{ hop_ip or 'keine Antwort' }}</span></h1>
-<p class="muted">Auf dem Pfad zu {{ check.target }} ({{ check.name }}) · Ping alle {{ check.interval_s }} s. Verlust nur an diesem Hop, aber nicht an späteren, ist meist ICMP-Drosselung des Routers.</p>
+<p class="muted">Auf dem Pfad zu {{ check.target }} (<a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">{{ check.name }}</a>) · Ping alle {{ check.interval_s }} s. Verlust nur an diesem Hop, aber nicht an späteren, ist meist ICMP-Drosselung des Routers.</p>
 {% set q = {'hop': hop} %}
 {% else %}
 <h1>{{ check.name }} <span class="muted">· {{ check.target }}</span></h1>
@@ -23,8 +23,19 @@
     {% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}" aria-pressed="{{ 'true' if r == '1h' else 'false' }}">{{ r }}</button>{% endfor %}
     <span id="chart-source" class="muted small"></span>
   </div>
-  <div class="legend small"><span class="lg-avg"></span> Durchschnitt <span class="lg-band"></span> Min–Max <span class="lg-jitter"></span> Jitter <span class="lg-loss"></span> Paketverlust{% if chart_reports %} <span class="lg-report"></span> Störungsmeldung{% endif %}</div>
-  <div id="chart" class="chart"></div>
+  {% set lw, lb = thr.loss_warn_pct, thr.loss_bad_pct %}
+  {% macro pct(v) %}{{ ('%g' % v)|replace('.', ',') }} %{% endmacro %}
+  {% macro item(cls, text) %}<div class="lg-item"><span class="{{ cls }}"></span> {{ text }}</div>{% endmacro %}
+  <div class="legend small"><div>Median nach Paketverlust:</div> {{ item('lg-l c-l0', '0 %') }}
+    {{ item('lg-l c-l1', 'bis ' ~ pct(lw or lb) if (lw or lb) else 'mit Verlust') }}
+    {% if lw and lb %}{{ item('lg-l c-l2', 'bis ' ~ pct(lb)) }}{% endif %}
+    {% if lw or lb %}{{ item('lg-l c-l3' if lb else 'lg-l c-l2', 'über ' ~ pct(lb or lw)) }}{% endif %}
+    {{ item('lg-smoke', 'Streuung: 80 % und mittlere 50 % der Pings') }}
+    {% if thr.lat_warn_ms %}{{ item('lg-thrlat', 'Latenzschwelle %g ms' % thr.lat_warn_ms) }}{% endif %}
+    {% if lw or lb or thr.lat_warn_ms %}{{ item('lg-over', 'über Alarmschwelle') }}{% endif %}
+    {% if chart_reports %}{{ item('lg-report', 'Störungsmeldung') }}{% endif %}</div>
+  <div id="chart" class="chart" tabindex="0" role="group" aria-label="Latenzgraph. Pfeiltasten zeigen die Werte je Messpunkt, Bereich aufziehen vergrößert."></div>
+  <p id="chart-live" class="sr-only" aria-live="polite"></p>
   <p id="chart-error" class="flash error" hidden></p>
 </div>
 

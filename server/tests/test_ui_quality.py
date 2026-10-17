@@ -183,8 +183,10 @@ class PageSemanticsTest(AppTestCase):
             "trigger) VALUES (?, ?, ?, 'speedtest', 'down', 'x', 'http', 240, 0, 'schedule')", (pid, self.wan, now))
         alerts.store_webhook({"alerts": [
             {"status": "firing", "fingerprint": "f1", "startsAt": "2026-10-16T08:00:00Z",
-             "labels": {"alertname": "WachtlTargetDown", "severity": "critical", "probe": str(pid)},
-             "annotations": {"summary": "Ziel nicht erreichbar"}},
+             "labels": {"alertname": "WachtlTargetDown", "severity": "critical", "kind": "target_down",
+                        "probe": str(pid), "probe_name": "PC-EMPFANG", "site": "1", "site_name": "Zentrale",
+                        "check_id": "1", "target": "8.8.8.8", "role": "target"},
+             "annotations": {"summary": "8.8.8.8 von PC-EMPFANG (Zentrale) nicht erreichbar"}},
             {"status": "firing", "fingerprint": "f2", "startsAt": "2026-10-16T08:00:00Z",
              "labels": {"alertname": "WachtlPacketLoss", "severity": "warning", "probe": str(pid)},
              "annotations": {"summary": "Paketverlust"}}]})
@@ -222,6 +224,36 @@ class PageSemanticsTest(AppTestCase):
         if login_problems:
             failures["/login"] = login_problems
         self.assertEqual(failures, {}, json.dumps(failures, indent=1, ensure_ascii=False))
+
+    def test_references_are_links(self):
+        """Regel „Verweise sind Links“: Steht ein Standort- oder Probe-Name als eigener Wert in Zelle, Karte,
+        Navigationspfad oder Untertitel, ist er ein Link. Ausnahmen: <title>, <option>, Text direkt in der h1
+        (eigene Seite) und Namen mitten in einem Satz (Alarmtexte, Audit-Details, Statusmeldungen)."""
+        pid = self.probe["probe_id"]
+        self.make_token(1, token="tok-offen", max_uses=5)
+        for obj in ("site:1", f"probe:{pid}", "check:1", "report:1"):
+            repo.audit("admin", "test", obj)
+        names = {"Zentrale", "PC-EMPFANG"}
+        failures = []
+        for url in self.pages() + [f"/meldungen?status=all&probe={pid}"]:
+            r = self.client.get(url)
+            self.assertEqual(r.status_code, 200, url)
+            for node in _Tree(r.get_data(as_text=True)).root.walk():
+                chain = [node, *node.ancestors()]
+                if node.tag == "h1" or any(n.tag in ("a", "title", "option", "select") for n in chain):
+                    continue
+                for text in node.text:
+                    # eigenständiger Wert: ganzer Text oder ein Abschnitt zwischen Trennzeichen (· → ↔ / |)
+                    parts = {p.strip() for p in re.split(r"[·→↔/|]", text)}
+                    for name in names & parts:
+                        failures.append(f"{url}: „{name}“ ohne Link in <{node.tag}>: {' '.join(text.split())[:80]}")
+        self.assertEqual(failures, [], "\n".join(failures))
+        # Stichproben: Ziel im Ausfall, Audit-Objekt, Zuweisung und Token-Standort sind verlinkt
+        self.assertIn(f'href="/probes/{pid}/checks/1" aria-label="8.8.8.8 von PC-EMPFANG"',
+                      self.client.get("/outages").get_data(as_text=True))
+        self.assertIn('<a href="/admin/checks/1/edit">check:1</a>', self.client.get("/admin/audit").get_data(as_text=True))
+        admin = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('<td><a href="/sites/1">Zentrale</a></td><td>', admin)
 
     def test_navigation_marks_current_page(self):
         html = self.client.get("/alerts").get_data(as_text=True)
@@ -280,6 +312,10 @@ PAIRS = [
     ("--accent", "--accent-soft", 4.5), ("--text-muted", "--accent-soft", 4.5),
     ("--field-border", "--surface", 3.0), ("--off", "--surface", 3.0), ("--focus", "--bg", 3.0),
     ("--focus", "--surface", 3.0), ("--report", "--surface", 4.5), ("--report", "--bg", 4.5),
+    ("--jitter", "--surface", 3.0),
+    # Graph: Median je Verlustklasse auf dem dunkleren Rauch-Band (und damit auch auf hellerem Grund) ≥ 3:1
+    ("--ok", "--band", 3.0), ("--loss-low", "--band", 3.0), ("--warn", "--band", 3.0), ("--bad", "--band", 3.0),
+    ("--loss-low", "--surface", 3.0),
 ]
 # Badges: Schrift auf 12 % der eigenen Farbe über --surface (siehe .badge.* in app.css)
 BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]

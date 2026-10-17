@@ -11,7 +11,7 @@ mit einem fertigen Paket installiert. Rechne mit etwa 30 Minuten für den Server
 
 | Variante | Was tun |
 |---|---|
-| Windows Server | `WachtlSetup-0.6.0.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
+| Windows Server | `WachtlSetup-0.7.0.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
 | Linux-VM mit Docker | `sudo ./setup.sh wachtl.kunde.local` im Ordner `deploy`. Details: [INSTALL-SERVER.md](INSTALL-SERVER.md) |
 
 Am Ende zeigt das Setup die Adresse, den Admin-Zugang und den **SPKI-Pin**. Zugangsdaten sofort im
@@ -22,6 +22,10 @@ mit dem Zusatz „Server“ am Standort „Wachtl-Server“. So sieht man auch o
 vom Server aus funktionieren.
 
 ## 2. Standorte und Standardpaket
+
+**Am schnellsten:** Verwaltung › **Probes einrichten (geführt)**. Vier Schritte – Standort, Messungen (Standardpaket),
+Alarmierung (E-Mail/Teams) und Anzahl PCs – sind mit Standards vorbelegt. **Einrichten** legt alles an und bietet
+direkt das fertige Setup für die PCs an; weiter mit Schritt 3, Punkt 2. Von Hand geht es so:
 
 1. **Verwaltung › Standorte**: für jeden Standort einen Eintrag anlegen (z. B. „Zentrale“, „Lager Coesfeld“).
 2. **Verwaltung › Standardpaket**: alles angehakt lassen, „Gilt für: alle Probes“, **Standardpaket anlegen**.

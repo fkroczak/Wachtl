@@ -1,7 +1,7 @@
 """Minimaler VictoriaMetrics-Ersatz für lokale Entwicklung und End-to-End-Tests.
 
 Versteht genau die Abfrageformen, die Wachtl stellt (…_over_time über einen Selektor,
-optional ``1 - … * 100``). Für echte Installationen immer VictoriaMetrics verwenden.
+optional ``1 - … * 100``, ``quantiles_over_time``, außen ``avg(…)`` bzw. ``avg by (phi) (…)``). Für echte Installationen immer VictoriaMetrics verwenden.
 Start: python devtools/fake_vm.py 18428
 """
 from __future__ import annotations
@@ -21,15 +21,31 @@ LOCK = threading.Lock()
 LINE = re.compile(r'^([\w:]+)\{(.*)\}\s+(\S+)\s+(\d+)$')
 LABEL = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
 QUERY = re.compile(
-    r'^\(?(?P<one>1 - )?(?P<fn>\w+)\((?:0\.5, )?(?P<metric>[\w:]+)(?:\{(?P<sel>[^}]*)\})?\[(?P<win>\w+)\]\)\)?(?P<pct> \* 100)?$'
+    r'^\(?(?P<one>1 - )?(?P<fn>\w+)\((?P<args>(?:[\w."]+, )*)(?P<metric>[\w:]+)(?:\{(?P<sel>[^}]*)\})?'
+    r'\[(?P<win>\w+)\]\)\)?(?P<pct> \* 100)?$'
 )
+OUTER = re.compile(r'^avg(?P<by> by \(phi\))? ?\((?P<inner>.*)\)$')
 AGG_MAP = {  # Recording Rules auf Rohdaten abbilden
     "wachtl:ping_rtt_ms:avg_1m": "wachtl_ping_rtt_ms",
     "wachtl:ping_rtt_ms:min_1m": "wachtl_ping_rtt_ms",
     "wachtl:ping_rtt_ms:max_1m": "wachtl_ping_rtt_ms",
     "wachtl:ping_rtt_ms:p50_1m": "wachtl_ping_rtt_ms",
     "wachtl:ping_jitter_ms:avg_1m": "wachtl_ping_jitter_ms",
+    "wachtl:ping_rtt_ms:quantiles_1m": "wachtl_ping_rtt_ms",
+    "wachtl:hop_rtt_ms:avg_1m": "wachtl_hop_rtt_ms",
+    "wachtl:hop_rtt_ms:min_1m": "wachtl_hop_rtt_ms",
+    "wachtl:hop_rtt_ms:max_1m": "wachtl_hop_rtt_ms",
+    "wachtl:hop_rtt_ms:p50_1m": "wachtl_hop_rtt_ms",
+    "wachtl:hop_rtt_ms:quantiles_1m": "wachtl_hop_rtt_ms",
+    "wachtl:hop_jitter_ms:avg_1m": "wachtl_hop_jitter_ms",
 }
+
+
+def quantile(vals: list[float], phi: float) -> float:
+    s = sorted(vals)
+    pos = phi * (len(s) - 1)
+    lo = int(pos)
+    return s[lo] + (s[min(lo + 1, len(s) - 1)] - s[lo]) * (pos - lo)
 
 
 def dur(s: str) -> float:
@@ -38,13 +54,26 @@ def dur(s: str) -> float:
 
 
 def evaluate(query: str, t: float) -> list[tuple[dict, float]]:
+    outer = OUTER.match(query.strip())
+    if not outer:
+        return evaluate_inner(query, t)
+    groups: dict[str, list[float]] = defaultdict(list)
+    for labels, v in evaluate_inner(outer["inner"], t):
+        groups[labels.get("phi", "") if outer["by"] else ""].append(v)
+    return [({"phi": k} if k else {}, statistics.fmean(v)) for k, v in groups.items()]
+
+
+def evaluate_inner(query: str, t: float) -> list[tuple[dict, float]]:
     m = QUERY.match(query.strip())
     if not m:
         raise ValueError(f"nicht unterstützt: {query}")
     metric, fn = m["metric"], m["fn"]
+    args = [a.strip('"') for a in m["args"].split(", ") if a]
     invert = bool(m["one"])
-    if metric == "wachtl:ping_loss_ratio_1m":
-        metric, fn, invert = "wachtl_ping_up", "avg_over_time", True
+    if metric in ("wachtl:ping_loss_ratio_1m", "wachtl:hop_loss_ratio_1m"):
+        metric, fn, invert = metric.replace(":", "_", 1).replace("_loss_ratio_1m", "_up"), "avg_over_time", True
+    if metric.endswith(":quantiles_1m"):  # Minuten-Quantile: hier direkt aus den Rohdaten des Fensters
+        fn, args = "quantiles_over_time", ["phi", "0.1", "0.25", "0.75", "0.9"]
     metric = AGG_MAP.get(metric, metric)
     sel = dict(LABEL.findall(m["sel"] or ""))
     win = dur(m["win"])
@@ -58,9 +87,12 @@ def evaluate(query: str, t: float) -> list[tuple[dict, float]]:
         vals = [v for ts, v in samples if t - win < ts <= t]
         if not vals:
             continue
+        if fn == "quantiles_over_time":
+            out += [({**labels, args[0]: phi}, quantile(vals, float(phi))) for phi in args[1:]]
+            continue
         val = {
             "avg_over_time": statistics.fmean, "min_over_time": min, "max_over_time": max,
-            "quantile_over_time": statistics.median, "last_over_time": lambda x: x[-1],
+            "quantile_over_time": lambda x: quantile(x, float(args[0])), "last_over_time": lambda x: x[-1],
             "count_over_time": len, "sum_over_time": sum,
         }[fn](vals)
         if invert:

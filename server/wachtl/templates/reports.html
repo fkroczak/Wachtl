@@ -11,7 +11,7 @@
   {% if probe_filter %}<input type="hidden" name="probe" value="{{ probe_filter.id }}">{% endif %}
   <button>Anzeigen</button>
 </form>
-{% if probe_filter %}<p>Nur Meldungen von <strong>{{ probe_filter.hostname }}</strong>. <a href="{{ url_for('web.reports_view', status=status, site=site_id) }}">Alle PCs zeigen</a></p>{% endif %}
+{% if probe_filter %}<p>Nur Meldungen von <strong><a href="{{ url_for('web.probe', probe_id=probe_filter.id) }}">{{ probe_filter.hostname }}</a></strong>. <a href="{{ url_for('web.reports_view', status=status, site=site_id) }}">Alle PCs zeigen</a></p>{% endif %}
 
 <p class="muted" role="status">{{ total }} {{ 'Meldung' if total == 1 else 'Meldungen' }} ({{ filters[status] }}){% if pages > 1 %} · Seite {{ page }} von {{ pages }}{% endif %}</p>
 
