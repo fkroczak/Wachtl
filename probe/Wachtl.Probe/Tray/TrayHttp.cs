@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Net;
 using System.Text;
 using System.Text.Json;
 
@@ -31,8 +30,6 @@ public sealed class TrayHttpResponse
     public int Status { get; }
 
     public string Json { get; }
-
-    public Dictionary<string, string> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static TrayHttpResponse Error(int status, string message) =>
         new(status, JsonSerializer.Serialize(new Dictionary<string, string> { ["error"] = message }));
@@ -185,11 +182,7 @@ public static class TrayHttp
         return (int)length;
     }
 
-    private static int IndexOf(byte[] buffer, int count, byte[] pattern)
-    {
-        var index = buffer.AsSpan(0, count).IndexOf(pattern);
-        return index;
-    }
+    private static int IndexOf(byte[] buffer, int count, byte[] pattern) => buffer.AsSpan(0, count).IndexOf(pattern);
 
     public static byte[] Format(TrayHttpResponse response)
     {
@@ -201,11 +194,6 @@ public static class TrayHttp
         sb.Append(CultureInfo.InvariantCulture, $"Content-Length: {body.Length}\r\n");
         sb.Append("Cache-Control: no-store\r\n");
         sb.Append("X-Content-Type-Options: nosniff\r\n");
-        foreach (var (name, value) in response.Headers)
-        {
-            sb.Append(CultureInfo.InvariantCulture, $"{name}: {value}\r\n");
-        }
-
         sb.Append("Connection: close\r\n\r\n");
         var head = Encoding.ASCII.GetBytes(sb.ToString());
         var result = new byte[head.Length + body.Length];
@@ -216,11 +204,16 @@ public static class TrayHttp
 
     private static string Reason(int status) => status switch
     {
+        200 => "OK",
+        202 => "Accepted",
+        400 => "Bad Request",
+        403 => "Forbidden",
+        404 => "Not Found",
+        405 => "Method Not Allowed",
+        409 => "Conflict",
         413 => "Payload Too Large",
         429 => "Too Many Requests",
         431 => "Request Header Fields Too Large",
-        _ => Enum.IsDefined(typeof(HttpStatusCode), status)
-            ? System.Text.RegularExpressions.Regex.Replace(((HttpStatusCode)status).ToString(), "(?<=[a-z])(?=[A-Z])", " ")
-            : "Status",
+        _ => "Error",
     };
 }

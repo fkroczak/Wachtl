@@ -19,14 +19,13 @@ namespace Wachtl.Tray
         private readonly System.Windows.Forms.Timer _pollTimer;
         private readonly System.Windows.Forms.Timer _clickTimer;
         private readonly SynchronizationContext _ui;
-        private readonly RegisteredWaitHandle _signalWait;
         private readonly Icon _trayIcon;
         private TrayStatus? _status;
         private bool _polling;
         private ReportForm? _reportForm;
         private AboutForm? _aboutForm;
 
-        public TrayContext(TrayClient client, WaitHandle reportSignal, bool openReport)
+        public TrayContext(TrayClient client, bool openReport)
         {
             _client = client;
             _menu = new ContextMenuStrip();
@@ -75,9 +74,6 @@ namespace Wachtl.Tray
             _pollTimer.Tick += (s, e) => RefreshStatus();
             _pollTimer.Start();
             RefreshStatus();
-
-            _signalWait = ThreadPool.RegisterWaitForSingleObject(reportSignal,
-                (state, timedOut) => _ui.Post(_ => OpenReport(), null), null, Timeout.Infinite, false);
 
             if (openReport)
             {
@@ -200,7 +196,6 @@ namespace Wachtl.Tray
         {
             if (disposing)
             {
-                _signalWait.Unregister(null);
                 _pollTimer.Dispose();
                 _clickTimer.Dispose();
                 _icon.Visible = false;

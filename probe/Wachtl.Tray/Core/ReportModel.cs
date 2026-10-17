@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
-using System.Text;
 
 namespace Wachtl.Tray.Core
 {
@@ -91,16 +89,8 @@ namespace Wachtl.Tray.Core
         /// <summary>Erlaubter Vorlauf der gewählten Uhrzeit (Uhrenabweichung), wie beim Server.</summary>
         public static readonly TimeSpan MaxFuture = TimeSpan.FromMinutes(5);
 
-        private static readonly DateTime Epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
-        /// <summary>Ortszeit (oder UTC) in Unix-Sekunden UTC.</summary>
-        public static long ToUnixSeconds(DateTime time)
-        {
-            var utc = time.Kind == DateTimeKind.Utc ? time : DateTime.SpecifyKind(time, DateTimeKind.Local).ToUniversalTime();
-            return (long)Math.Floor((utc - Epoch).TotalSeconds);
-        }
-
-        public static DateTime FromUnixSecondsLocal(long seconds) => Epoch.AddSeconds(seconds).ToLocalTime();
+        /// <summary>Ortszeit (Kind Local/Unspecified) oder UTC in Unix-Sekunden UTC.</summary>
+        public static long ToUnixSeconds(DateTime time) => new DateTimeOffset(time).ToUnixTimeSeconds();
 
         /// <summary>„DOMÄNE\Benutzer“ (ohne Domäne nur der Benutzer), höchstens 128 Zeichen.</summary>
         public static string FormatUser(string? domain, string? user)
@@ -111,7 +101,7 @@ namespace Wachtl.Tray.Core
 
         /// <summary>Zeitpunkt der Meldung in Unix-Sekunden; bei „Jetzt“ der Zeitpunkt des Absendens.</summary>
         public static long OccurredAt(ReportInput input, DateTime utcNow) =>
-            input.Now ? ToUnixSeconds(DateTime.SpecifyKind(utcNow, DateTimeKind.Utc)) : ToUnixSeconds(input.LocalTime);
+            ToUnixSeconds(input.Now ? DateTime.SpecifyKind(utcNow, DateTimeKind.Utc) : input.LocalTime);
 
         /// <summary>Deutscher Fehlertext oder null, wenn alles passt.</summary>
         public static string? Validate(ReportInput input, DateTime utcNow)
@@ -150,18 +140,13 @@ namespace Wachtl.Tray.Core
         }
 
         /// <summary>Körper für POST /tray/v1/report.</summary>
-        public static string ToJson(ReportInput input, DateTime utcNow)
+        public static string ToJson(ReportInput input, DateTime utcNow) => Json.Write(new ReportRequest
         {
-            var description = (input.Description ?? string.Empty).Trim();
-            var user = input.User ?? string.Empty;
-            var sb = new StringBuilder();
-            sb.Append("{\"occurred_at\":").Append(OccurredAt(input, utcNow).ToString(CultureInfo.InvariantCulture));
-            sb.Append(",\"category\":").Append(TrayJson.Quote(input.Category));
-            sb.Append(",\"duration\":").Append(TrayJson.Quote(input.Duration));
-            sb.Append(",\"description\":").Append(TrayJson.Quote(description));
-            sb.Append(",\"user\":").Append(TrayJson.Quote(user.Length > MaxUser ? user.Substring(0, MaxUser) : user));
-            sb.Append('}');
-            return sb.ToString();
-        }
+            OccurredAt = OccurredAt(input, utcNow),
+            Category = input.Category ?? string.Empty,
+            Duration = input.Duration,
+            Description = (input.Description ?? string.Empty).Trim(),
+            User = input.User.Length > MaxUser ? input.User.Substring(0, MaxUser) : input.User,
+        });
     }
 }

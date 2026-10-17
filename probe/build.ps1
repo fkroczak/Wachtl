@@ -27,12 +27,9 @@ if ($LASTEXITCODE -ne 0) { throw 'dotnet publish fehlgeschlagen' }
 Copy-Item "$PSScriptRoot\..\installer\Install-Wachtl.ps1" $Output -Force
 
 # Tray-Symbol (Problem melden, Über, Beenden): .NET Framework 4.6.2 – in Windows enthalten, keine Laufzeit beilegen
-$trayOut = Join-Path ([IO.Path]::GetTempPath()) 'wachtl-tray-publish'
-if (Test-Path $trayOut) { Remove-Item $trayOut -Recurse -Force }
-dotnet publish "$PSScriptRoot\Wachtl.Tray\Wachtl.Tray.csproj" -c Release -p:DebugType=none -p:Version=$Version -o $trayOut
-if ($LASTEXITCODE -ne 0) { throw 'dotnet publish (Tray) fehlgeschlagen' }
-Copy-Item "$trayOut\wachtl-tray.exe" $Output -Force
-if (Test-Path "$trayOut\wachtl-tray.exe.config") { Copy-Item "$trayOut\wachtl-tray.exe.config" $Output -Force }
+dotnet build "$PSScriptRoot\Wachtl.Tray\Wachtl.Tray.csproj" -c Release -p:Version=$Version
+if ($LASTEXITCODE -ne 0) { throw 'dotnet build (Tray) fehlgeschlagen' }
+Copy-Item "$PSScriptRoot\Wachtl.Tray\bin\Release\net462\wachtl-tray.exe" $Output -Force
 $traySize = (Get-Item "$Output\wachtl-tray.exe").Length
 Write-Host "wachtl-tray.exe: $([math]::Round($traySize / 1KB)) KB"
 if ($traySize -gt 2MB) { throw 'wachtl-tray.exe ist größer als 2 MB – wurde eine Laufzeit mitgepackt?' }

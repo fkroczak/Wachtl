@@ -57,7 +57,6 @@ Source: "{#BuildDir}\THIRD-PARTY.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\wachtl.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Tray-Symbol: Störung melden, Über, Dashboard öffnen, Beenden (aus dem Probe-Build)
 Source: "{#BuildDir}\wachtl-tray.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
-Source: "{#BuildDir}\wachtl-tray.exe.config"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#BuildDir}\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs ignoreversion
 Source: "{#BuildDir}\probe\*"; DestDir: "{app}\probe"; Flags: recursesubdirs ignoreversion skipifsourcedoesntexist
 

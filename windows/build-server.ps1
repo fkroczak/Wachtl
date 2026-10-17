@@ -146,7 +146,6 @@ if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-probe.exe'))) {
 # Tray-Symbol auch auf dem Server (Störung melden, Dashboard öffnen) – aus dem Probe-Build
 if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-tray.exe'))) {
     Copy-Item (Join-Path $ProbeDir 'wachtl-tray.exe') $Build -Force
-    if (Test-Path (Join-Path $ProbeDir 'wachtl-tray.exe.config')) { Copy-Item (Join-Path $ProbeDir 'wachtl-tray.exe.config') $Build -Force }
     Write-Host '    Tray-Symbol beigelegt'
 }
 

@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Wachtl.Probe.Transport;
@@ -18,44 +17,6 @@ public enum ReportSendOutcome
 }
 
 public sealed record ReportSendResult(ReportSendOutcome Outcome, string? Error = null);
-
-public interface IReportSender
-{
-    Task<ReportSendResult> SendAsync(ServerReport report, CancellationToken ct);
-}
-
-/// <summary>Sendet über den ApiClient des Workers (Token, Pinning, Proxy).</summary>
-public sealed class ApiReportSender : IReportSender
-{
-    private readonly ProbeStatus _status;
-
-    public ApiReportSender(ProbeStatus status) => _status = status;
-
-    public async Task<ReportSendResult> SendAsync(ServerReport report, CancellationToken ct)
-    {
-        var api = _status.Api;
-        if (api is null)
-        {
-            return new ReportSendResult(ReportSendOutcome.Retry, "Dienst noch nicht mit dem Server verbunden");
-        }
-
-        try
-        {
-            await api.PostResultAsync("report", report, ct).ConfigureAwait(false);
-            _status.MarkContact();
-            return new ReportSendResult(ReportSendOutcome.Delivered);
-        }
-        catch (ApiException ex) when (ex.Status == HttpStatusCode.BadRequest)
-        {
-            return new ReportSendResult(ReportSendOutcome.Rejected, ex.Detail);
-        }
-        catch (Exception ex)
-        {
-            // Netzfehler, Zeitüberschreitung, 401/403/404/5xx, ApiClient bereits freigegeben: puffern.
-            return new ReportSendResult(ReportSendOutcome.Retry, ex.Message);
-        }
-    }
-}
 
 /// <summary>
 /// Noch nicht zugestellte Meldungen in reports-pending.json (höchstens <see cref="MaxEntries"/>, älteste fallen heraus).
@@ -115,7 +76,7 @@ public sealed class PendingReports
     }
 
     /// <summary>Liefert der Reihe nach nach; bricht beim ersten „später erneut“ ab. Gibt die Zahl der zugestellten zurück.</summary>
-    public async Task<int> FlushAsync(IReportSender sender, CancellationToken ct)
+    public async Task<int> FlushAsync(Func<ServerReport, CancellationToken, Task<ReportSendResult>> send, CancellationToken ct)
     {
         if (!await _flush.WaitAsync(0, ct).ConfigureAwait(false))
         {
@@ -127,7 +88,7 @@ public sealed class PendingReports
             var delivered = 0;
             foreach (var report in Snapshot())
             {
-                var result = await sender.SendAsync(report, ct).ConfigureAwait(false);
+                var result = await send(report, ct).ConfigureAwait(false);
                 if (result.Outcome == ReportSendOutcome.Retry)
                 {
                     break;

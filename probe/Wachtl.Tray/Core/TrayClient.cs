@@ -1,8 +1,8 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Net;
+using System.Runtime.Serialization;
 using System.Text;
 
 #pragma warning disable SYSLIB0014 // HttpWebRequest: in .NET Framework 4.6.2 ohne Zusatz-DLL verfügbar
@@ -20,46 +20,24 @@ namespace Wachtl.Tray.Core
     }
 
     /// <summary>Antwort von GET /tray/v1/status.</summary>
+    [DataContract]
     public sealed class TrayStatus
     {
-        public string Role { get; set; } = "probe";
-        public string Name { get; set; } = string.Empty;
-        public string Site { get; set; } = string.Empty;
-        public string ServerUrl { get; set; } = string.Empty;
-        public string DashboardUrl { get; set; } = string.Empty;
-        public string Version { get; set; } = string.Empty;
-        public bool Enrolled { get; set; }
-        public bool Connected { get; set; }
-        public long LastContact { get; set; }
-        public int PendingReports { get; set; }
+        [DataMember(Name = "role")] public string Role { get; set; } = "probe";
+        [DataMember(Name = "name")] public string Name { get; set; } = string.Empty;
+        [DataMember(Name = "site")] public string Site { get; set; } = string.Empty;
+        [DataMember(Name = "server_url")] public string ServerUrl { get; set; } = string.Empty;
+        [DataMember(Name = "dashboard_url")] public string DashboardUrl { get; set; } = string.Empty;
+        [DataMember(Name = "version")] public string Version { get; set; } = string.Empty;
+        [DataMember(Name = "enrolled")] public bool Enrolled { get; set; }
+        [DataMember(Name = "connected")] public bool Connected { get; set; }
+        [DataMember(Name = "last_contact")] public long LastContact { get; set; }
+        [DataMember(Name = "pending_reports")] public int PendingReports { get; set; }
 
         public bool IsServer => Role == "server";
 
         public TrayConnection Connection =>
             !Enrolled ? TrayConnection.NotEnrolled : Connected ? TrayConnection.Connected : TrayConnection.Disconnected;
-
-        public static TrayStatus? FromJson(string json)
-        {
-            var o = TrayJson.TryParseObject(json);
-            if (o == null)
-            {
-                return null;
-            }
-
-            return new TrayStatus
-            {
-                Role = TrayJson.GetString(o, "role", "probe"),
-                Name = TrayJson.GetString(o, "name"),
-                Site = TrayJson.GetString(o, "site"),
-                ServerUrl = TrayJson.GetString(o, "server_url"),
-                DashboardUrl = TrayJson.GetString(o, "dashboard_url"),
-                Version = TrayJson.GetString(o, "version"),
-                Enrolled = TrayJson.GetBool(o, "enrolled"),
-                Connected = TrayJson.GetBool(o, "connected"),
-                LastContact = TrayJson.GetLong(o, "last_contact"),
-                PendingReports = (int)TrayJson.GetLong(o, "pending_reports"),
-            };
-        }
     }
 
     public enum ReportOutcome
@@ -166,7 +144,7 @@ namespace Wachtl.Tray.Core
         public TrayStatus? GetStatus()
         {
             var response = Send("GET", "/tray/v1/status", null, StatusTimeoutMs);
-            return response != null && response.Status == 200 ? TrayStatus.FromJson(response.Body) : null;
+            return response != null && response.Status == 200 ? Json.Read<TrayStatus>(response.Body) : null;
         }
 
         public ReportResult SendReport(string json)
@@ -183,20 +161,15 @@ namespace Wachtl.Tray.Core
         /// <summary>Wertet die Antwort von POST /tray/v1/report aus.</summary>
         public static ReportResult Interpret(int status, string body)
         {
-            var o = TrayJson.TryParseObject(body);
-            if (status == 202 || status == 200)
+            var response = Json.Read<ReportResponse>(body);
+            if (status == 202 && response != null && response.Ok)
             {
-                if (o != null && TrayJson.GetBool(o, "ok"))
-                {
-                    return TrayJson.GetBool(o, "delivered")
-                        ? new ReportResult(ReportOutcome.Delivered, TrayTexts.Delivered)
-                        : new ReportResult(ReportOutcome.Queued, TrayTexts.Queued);
-                }
-
-                return new ReportResult(ReportOutcome.Failed, "Unerwartete Antwort des Wachtl-Dienstes.");
+                return response.Delivered
+                    ? new ReportResult(ReportOutcome.Delivered, TrayTexts.Delivered)
+                    : new ReportResult(ReportOutcome.Queued, TrayTexts.Queued);
             }
 
-            return new ReportResult(ReportOutcome.Failed, TrayTexts.ForStatusCode(status, o != null ? TrayJson.GetString(o, "error") : null));
+            return new ReportResult(ReportOutcome.Failed, TrayTexts.ForStatusCode(status, response?.Error));
         }
 
         private sealed class RawResponse

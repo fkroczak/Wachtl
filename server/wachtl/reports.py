@@ -161,6 +161,7 @@ def chart_item(r: dict) -> dict:
 
 def for_chart(since: int, until: int, probe_id: int | None = None, site_id: int | None = None,
               limit: int = 1000) -> list[dict]:
+    # shortcut: höchstens die neuesten 1000 Meldungen je Graph, bei sehr vielen Meldungen im Zeitraum paginieren
     rows = search(None, site_id, probe_id, since, until, limit=limit)
     rows.reverse()  # zeitlich aufsteigend wie die Messreihen
     return [chart_item(r) for r in rows]

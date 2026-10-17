@@ -21,24 +21,22 @@ public sealed class TrayEndpoint : BackgroundService
     private readonly ILogger _logger;
     private readonly ProbeStatus _status;
     private readonly PendingReports _pending;
-    private readonly IReportSender _sender;
     private readonly TrayApi _api;
     private readonly SemaphoreSlim _slots = new(MaxConcurrent, MaxConcurrent);
 
     public TrayEndpoint(ProbeStatus status, ILogger<TrayEndpoint> logger)
         : this(ResolvePort(), status, new PendingReports(Path.Combine(StateStore.DataDir, "reports-pending.json"), logger),
-            new ApiReportSender(status), logger)
+            logger)
     {
     }
 
-    internal TrayEndpoint(int port, ProbeStatus status, PendingReports pending, IReportSender sender, ILogger logger)
+    internal TrayEndpoint(int port, ProbeStatus status, PendingReports pending, ILogger logger)
     {
         Port = port;
         _status = status;
         _pending = pending;
-        _sender = sender;
         _logger = logger;
-        _api = new TrayApi(port, status, pending, sender, logger: logger);
+        _api = new TrayApi(port, status, pending, status.SendReportAsync, logger: logger);
     }
 
     public int Port { get; }
@@ -118,11 +116,6 @@ public sealed class TrayEndpoint : BackgroundService
             using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
                 timeout.CancelAfter(RequestTimeout + TrayApi.ImmediateSendTimeout);
-                if (client.Client.RemoteEndPoint is IPEndPoint remote && !IPAddress.IsLoopback(remote.Address))
-                {
-                    return;
-                }
-
                 var stream = client.GetStream();
                 TrayHttpResponse response;
                 try
@@ -161,11 +154,11 @@ public sealed class TrayEndpoint : BackgroundService
             await Task.Delay(TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
             while (!ct.IsCancellationRequested)
             {
-                if (_pending.Count > 0 && _status.Api is not null)
+                if (_pending.Count > 0 && _status.CanSend)
                 {
                     try
                     {
-                        await _pending.FlushAsync(_sender, ct).ConfigureAwait(false);
+                        await _pending.FlushAsync(_status.SendReportAsync, ct).ConfigureAwait(false);
                     }
                     catch (Exception ex) when (!ct.IsCancellationRequested)
                     {

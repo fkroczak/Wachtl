@@ -61,7 +61,6 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Source: "{#PublishDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Tray-Symbol neben der Uhr: Störung melden, Über, Beenden (.NET Framework 4.6.2, in Windows enthalten)
 Source: "{#PublishDir}\wachtl-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#PublishDir}\wachtl-tray.exe.config"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#PublishDir}\Install-Wachtl.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
 ; iperf3 für Bandbreitenmessungen (Client und optional Gegenstelle), BSD-Lizenz

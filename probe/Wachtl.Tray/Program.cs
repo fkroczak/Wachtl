@@ -10,9 +10,6 @@ namespace Wachtl.Tray
         /// <summary>Eine Instanz je Benutzersitzung.</summary>
         private const string MutexName = @"Local\WachtlTray";
 
-        /// <summary>Ein zweiter Start mit --report bittet die laufende Instanz, das Meldefenster zu öffnen.</summary>
-        private const string ReportSignalName = @"Local\WachtlTrayReport";
-
         [STAThread]
         private static int Main(string[] args)
         {
@@ -28,48 +25,31 @@ namespace Wachtl.Tray
 
             using (var mutex = new Mutex(true, MutexName, out var created))
             {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
                 if (!created)
                 {
+                    // Symbol läuft schon: ein zweiter Start (Startmenü „Problem melden“) zeigt nur das Meldefenster.
                     if (openReport)
                     {
-                        SignalRunningInstance();
+                        Application.Run(new ReportForm(TrayClient.FromEnvironment()));
                     }
 
                     return 0;
                 }
 
-                using (var reportSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ReportSignalName))
-                {
-                    Application.EnableVisualStyles();
-                    Application.SetCompatibleTextRenderingDefault(false);
-                    Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
-                    Application.ThreadException += (s, e) => { /* das Symbol soll nie mit einer Fehlermeldung abstürzen */ };
+                Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+                Application.ThreadException += (s, e) => { /* das Symbol soll nie mit einer Fehlermeldung abstürzen */ };
 
-                    using (var context = new TrayContext(TrayClient.FromEnvironment(), reportSignal, openReport))
-                    {
-                        Application.Run(context);
-                    }
+                using (var context = new TrayContext(TrayClient.FromEnvironment(), openReport))
+                {
+                    Application.Run(context);
                 }
 
                 GC.KeepAlive(mutex);
             }
 
             return 0;
-        }
-
-        private static void SignalRunningInstance()
-        {
-            try
-            {
-                using (var signal = EventWaitHandle.OpenExisting(ReportSignalName))
-                {
-                    signal.Set();
-                }
-            }
-            catch (Exception)
-            {
-                // Laufende Instanz startet gerade oder beendet sich – still beenden.
-            }
         }
     }
 }

@@ -26,7 +26,7 @@ namespace Wachtl.Tray
         public ReportForm(TrayClient client)
         {
             _client = client;
-            _user = ReportBuilder.FormatUser(Ui.Safe(() => Environment.UserDomainName), Ui.Safe(() => Environment.UserName));
+            _user = ReportBuilder.FormatUser(Environment.UserDomainName, Environment.UserName);
 
             SuspendLayout();
             Ui.SetupDialog(this, "Wachtl – Problem melden");

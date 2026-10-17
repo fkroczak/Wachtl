@@ -132,7 +132,7 @@ namespace Wachtl.Tray
                 AddRow("Server", Or(status.ServerUrl));
                 AddRow("Verbindung", TrayTexts.Connection(status.Connection));
                 AddRow("Letzter Kontakt", status.LastContact > 0
-                    ? ReportBuilder.FromUnixSecondsLocal(status.LastContact).ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture)
+                    ? DateTimeOffset.FromUnixTimeSeconds(status.LastContact).ToLocalTime().ToString("dd.MM.yyyy HH:mm:ss", CultureInfo.InvariantCulture)
                     : "noch nie");
                 AddRow("Offene Meldungen", status.PendingReports == 0
                     ? "keine"

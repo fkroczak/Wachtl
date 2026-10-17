@@ -8,7 +8,6 @@
   <PropertyGroup>
     <TargetFramework>net462</TargetFramework>
     <OutputType>WinExe</OutputType>
-    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>wachtl-tray</AssemblyName>
     <RootNamespace>Wachtl.Tray</RootNamespace>
     <Version>0.5.0</Version>
@@ -31,6 +30,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- WinForms direkt aus dem Framework statt UseWindowsForms: baut so auch mit dem Linux-SDK (kein WindowsDesktop-SDK nötig). -->
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
   </ItemGroup>
 
   <ItemGroup>

@@ -35,19 +35,20 @@ public sealed class TrayApi
     private readonly int _port;
     private readonly ProbeStatus _status;
     private readonly PendingReports _pending;
-    private readonly IReportSender _sender;
+    private readonly Func<ServerReport, CancellationToken, Task<ReportSendResult>> _send;
     private readonly RateLimiter _rate;
     private readonly Func<DateTimeOffset> _clock;
     private readonly string _hostname;
     private readonly ILogger? _logger;
 
-    public TrayApi(int port, ProbeStatus status, PendingReports pending, IReportSender sender,
+    public TrayApi(int port, ProbeStatus status, PendingReports pending,
+        Func<ServerReport, CancellationToken, Task<ReportSendResult>> send,
         RateLimiter? rate = null, Func<DateTimeOffset>? clock = null, string? hostname = null, ILogger? logger = null)
     {
         _port = port;
         _status = status;
         _pending = pending;
-        _sender = sender;
+        _send = send;
         _rate = rate ?? new RateLimiter(ReportsPerHour, TimeSpan.FromHours(1));
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _hostname = hostname ?? Environment.MachineName;
@@ -105,20 +106,11 @@ public sealed class TrayApi
                 return Status();
             case ReportPath when request.Method == "POST":
                 return await ReportAsync(request.Body, ct).ConfigureAwait(false);
-            case StatusPath:
-                return MethodNotAllowed("GET");
-            case ReportPath:
-                return MethodNotAllowed("POST");
+            case StatusPath or ReportPath:
+                return TrayHttpResponse.Error(405, "Methode nicht erlaubt.");
             default:
                 return TrayHttpResponse.Error(404, "Unbekannte Adresse.");
         }
-    }
-
-    private static TrayHttpResponse MethodNotAllowed(string allow)
-    {
-        var response = TrayHttpResponse.Error(405, "Methode nicht erlaubt.");
-        response.Headers["Allow"] = allow;
-        return response;
     }
 
     public TrayStatusResponse BuildStatus()
@@ -134,7 +126,7 @@ public sealed class TrayApi
             Version = AppInfo.Version,
             Enrolled = _status.Enrolled,
             Connected = _status.IsConnected(now),
-            LastContact = _status.LastContact?.ToUnixTimeSeconds() ?? 0,
+            LastContact = _status.LastContact,
             PendingReports = _pending.Count,
         };
     }
@@ -166,7 +158,7 @@ public sealed class TrayApi
             timeout.CancelAfter(ImmediateSendTimeout);
             try
             {
-                result = await _sender.SendAsync(report, timeout.Token).ConfigureAwait(false);
+                result = await _send(report, timeout.Token).ConfigureAwait(false);
             }
             catch (Exception ex)
             {

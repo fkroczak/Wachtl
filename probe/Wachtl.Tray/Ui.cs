@@ -1,4 +1,3 @@
-using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -130,17 +129,5 @@ namespace Wachtl.Tray
 
         public static void Error(IWin32Window owner, string message) =>
             MessageBox.Show(owner, message, "Wachtl – Problem melden", MessageBoxButtons.OK, MessageBoxIcon.Error);
-
-        public static string Safe(Func<string> f)
-        {
-            try
-            {
-                return f();
-            }
-            catch (Exception)
-            {
-                return string.Empty;
-            }
-        }
     }
 }
