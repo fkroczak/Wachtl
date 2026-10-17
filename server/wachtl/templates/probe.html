@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ probe.hostname }}{% endblock %}
 {% from "_forms.html" import field %}
+{% from "_reports.html" import report_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
@@ -155,6 +156,12 @@
   <button class="primary">Speichern</button>
 </form>
 {% endif %}
+
+<h2 id="meldungen">Störungsmeldungen</h2>
+{% if reports %}
+<p class="muted">Was Benutzer an diesem PC gemeldet haben. <a href="{{ url_for('web.reports_view', status='all', probe=probe.id) }}">Alle Meldungen dieser Probe</a></p>
+{{ report_table(reports, show_probe=False) }}
+{% else %}<p class="muted">Von diesem PC gibt es keine Meldungen.</p>{% endif %}
 
 <h2>Letzte Alarme</h2>
 {% if alerts %}

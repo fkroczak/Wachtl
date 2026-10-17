@@ -284,6 +284,7 @@ def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, hi
     ex("DELETE FROM ingest_batches WHERE received_at < ?", (ts - ingest_days * 86400,))
     ex("DELETE FROM audit_log WHERE ts < ?", (ts - audit_days * 86400,))
     ex("DELETE FROM alert_events WHERE status = 'resolved' AND ends_at < ?", (ts - alert_days * 86400,))
+    ex("DELETE FROM incident_reports WHERE occurred_at < ?", (ts - alert_days * 86400,))
 
 
 def probe_setup_file(probe_dir: str) -> "Path | None":

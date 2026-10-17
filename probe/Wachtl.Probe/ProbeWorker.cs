@@ -5,6 +5,7 @@ using Wachtl.Probe.Buffer;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
 using Wachtl.Probe.Transport;
+using Wachtl.Probe.Tray;
 
 namespace Wachtl.Probe;
 
@@ -21,6 +22,7 @@ public sealed class ProbeWorker : BackgroundService
     private readonly ILogger<ProbeWorker> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly GatewayResolver _gateway;
+    private readonly ProbeStatus _status;
     private readonly Dictionary<string, IAsyncDisposable> _runners = new();
     private IperfServerHost? _iperfServer;
     private readonly SemaphoreSlim _configChanged = new(0, 1);
@@ -32,11 +34,12 @@ public sealed class ProbeWorker : BackgroundService
     private ApiClient? _api;
     private SampleBuffer? _buffer;
 
-    public ProbeWorker(ILogger<ProbeWorker> logger, ILoggerFactory loggerFactory, GatewayResolver gateway)
+    public ProbeWorker(ILogger<ProbeWorker> logger, ILoggerFactory loggerFactory, GatewayResolver gateway, ProbeStatus status)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
         _gateway = gateway;
+        _status = status;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -60,6 +63,7 @@ public sealed class ProbeWorker : BackgroundService
         }
 
         _api = new ApiClient(new Uri(_state.ServerUrl), _state.SpkiPin, _state.Proxy, token);
+        _status.Attach(_state, _api);
         _buffer = new SampleBuffer(StateStore.BufferPath, _loggerFactory.CreateLogger<SampleBuffer>());
         _logger.LogInformation("Probe {Id} am Standort {Site}, Server {Server}, Puffer {Count} Werte",
             _state.ProbeId, _state.SiteName, _state.ServerUrl, _buffer.Count());
@@ -84,6 +88,7 @@ public sealed class ProbeWorker : BackgroundService
         finally
         {
             await StopRunnersAsync().ConfigureAwait(false);
+            _status.Detach();
             _api.Dispose();
             _logger.LogInformation("Wachtl-Probe beendet");
         }
@@ -97,6 +102,7 @@ public sealed class ProbeWorker : BackgroundService
             try
             {
                 var fresh = await _api!.GetConfigAsync(_config?.Etag, ct).ConfigureAwait(false);
+                _status.MarkContact();
                 if (fresh is not null)
                 {
                     ApplyConfig(fresh);
@@ -287,6 +293,7 @@ public sealed class ProbeWorker : BackgroundService
             switch (outcome)
             {
                 case IngestOutcome.Delivered:
+                    _status.MarkContact();
                     _buffer.DeleteThrough(batch[0].Id, batch[^1].Id);
                     break;
                 case IngestOutcome.Unauthorized:
@@ -323,6 +330,7 @@ public sealed class ProbeWorker : BackgroundService
                     UptimeS = (long)(DateTimeOffset.UtcNow - _started).TotalSeconds,
                     Addresses = GatewayResolver.LocalAddresses(),
                 }, ct).ConfigureAwait(false);
+                _status.MarkContact();
 
                 if (response.Commands.Count > 0)
                 {

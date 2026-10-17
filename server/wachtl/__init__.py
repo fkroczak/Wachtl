@@ -64,6 +64,7 @@ def create_app(overrides: dict | None = None) -> Flask:
     app.register_blueprint(api_probe.bp)
     app.register_blueprint(api_probe.internal)
     app.register_blueprint(api_admin.bp)
+    app.register_blueprint(api_admin.reports_bp)
     app.register_blueprint(web.bp)
     cli.register(app)
 

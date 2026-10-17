@@ -6,6 +6,7 @@ using Wachtl.Probe;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
 using Wachtl.Probe.Logging;
+using Wachtl.Probe.Tray;
 
 if (Cli.IsCommand(args))
 {
@@ -27,7 +28,9 @@ if (!WindowsServiceHelpers.IsWindowsService())
 }
 
 builder.Services.AddSingleton<GatewayResolver>();
+builder.Services.AddSingleton<ProbeStatus>();
 builder.Services.AddHostedService<ProbeWorker>();
+builder.Services.AddHostedService<TrayEndpoint>();
 
 await builder.Build().RunAsync();
 return 0;

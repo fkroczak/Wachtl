@@ -188,6 +188,14 @@ class PageSemanticsTest(AppTestCase):
             {"status": "firing", "fingerprint": "f2", "startsAt": "2026-10-16T08:00:00Z",
              "labels": {"alertname": "WachtlPacketLoss", "severity": "warning", "probe": str(pid)},
              "annotations": {"summary": "Paketverlust"}}]})
+        auth = {"Authorization": f"Bearer {self.probe['token']}"}
+        for i, (cat, desc) in enumerate((("slow", "Teams-Call ruckelt <b>stark</b>"), ("no_connection", ""))):
+            r = self.client.post("/api/probe/v1/report", headers=auth, json={
+                "report_id": f"00000000-0000-4000-8000-00000000000{i}", "occurred_at": now - 600 * (i + 1),
+                "category": cat, "duration": "minutes", "description": desc, "user": "KUNDE\\mmuster"})
+            self.assertEqual(r.status_code, 201, r.get_json())
+        self.client.post("/meldungen/2/status", data={"csrf_token": self.session_csrf(), "action": "done",
+                                                        "note": "Router neu gestartet"})
         live = {(str(pid), "1"): {"up": 1, "rtt": 0.4, "loss": 0}, (str(pid), "2"): {"up": 0, "rtt": None, "loss": 100}}
         for target, value in (("wachtl.services.vm.live_status", live), ("wachtl.services.vm.hop_table", {})):
             p = mock.patch(target, return_value=value)
@@ -198,7 +206,8 @@ class PageSemanticsTest(AppTestCase):
         pid = self.probe["probe_id"]
         return ["/", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
-                "/admin", "/admin/audit", "/account"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
+                "/admin", "/admin/audit", "/account", "/meldungen", "/meldungen?status=all",
+                f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
 
     def test_all_pages_pass_lint(self):
         failures = {}
@@ -270,10 +279,10 @@ PAIRS = [
     ("--ok", "--surface", 4.5), ("--warn", "--surface", 4.5), ("--bad", "--surface", 4.5), ("--bad", "--bg", 4.5),
     ("--accent", "--accent-soft", 4.5), ("--text-muted", "--accent-soft", 4.5),
     ("--field-border", "--surface", 3.0), ("--off", "--surface", 3.0), ("--focus", "--bg", 3.0),
-    ("--focus", "--surface", 3.0),
+    ("--focus", "--surface", 3.0), ("--report", "--surface", 4.5), ("--report", "--bg", 4.5),
 ]
 # Badges: Schrift auf 12 % der eigenen Farbe über --surface (siehe .badge.* in app.css)
-BADGES = [("--bad", 0.12), ("--warn", 0.12)]
+BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]
 
 
 def _tokens(block: str) -> dict[str, str]:

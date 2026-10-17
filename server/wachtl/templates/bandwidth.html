@@ -37,7 +37,7 @@
   {% endfor %}
 </section>
 
-<div class="legend small"><span class="lg-down"></span> Download <span class="lg-up"></span> Upload <span class="lg-thr"></span> Alarmschwelle</div>
+<div class="legend small"><span class="lg-down"></span> Download <span class="lg-up"></span> Upload <span class="lg-thr"></span> Alarmschwelle{% if chart.reports %} <span class="lg-report"></span> Störungsmeldung{% endif %}</div>
 <div id="bw-chart" class="chart chart-small"></div>
 <script type="application/json" id="bw-data">{{ chart|tojson }}</script>
 

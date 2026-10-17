@@ -23,9 +23,13 @@ public sealed class ApiException : Exception
         : base($"HTTP {(int)status}: {message}")
     {
         Status = status;
+        Detail = message;
     }
 
     public HttpStatusCode Status { get; }
+
+    /// <summary>Fehlertext des Servers ohne Statuscode-Präfix.</summary>
+    public string Detail { get; }
 
     public bool IsAuthError => Status is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden;
 }

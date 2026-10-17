@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ check.name }}{% if hop %} Hop {{ hop }}{% endif %} – {{ probe.hostname }}{% endblock %}
+{% from "_reports.html" import report_table with context %}
 {% block content %}
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
   {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
@@ -13,13 +14,16 @@
 {% set q = {} %}
 {% endif %}
 
+{% if at %}<p class="flash warn">Der Graph zeigt den Zeitraum um die Störungsmeldung vom {{ at|dt }}.
+  <a href="{{ request.path }}">Aktuellen Zeitraum zeigen</a></p>{% endif %}
 <div id="chart-panel" data-series-url="{{ url_for('api_admin.series', probe_id=probe.id, check_id=check.id, **q) }}"
-     data-stats-url="{{ url_for('api_admin.stats', probe_id=probe.id, check_id=check.id, **q) }}">
+     data-stats-url="{{ url_for('api_admin.stats', probe_id=probe.id, check_id=check.id, **q) }}"
+     data-reports-url="{{ url_for('api_reports.reports', probe_id=probe.id) }}"{% if at %} data-at="{{ at }}"{% endif %}>
   <div class="range-buttons">
     {% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}" aria-pressed="{{ 'true' if r == '1h' else 'false' }}">{{ r }}</button>{% endfor %}
     <span id="chart-source" class="muted small"></span>
   </div>
-  <div class="legend small"><span class="lg-avg"></span> Durchschnitt <span class="lg-band"></span> Min–Max <span class="lg-jitter"></span> Jitter <span class="lg-loss"></span> Paketverlust</div>
+  <div class="legend small"><span class="lg-avg"></span> Durchschnitt <span class="lg-band"></span> Min–Max <span class="lg-jitter"></span> Jitter <span class="lg-loss"></span> Paketverlust{% if chart_reports %} <span class="lg-report"></span> Störungsmeldung{% endif %}</div>
   <div id="chart" class="chart"></div>
   <p id="chart-error" class="flash error" hidden></p>
 </div>
@@ -37,4 +41,10 @@
   <li>Bis 6 Stunden zeigt die Tabelle Rohdaten im Sekundentakt. Bei längeren Zeiträumen zeigt sie Minutenwerte.</li>
   <li>Jitter: wie stark zwei Antwortzeiten nacheinander im Mittel schwanken.</li>
 </ul>
+
+{% if chart_reports %}
+<h2 id="meldungen">Störungsmeldungen dieser Probe</h2>
+<p class="muted">Im Graph als senkrechte Markierung zum gemeldeten Zeitpunkt. Die neuesten Meldungen der letzten 30 Tage:</p>
+{{ report_table(chart_reports, show_probe=False) }}
+{% endif %}
 {% endblock %}

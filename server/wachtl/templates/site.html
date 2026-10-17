@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ site.name }}{% endblock %}
+{% from "_reports.html" import report_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
@@ -41,4 +42,10 @@
 </table>
 </div>
 {% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
+
+<h2 id="meldungen">Störungsmeldungen</h2>
+{% if reports %}
+<p class="muted">Die neuesten Meldungen von Benutzern an diesem Standort. <a href="{{ url_for('web.reports_view', status='all', site=site.id) }}">Alle Meldungen dieses Standorts</a></p>
+{{ report_table(reports) }}
+{% else %}<p class="muted">Von diesem Standort gibt es keine Meldungen.</p>{% endif %}
 {% endblock %}

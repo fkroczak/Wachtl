@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Meldungen{% endblock %}
+{% block content %}
+<h1>Störungsmeldungen</h1>
+<p class="muted">Benutzer melden hier Netzprobleme über das Wachtl-Symbol neben der Uhr. Jede Meldung steht auch als Markierung im Graph der Probe.
+  So sieht man, ob Latenz, Verlust oder Bandbreite zu diesem Zeitpunkt auffällig waren.</p>
+
+<form method="get" class="row">
+  <label>Status <select name="status">{% for k, v in filters.items() %}<option value="{{ k }}" {{ 'selected' if k == status }}>{{ v }}</option>{% endfor %}</select></label>
+  <label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site_id == s.id }}>{{ s.name }}</option>{% endfor %}</select></label>
+  {% if probe_filter %}<input type="hidden" name="probe" value="{{ probe_filter.id }}">{% endif %}
+  <button>Anzeigen</button>
+</form>
+{% if probe_filter %}<p>Nur Meldungen von <strong>{{ probe_filter.hostname }}</strong>. <a href="{{ url_for('web.reports_view', status=status, site=site_id) }}">Alle PCs zeigen</a></p>{% endif %}
+
+<p class="muted" role="status">{{ total }} {{ 'Meldung' if total == 1 else 'Meldungen' }} ({{ filters[status] }}){% if pages > 1 %} · Seite {{ page }} von {{ pages }}{% endif %}</p>
+
+{% set back = url_for('web.reports_view', page=page, **args) %}
+<div class="scroll">
+<table class="reports">
+  <thead><tr><th>Störung</th><th>Eingang</th><th>PC / Probe</th><th>Standort</th><th>Benutzer</th><th>Art</th><th>Dauer</th><th>Beschreibung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+  <tbody>{% for r in items %}
+    {% set what = r.category_label ~ ', ' ~ r.probe_label ~ ', ' ~ (r.occurred_at|dt) %}
+    <tr class="{{ 'report-open-row' if r.status == 'open' }}">
+      <td class="nowrap">{{ r.occurred_at|dt }}</td>
+      <td class="nowrap">{{ r.received_at|dt }}</td>
+      <td>{% if r.probe_id %}<a href="{{ url_for('web.probe', probe_id=r.probe_id) }}">{{ r.probe_label }}</a>{% else %}{{ r.probe_label }}{% endif %}
+        {% if r.hostname and r.probe_name and r.hostname != r.probe_name %}<br><span class="muted small">{{ r.hostname }}</span>{% endif %}</td>
+      <td>{% if r.site_id %}<a href="{{ url_for('web.site', site_id=r.site_id) }}">{{ r.site_name }}</a>{% else %}–{% endif %}</td>
+      <td>{{ r.reported_user or '–' }}</td>
+      <td>{{ r.category_label }}</td>
+      <td>{{ r.duration_label }}</td>
+      <td class="report-text">{{ r.description or '–' }}</td>
+      <td>
+        <span class="badge {{ 'report-open' if r.status == 'open' else 'info' }}">{{ r.status_label }}</span>
+        {% if r.status == 'done' %}<br><span class="muted small">{{ r.done_by or '–' }}, {{ r.done_at|dt }}</span>
+          {% if r.done_note %}<br><span class="small">{{ r.done_note }}</span>{% endif %}{% endif %}
+      </td>
+      <td>
+        {% set g = report_graph_url(r) %}{% if g %}<a href="{{ g }}" aria-label="Graph zur Meldung: {{ what }}">Graph</a>{% endif %}
+        {% if has_role(user, 'operator') %}
+        <form method="post" action="{{ url_for('web.report_status', report_id=r.id) }}" class="ack report-action">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ back }}">
+          {% if r.status == 'open' %}
+          <input name="note" maxlength="500" aria-label="Notiz (Meldung: {{ what }})" placeholder="Notiz (optional)">
+          <button name="action" value="done" aria-label="Erledigt: {{ what }}">Erledigt</button>
+          {% else %}
+          <button name="action" value="open" aria-label="Wieder öffnen: {{ what }}">Wieder öffnen</button>
+          {% endif %}
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% else %}<tr><td colspan="10" class="muted">Keine Meldungen für diese Auswahl.</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+
+{% if pages > 1 %}
+<nav class="pager" aria-label="Seiten">
+  {% if page > 1 %}<a class="button" href="{{ url_for('web.reports_view', page=page - 1, **args) }}">Neuere Meldungen</a>{% endif %}
+  {% if page < pages %}<a class="button" href="{{ url_for('web.reports_view', page=page + 1, **args) }}">Ältere Meldungen</a>{% endif %}
+</nav>
+{% endif %}
+<p class="muted small">„Störung“ ist der Zeitpunkt, den der Benutzer angegeben hat. „Eingang“ ist der Zeitpunkt, zu dem die Meldung beim Server ankam. Ohne Netz liefert der PC die Meldung später nach.</p>
+{% endblock %}

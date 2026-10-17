@@ -206,6 +206,17 @@
       if (v > 0) el("rect", { x: x(t) - bw / 2, y: yl(v), width: bw, height: lossTop + lossH - yl(v), class: "c-loss" }, svg);
     }
 
+    // Störungsmeldungen: senkrechte Markierung mit Dreieck zum gemeldeten Zeitpunkt
+    const marks = [];
+    for (const r of data.reports || []) {
+      const t = r.ts * 1000;
+      if (t < t0 || t > t1) continue;
+      const g = el("g", {}, svg);
+      drawReportMark(el, g, x(t), pad.t, lossTop + lossH);
+      marks.push({ x: x(t), r });
+    }
+    if (marks.length) svg.setAttribute("aria-label", svg.getAttribute("aria-label") + reportAria(marks.length));
+
     // Tooltip
     const cursor = el("line", { y1: pad.t, y2: lossTop + lossH, class: "c-cursor", visibility: "hidden" }, svg);
     const lookup = (key, t) => s[key].find((p) => p[0] === t)?.[1] ?? null;
@@ -232,9 +243,18 @@
         row.textContent = v ? `${k}: ${v}` : k;
         tip.appendChild(row);
       }
+      for (const m of marks.filter((m) => Math.abs(m.x - px) <= 8)) {
+        reportLines(m.r).forEach((line, i) => {
+          const row = document.createElement("div");
+          row.textContent = line;
+          if (i === 0) row.className = "tip-report";
+          tip.appendChild(row);
+        });
+      }
       tip.hidden = false;
       const left = x(best) + 12;
-      tip.style.left = (left + 190 > W ? x(best) - 200 : left) + "px";
+      const tw = tip.offsetWidth || 190;
+      tip.style.left = Math.max(0, left + tw > W ? x(best) - tw - 10 : left) + "px";
       tip.style.top = pad.t + 4 + "px";
     });
     svg.addEventListener("mouseleave", () => {
@@ -249,12 +269,34 @@
   window.addEventListener("resize", () => lastData && render(lastData));
 
 
+  // ?at=<Unix-Sekunden>: Fenster um eine Störungsmeldung herum statt bis jetzt
+  const RANGE_S = { "1h": 3600, "6h": 21600, "24h": 86400, "7d": 604800, "30d": 2592000 };
+  const at = parseInt(panel.dataset.at || "", 10) || null;
+
+  async function loadReports(from, to) {
+    if (!panel.dataset.reportsUrl || !from || !to) return [];
+    try {
+      const url = new URL(panel.dataset.reportsUrl, window.location.href);
+      url.searchParams.set("from", from);
+      url.searchParams.set("to", to);
+      return (await getJSON(url.toString())).reports || [];
+    } catch (e) {
+      return [];   // Markierungen sind Zusatz – der Graph erscheint auch ohne
+    }
+  }
+
   async function loadSeries(range) {
     errorBox.hidden = true;
     try {
       const url = new URL(panel.dataset.seriesUrl, window.location.href);
       url.searchParams.set("range", range);
-      render(await getJSON(url.toString()));
+      const span = RANGE_S[range] || 3600;
+      const now = Math.floor(Date.now() / 1000);
+      if (at) url.searchParams.set("end", Math.min(now, at + Math.floor(span / 2)));
+      const data = await getJSON(url.toString());
+      const end = data.end || (at ? Math.min(now, at + Math.floor(span / 2)) : now);
+      data.reports = await loadReports(data.start || end - span, end);
+      render(data);
     } catch (e) {
       errorBox.textContent = "Graph konnte nicht geladen werden: " + e.message;
       errorBox.hidden = false;
@@ -293,9 +335,29 @@
   loadStats();
   setInterval(() => {
     if (document.hidden) return;
-    if (current === "1h" || current === "6h") loadSeries(current);
+    if (!at && (current === "1h" || current === "6h")) loadSeries(current);
     loadStats();
   }, 30000);
+
+  function reportAria(n) {
+    return ` ${n === 1 ? "Eine Störungsmeldung ist" : n + " Störungsmeldungen sind"} als senkrechte Linie markiert.`;
+  }
+
+  // Störungsmeldung als senkrechte, gestrichelte Linie mit Dreieck oben (beide Graph-Arten)
+  function drawReportMark(mk, g, xx, top, bottom) {
+    mk("line", { x1: xx, x2: xx, y1: top, y2: bottom, class: "c-report" }, g);
+    mk("line", { x1: xx, x2: xx, y1: top - 12, y2: bottom, class: "c-report-hit" }, g);
+    mk("polygon", { points: `${xx - 5},${top - 12} ${xx + 5},${top - 12} ${xx},${top - 3}`, class: "c-report-mark" }, g);
+  }
+
+  // Zeilen für Tooltip bzw. SVG-Titel einer Meldung
+  function reportLines(r) {
+    const when = new Date(r.ts * 1000).toLocaleString("de-DE");
+    const lines = ["Störungsmeldung" + (r.status === "done" ? " (erledigt)" : ""), r.category_label,
+      `${r.user || "Benutzer unbekannt"} · ${r.probe}`, when + (r.duration_label ? " · " + r.duration_label : "")];
+    if (r.description) lines.push(r.description.length > 160 ? r.description.slice(0, 157) + " …" : r.description);
+    return lines;
+  }
 
   // Bandbreiten-Graph: Punkte und Linien für Download/Upload, Schwellwerte gestrichelt
   function renderBandwidth(data, host) {
@@ -340,6 +402,16 @@
           .textContent = d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) +
             (span <= 2 * 86400000 ? " " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "");
       }
+      let shown = 0;
+      for (const r of data.reports || []) {
+        const t = r.ts * 1000;
+        if (t < t0 || t > t1) continue;
+        const g = mk("g", {}, svg);
+        drawReportMark(mk, g, x(t), pad.t, H - pad.b);
+        mk("title", {}, g).textContent = reportLines(r).join("\n");
+        shown++;
+      }
+      if (shown) svg.setAttribute("aria-label", svg.getAttribute("aria-label") + reportAria(shown));
       for (const [key, min] of [["down", data.min_down], ["up", data.min_up]]) {
         if (min > 0) mk("line", { x1: pad.l, x2: W - pad.r, y1: y(min), y2: y(min), class: `c-thr c-${key}` }, svg);
         const pts = data[key];

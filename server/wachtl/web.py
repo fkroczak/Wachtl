@@ -16,6 +16,7 @@ from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
 from . import checktypes, standardpaket
+from . import reports as report_service
 from .services import alertgen
 from .services import alerts as alert_service
 from .services import checkstatus, notify, outages, pathanalysis, vm
@@ -28,15 +29,31 @@ bp = Blueprint("web", __name__)
 # -- Template-Hilfen ---------------------------------------------------------
 @bp.app_context_processor
 def inject():
+    user = current_user()
     return {
-        "user": current_user(),
+        "user": user,
+        "open_reports": _open_reports() if user else 0,
         "csrf_token": csrf_token,
         "has_role": has_role,
         "ROLE_LABELS": ROLE_LABELS,
         "CHECK_ROLES": repo.CHECK_ROLES,
         "probe_online": repo.probe_online,
         "check_url": check_url,
+        "report_graph_url": report_graph_url,
     }
+
+
+def _open_reports() -> int:
+    """Zahl der offenen Störungsmeldungen für die Navigation (einmal je Request)."""
+    from flask import g
+
+    if "open_reports" not in g:
+        try:
+            g.open_reports = report_service.count("open")
+        except Exception:  # Navigation darf nie an der Zählung scheitern (z. B. Fehlerseite vor der Migration)
+            log.exception("Offene Meldungen nicht zählbar")
+            g.open_reports = 0
+    return g.open_reports
 
 
 def check_url(probe: dict, check: dict) -> str:
@@ -220,10 +237,13 @@ def overview():
         bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.SCHEDULED_TYPES]
     problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
+    since = repo.now() - 7 * 86400
+    recent_reports = report_service.search("open", since=since, limit=5)
     return render_template(
         "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
         alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth,
-        KIND_LABELS=checkstatus.KIND_LABELS,
+        KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
+        recent_reports_total=report_service.count("open", since=since) if recent_reports else 0,
     )
 
 
@@ -249,6 +269,7 @@ def site(site_id: int):
         "site.html", site=s, probes=probes,
         checks=sorted(all_checks.values(), key=lambda c: (order.get(c["type"], 9), c["id"])),
         matrix=matrix, live_ok=live_ok, KIND_LABELS=checkstatus.KIND_LABELS,
+        reports=report_service.search(site_id=site_id, limit=10),
     )
 
 
@@ -298,6 +319,7 @@ def probe(probe_id: int):
         live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
         default_iperf_port=measure["probe_iperf_port"],
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
+        reports=report_service.search(probe_id=probe_id, limit=10),
     )
 
 
@@ -389,7 +411,7 @@ def hop_view(probe_id: int, check_id: int, hop: int):
              (probe_id, check_id))
     ip = next((h["ip"] for h in json.loads(run["hops"]) if h["hop"] == hop), None) if run else None
     return render_template("target.html", probe=p, check=c, hop=hop, hop_ip=ip, ranges=list(vm.RANGES),
-                           windows=vm.STAT_WINDOWS)
+                           windows=vm.STAT_WINDOWS, **_chart_reports(probe_id))
 
 
 BW_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
@@ -418,6 +440,7 @@ def bandwidth_view(probe_id: int, check_id: int):
         "up": [[r["ts"] * 1000, r["mbps"]] for r in reversed(runs) if r["direction"] == "up" and r["mbps"] is not None],
         "min_down": params.get("min_down_mbps") or 0, "min_up": params.get("min_up_mbps") or 0,
         "start": since * 1000, "end": repo.now() * 1000,
+        "reports": report_service.for_chart(since, repo.now(), probe_id),   # ts in Sekunden wie /api/reports
     }
     pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
                  (probe_id, check_id))
@@ -447,6 +470,84 @@ def outages_view():
         sites=q("SELECT * FROM sites ORDER BY name"), range_key=range_key, ranges=list(OUTAGE_RANGES),
         site=site, cause=cause, show_all=show_all, min_s=min_s,
     )
+
+
+# -- Störungsmeldungen --------------------------------------------------------
+REPORTS_PER_PAGE = 50
+REPORT_FILTERS = {"open": "offen", "done": "erledigt", "all": "alle"}
+
+
+def report_graph_url(r: dict) -> str | None:
+    """Graph um den Zeitpunkt der Meldung: Ziel-Seite des wichtigsten Ping-Checks der Probe.
+
+    Reihenfolge: Internet-Referenz, Gateway, sonstiges Ziel – so sieht man sofort, ob die Leitung auffällig war.
+    """
+    from flask import g
+
+    if not r.get("probe_id"):
+        return None
+    cache = g.setdefault("report_graph_checks", {})
+    if r["probe_id"] not in cache:
+        probe = q1("SELECT * FROM probes WHERE id = ?", (r["probe_id"],))
+        pings = [c for c in repo.checks_for_probe(probe) if c["type"] == "ping"] if probe else []
+        order = {"reference": 0, "gateway": 1, "target": 2}
+        pings.sort(key=lambda c: (order.get(c["role"], 9), c["id"]))
+        cache[r["probe_id"]] = pings[0]["id"] if pings else None
+    check_id = cache[r["probe_id"]]
+    if check_id is None:
+        return url_for("web.probe", probe_id=r["probe_id"])
+    return url_for("web.target", probe_id=r["probe_id"], check_id=check_id, at=r["occurred_at"])
+
+
+def _int_param(name: str) -> int | None:
+    try:
+        return int(request.args.get(name, ""))
+    except ValueError:
+        return None
+
+
+@bp.get("/meldungen")
+@login_required()
+def reports_view():
+    status = request.args.get("status", "open")
+    if status not in REPORT_FILTERS:
+        status = "open"
+    site_id = _int_param("site")
+    probe_id = _int_param("probe")
+    page = max(_int_param("page") or 1, 1)
+    sel = None if status == "all" else status
+    total = report_service.count(sel, site_id, probe_id)
+    pages = max((total + REPORTS_PER_PAGE - 1) // REPORTS_PER_PAGE, 1)
+    page = min(page, pages)
+    items = report_service.search(sel, site_id, probe_id, limit=REPORTS_PER_PAGE, offset=(page - 1) * REPORTS_PER_PAGE)
+    probe_filter = q1("SELECT id, hostname FROM probes WHERE id = ?", (probe_id,)) if probe_id else None
+    args = {k: v for k, v in (("status", status), ("site", site_id), ("probe", probe_id)) if v is not None}
+    return render_template(
+        "reports.html", items=items, status=status, filters=REPORT_FILTERS, site_id=site_id, probe_id=probe_id,
+        probe_filter=probe_filter, sites=q("SELECT * FROM sites ORDER BY name"), total=total, page=page, pages=pages,
+        args=args,
+    )
+
+
+@bp.post("/meldungen/<int:report_id>/status")
+@login_required("operator")
+def report_status(report_id: int):
+    r = report_service.get(report_id) or abort(404)
+    action = request.form.get("action")
+    if action not in ("done", "open"):
+        abort(400, "Unbekannte Aktion.")
+    user = current_user()["username"]
+    note = request.form.get("note", "")
+    report_service.set_status(r, action, user, note)
+    what = f"{r['category_label']}, {r['probe_label']}, {fmt_dt(r['occurred_at'])}"
+    if action == "done":
+        repo.audit(user, "report.done", f"report:{report_id}", what + (f" – Notiz: {note.strip()[:500]}" if note.strip() else ""))
+        flash(f"Meldung als erledigt markiert ({what}).", "ok")
+    else:
+        repo.audit(user, "report.reopen", f"report:{report_id}", what)
+        flash(f"Meldung wieder geöffnet ({what}).", "ok")
+    nxt = request.form.get("next", "")
+    return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.reports_view"))
 
 
 @bp.post("/probes/<int:probe_id>/status")
@@ -483,7 +584,20 @@ def target(probe_id: int, check_id: int):
     ) or abort(404)
     c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
     return render_template("target.html", probe=p, check=c, hop=None, hop_ip=None, ranges=list(vm.RANGES),
-                           windows=vm.STAT_WINDOWS)
+                           windows=vm.STAT_WINDOWS, **_chart_reports(probe_id))
+
+
+def _chart_reports(probe_id: int) -> dict:
+    """Zeitpunkt aus ?at= (Graph um eine Störungsmeldung herum) und die Meldungen der Probe der letzten 30 Tage."""
+    now = repo.now()
+    try:
+        at = int(request.args.get("at", ""))
+    except ValueError:
+        at = None
+    if at is not None and not now - 400 * 86400 <= at <= now + 300:
+        at = None
+    return {"at": at, "chart_reports": report_service.search(probe_id=probe_id, since=now - vm.RANGES["30d"],
+                                                              limit=10)}
 
 
 # -- Alarme ---------------------------------------------------------------
