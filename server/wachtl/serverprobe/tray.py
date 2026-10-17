@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import socket
 import threading
 import time
 import uuid
@@ -16,6 +18,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable
 
+from ..reports import CATEGORIES, DURATIONS, MAX_AGE_S, MAX_FUTURE_S
+
 log = logging.getLogger("wachtl.serverprobe.tray")
 
 DEFAULT_PORT = 47251
@@ -23,10 +27,6 @@ MAX_BODY = 16 * 1024
 RATE_LIMIT = 30                 # Meldungen je Stunde
 MAX_PENDING = 200
 PENDING_FILE = "reports-pending.json"
-CATEGORIES = ("no_connection", "slow", "dropouts", "voice_video", "application", "other")
-DURATIONS = ("unknown", "short", "minutes", "long", "ongoing")
-MAX_AGE_S = 7 * 86400
-MAX_FUTURE_S = 300
 
 
 class ReportRejected(Exception):
@@ -39,7 +39,7 @@ def validate(payload, now: float | None = None) -> dict:
         raise ValueError("Ungültige Meldung.")
     now = time.time() if now is None else now
     ts = payload.get("occurred_at")
-    if isinstance(ts, bool) or not isinstance(ts, (int, float)):
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)) or not math.isfinite(ts):
         raise ValueError("Zeitpunkt fehlt.")
     ts = int(ts)
     if ts < now - MAX_AGE_S:
@@ -95,20 +95,22 @@ class PendingReports:
             return len(self.load())
 
     def flush(self, send: Callable[[dict], None]) -> int:
-        """Versucht alle Meldungen zuzustellen; bricht beim ersten Netz-/Serverfehler ab. Liefert die Zahl offener."""
+        """Versucht alle Meldungen zuzustellen; bricht beim ersten Netz-/Serverfehler ab. Liefert die Zahl offener.
+
+        Gesendet wird ohne Sperre, damit Statusabfragen und neue Meldungen nicht auf den Server warten."""
+        done = set()
+        for report in self.load():
+            try:
+                send(report)
+            except ReportRejected as exc:
+                log.warning("Server lehnt gespeicherte Meldung %s ab: %s", report.get("report_id"), exc)
+            except Exception as exc:  # noqa: BLE001 – später erneut versuchen
+                log.debug("Meldung noch nicht zustellbar: %s", exc)
+                break
+            done.add(report.get("report_id"))
         with self.lock:
-            items = self.load()
-            remaining = list(items)
-            for report in items:
-                try:
-                    send(report)
-                except ReportRejected as exc:
-                    log.warning("Server lehnt gespeicherte Meldung %s ab: %s", report.get("report_id"), exc)
-                except Exception as exc:  # noqa: BLE001 – später erneut versuchen
-                    log.debug("Meldung noch nicht zustellbar: %s", exc)
-                    break
-                remaining.remove(report)
-            if remaining != items:
+            remaining = [r for r in self.load() if r.get("report_id") not in done]
+            if done:
                 self._save(remaining)
             return len(remaining)
 
@@ -152,7 +154,11 @@ class TrayService:
             return 400, {"error": str(exc) or "Der Server hat die Meldung abgelehnt."}
         except Exception as exc:  # noqa: BLE001 – Server nicht erreichbar: speichern und nachliefern
             log.info("Meldung gespeichert, Server nicht erreichbar: %s", exc)
-            self.pending.add(report)
+            try:
+                self.pending.add(report)
+            except OSError as err:
+                log.error("Meldung konnte nicht gespeichert werden: %s", err)
+                return 500, {"error": "Die Meldung konnte weder gesendet noch gespeichert werden."}
             return 202, {"ok": True, "delivered": False}
         log.info("Störungsmeldung %s (%s) an den Server übermittelt", report["report_id"], report["category"])
         return 202, {"ok": True, "delivered": True}
@@ -227,6 +233,17 @@ def make_handler(service: TrayService, port: int):
     return Handler
 
 
+class _LoopbackServer(ThreadingHTTPServer):
+    # Port exklusiv belegen: sonst könnte unter Windows das Programm eines anderen Benutzers mitlauschen
+    allow_reuse_address = False
+    daemon_threads = True
+
+    def server_bind(self):
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 class TrayEndpoint:
     def __init__(self, service: TrayService, port: int = DEFAULT_PORT):
         self.service, self.port = service, port
@@ -234,12 +251,11 @@ class TrayEndpoint:
 
     def start(self) -> bool:
         try:
-            self.httpd = ThreadingHTTPServer(("127.0.0.1", self.port), make_handler(self.service, self.port))
+            self.httpd = _LoopbackServer(("127.0.0.1", self.port), make_handler(self.service, self.port))
         except OSError as exc:
             log.warning("Tray-Endpunkt 127.0.0.1:%s nicht verfügbar (%s) – Störungsmeldungen über das Symbol aus",
                         self.port, exc)
             return False
-        self.httpd.daemon_threads = True
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="tray-endpoint").start()
         log.info("Tray-Endpunkt lauscht auf 127.0.0.1:%s", self.port)
         return True

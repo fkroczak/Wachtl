@@ -76,6 +76,8 @@ Root: HKLM; Subkey: "Software\Wachtl Server"; ValueType: string; ValueName: "Ver
 ; Tray-Symbol bei jeder Anmeldung (alle Benutzer); /NoTray lässt es weg
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Wachtl Server Tray"; ValueData: """{app}\wachtl-tray.exe"""; Flags: uninsdeletevalue; Check: TrayWanted
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Wachtl Server Tray"; Flags: deletevalue; Check: not TrayWanted
+Root: HKLM; Subkey: "Software\Wachtl Server"; ValueType: dword; ValueName: "NoTray"; ValueData: 1; Flags: uninsdeletekey; Check: not TrayWanted
+Root: HKLM; Subkey: "Software\Wachtl Server"; ValueName: "NoTray"; Flags: deletevalue; Check: TrayWanted
 
 [Run]
 Filename: "{code:GetUrl}"; Description: "Wachtl im Browser öffnen"; Flags: postinstall shellexec nowait skipifsilent; Check: SetupSucceeded
@@ -88,6 +90,7 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM wachtl-tray.exe"; Flags: run
 Filename: "{app}\python\python.exe"; Parameters: "-m wachtl.win.installer uninstall --result ""{commonappdata}\Wachtl Server Deinstallation.ini"""; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "WachtlUninstall"
 
 [UninstallDelete]
+Type: files; Name: "{app}\wachtl-tray.old"
 Type: filesandordirs; Name: "{app}\app"
 Type: filesandordirs; Name: "{app}\python"
 Type: filesandordirs; Name: "{app}\service"
@@ -249,14 +252,25 @@ begin
   Result := FileExists(ExpandConstant('{app}\wachtl-tray.exe'));
 end;
 
+var
+  TrayDecided, TrayOn: Boolean;
+
+{ Symbol ja/nein: /NoTray schaltet ab, /Tray wieder an; ohne Parameter bleibt die Wahl der letzten Installation }
 function TrayWanted(): Boolean;
 var
   I: Integer;
 begin
-  Result := TrayIncluded();
-  for I := 1 to ParamCount do
-    if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
-      Result := False;
+  if not TrayDecided then
+  begin
+    TrayOn := not RegValueExists(HKLM, 'Software\Wachtl Server', 'NoTray');
+    for I := 1 to ParamCount do
+      if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
+        TrayOn := False
+      else if CompareText(ParamStr(I), '/Tray') = 0 then
+        TrayOn := True;
+    TrayDecided := True;
+  end;
+  Result := TrayOn and TrayIncluded();
 end;
 
 { ---------- Assistent ---------- }
@@ -501,7 +515,9 @@ var
 begin
   { Laufenden Dienst vor dem Kopieren stoppen, sonst sind Dateien gesperrt }
   Exec(ExpandConstant('{sys}\net.exe'), 'stop WachtlServer', '', SW_HIDE, ewWaitUntilTerminated, Code);
-  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM wachtl-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  { Tray-Symbole laufen weiter: laufende wachtl-tray.exe umbenennen statt beenden, die neue kommt daneben }
+  DeleteFile(ExpandConstant('{app}\wachtl-tray.old'));
+  RenameFile(ExpandConstant('{app}\wachtl-tray.exe'), ExpandConstant('{app}\wachtl-tray.old'));
   Result := '';
 end;
 

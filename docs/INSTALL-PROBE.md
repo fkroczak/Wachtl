@@ -42,7 +42,7 @@ Ohne `/Pin` wird unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen)
 aktualisiert ein unbeaufsichtigter Lauf nur das Programm. Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
 `WachtlProbeSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
 
-`/NoTray` lässt das Tray-Symbol weg (kein Autostart-Eintrag). Unbeaufsichtigt per Softwareverteilung läuft das Setup
+`/NoTray` lässt das Tray-Symbol weg (kein Autostart-Eintrag); spätere Updates behalten das bei, `/Tray` schaltet es wieder ein. Unbeaufsichtigt per Softwareverteilung läuft das Setup
 meist als SYSTEM – das Symbol erscheint dann bei der nächsten Anmeldung der Benutzer.
 
 ### Tray-Symbol: Problem melden

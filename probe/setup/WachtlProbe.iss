@@ -78,6 +78,8 @@ Name: "{group}\Wachtl – Problem melden"; Filename: "{app}\wachtl-tray.exe"; Pa
 ; Tray-Symbol bei jeder Anmeldung starten (alle Benutzer); Deinstallation entfernt den Eintrag
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Wachtl Tray"; ValueData: """{app}\wachtl-tray.exe"""; Flags: uninsdeletevalue; Check: TrayWanted
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Wachtl Tray"; Flags: deletevalue; Check: not TrayWanted
+Root: HKLM; Subkey: "Software\Wachtl Probe"; ValueType: dword; ValueName: "NoTray"; ValueData: 1; Flags: uninsdeletekey; Check: not TrayWanted
+Root: HKLM; Subkey: "Software\Wachtl Probe"; ValueName: "NoTray"; Flags: deletevalue; Check: TrayWanted
 
 [Run]
 Filename: "{code:GetServer}"; Description: "Wachtl-Dashboard im Browser öffnen"; Flags: postinstall shellexec nowait skipifsilent unchecked; Check: DashboardKnown
@@ -97,6 +99,7 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\wachtl-probe.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallProbe"
 
 [UninstallDelete]
+Type: files; Name: "{app}\wachtl-tray.old"
 ; Token (verschlüsselt) und zwischengespeicherte Konfiguration immer entfernen – auch wenn Puffer und Logs bleiben
 Type: files; Name: "{commonappdata}\Wachtl\state.json"
 Type: files; Name: "{commonappdata}\Wachtl\state.json.tmp"
@@ -198,14 +201,25 @@ begin
   Result := SetupOk and EnrollDone and (GetServer('') <> '');
 end;
 
+var
+  TrayDecided, TrayOn: Boolean;
+
+{ Symbol ja/nein: /NoTray schaltet ab, /Tray wieder an; ohne Parameter bleibt die Wahl der letzten Installation }
 function TrayWanted(): Boolean;
 var
   I: Integer;
 begin
-  Result := True;
-  for I := 1 to ParamCount do
-    if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
-      Result := False;
+  if not TrayDecided then
+  begin
+    TrayOn := not RegValueExists(HKLM, 'Software\Wachtl Probe', 'NoTray');
+    for I := 1 to ParamCount do
+      if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
+        TrayOn := False
+      else if CompareText(ParamStr(I), '/Tray') = 0 then
+        TrayOn := True;
+    TrayDecided := True;
+  end;
+  Result := TrayOn;
 end;
 
 { Symbol sofort für den angemeldeten Benutzer zeigen. Unbeaufsichtigt läuft das Setup meist als SYSTEM
@@ -216,12 +230,6 @@ var
 begin
   if TrayWanted() and SetupOk and not WizardSilent() then
     ExecAsOriginalUser(ExpandConstant('{app}\wachtl-tray.exe'), '', '', SW_SHOWNORMAL, ewNoWait, Code);
-end;
-
-{ laufende Tray-Symbole aller Benutzer beenden, damit wachtl-tray.exe ersetzt werden kann }
-procedure StopTray();
-begin
-  RunHidden(ExpandConstant('{sys}\taskkill.exe'), '/F /IM wachtl-tray.exe');
 end;
 
 function NotRunningFromApp(): Boolean;
@@ -468,7 +476,9 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   RunHidden(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
-  StopTray();
+  { Tray-Symbole laufen weiter: laufende wachtl-tray.exe umbenennen statt beenden, die neue kommt daneben }
+  DeleteFile(ExpandConstant('{app}\wachtl-tray.old'));
+  RenameFile(ExpandConstant('{app}\wachtl-tray.exe'), ExpandConstant('{app}\wachtl-tray.old'));
   Result := '';
 end;
 

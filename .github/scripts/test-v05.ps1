@@ -119,9 +119,7 @@ try {
     if ($page.Content -notmatch 'CI Meldung Probe') { throw 'Seite „Meldungen“ zeigt die Meldung nicht' }
     $summary.Add('Seite „Meldungen“ zeigt die Meldungen')
 
-    # Standard wiederherstellen (Port 47252 wird bei der Deinstallation geprüft)
-    Remove-ItemProperty $svcKey -Name Environment -ErrorAction SilentlyContinue
-    Restart-Service Wachtl
+    # Probe bleibt bis zur Deinstallation auf 47252 – test-uninstall.ps1 prüft, dass der Port danach zu ist
 }
 catch {
     foreach ($f in 'C:\WachtlData\logs\serverprobe.log', 'C:\WachtlData\logs\web.log') {

@@ -126,7 +126,8 @@ class ServerProbe:
 
     def send_report(self, report: dict) -> None:
         try:
-            self.api.report(report)
+            # kurzer Timeout: das Tray wartet nur 25 s, danach lieber puffern als doppelt melden lassen
+            Api(self.url, self.pin, self.api.token, timeout=10).report(report)
         except ApiError as exc:
             if exc.status == 400:
                 raise ReportRejected(str(exc).split(": ", 1)[-1]) from exc

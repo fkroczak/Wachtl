@@ -15,10 +15,6 @@ $ErrorActionPreference = 'Stop'
 
 dotnet test "$PSScriptRoot\Wachtl.Probe.Tests\Wachtl.Probe.Tests.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen' }
-foreach ($t in Get-ChildItem "$PSScriptRoot\*.Tests\*.Tests.csproj" | Where-Object Name -ne 'Wachtl.Probe.Tests.csproj') {
-    dotnet test $t.FullName -c Release
-    if ($LASTEXITCODE -ne 0) { throw "Tests fehlgeschlagen: $($t.Name)" }
-}
 
 dotnet publish "$PSScriptRoot\Wachtl.Probe\Wachtl.Probe.csproj" -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none `

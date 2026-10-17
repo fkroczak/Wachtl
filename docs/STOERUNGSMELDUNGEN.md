@@ -126,6 +126,9 @@ für die Graph-Markierungen:
 
 - **Probe-Setup** legt `wachtl-tray.exe` neben `wachtl-probe.exe`, trägt es unter
   `HKLM\Software\Microsoft\Windows\CurrentVersion\Run` (Wert `Wachtl Tray`) für alle Benutzer ein und startet es
-  nach der Installation für den angemeldeten Benutzer. Abschalten für alle: Setup-Parameter `/NoTray`.
+  nach der Installation für den angemeldeten Benutzer. Abschalten für alle: Setup-Parameter `/NoTray` – das Setup merkt
+  sich die Wahl auch für spätere Updates, `/Tray` schaltet das Symbol wieder ein.
 - **Server-Setup** genauso für den Server (Symbol mit „Dashboard öffnen“).
+- **Update** (auch unbeaufsichtigt) beendet laufende Symbole nicht: die alte `wachtl-tray.exe` wird umbenannt, die neue
+  gilt ab der nächsten Anmeldung.
 - **Deinstallation** beendet alle `wachtl-tray.exe`-Prozesse und entfernt den Autostart-Eintrag.

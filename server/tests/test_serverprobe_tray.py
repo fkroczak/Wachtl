@@ -23,6 +23,7 @@ def test_validate_bereinigt_und_prueft():
     assert validate(good(duration=None), NOW)["duration"] == "unknown"
     for bad, text in [(good(occurred_at=NOW - 8 * 86400), "7 Tage"), (good(occurred_at=NOW + 3600), "Zukunft"),
                       (good(occurred_at="jetzt"), "Zeitpunkt"), (good(occurred_at=True), "Zeitpunkt"),
+                      (good(occurred_at=float("inf")), "Zeitpunkt"),
                       (good(category="kaputt"), "passiert"), (good(duration="ewig"), "Dauer"), ([], "Ungültig")]:
         with pytest.raises(ValueError, match=text):
             validate(bad, NOW)
@@ -124,3 +125,17 @@ def test_http_schutz_gegen_browser(endpoint):
     status, _ = call(port, "POST", "/tray/v1/report", {"description": "x" * 20000, **good()})
     assert status == 400
     assert sent == []
+
+
+def test_port_exklusiv(endpoint, tmp_path):
+    port, _ = endpoint
+    second = TrayEndpoint(TrayService(dict, lambda r: None, PendingReports(tmp_path / "x.json"), "x"), port)
+    assert second.start() is False
+
+
+def test_puffer_nicht_schreibbar(tmp_path):
+    def offline(_):
+        raise OSError("weg")
+
+    (tmp_path / "p.json").mkdir()          # Datei kann nicht geschrieben werden
+    assert service(tmp_path, offline).report(good())[0] == 500
