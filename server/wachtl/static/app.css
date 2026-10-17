@@ -341,3 +341,4 @@ svg.spark { border-bottom: 1px solid var(--border); }
 p.spark { display: flex; align-items: center; }
 details > summary h2 { display: inline; }
 details > summary { cursor: pointer; margin: 1.6rem 0 0.6rem; }
+.excluded { margin: 0.5rem 0 1rem; }

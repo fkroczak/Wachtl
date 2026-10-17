@@ -41,8 +41,12 @@ class ProbeApiTest(AppTestCase):
         r = self.client.get("/api/probe/v1/config", headers=self.auth(data["token"]))
         self.assertEqual(r.status_code, 200)
         cfg = r.get_json()
-        self.assertEqual({c["target"] for c in cfg["checks"]}, {"gateway", "8.8.8.8", "1.1.1.1"})
-        self.assertTrue(all(c["interval_s"] == 1 for c in cfg["checks"]))
+        # Standard ab 0.8.3: Pings Gateway + 3 Referenzen, Traceroute ins Internet, Speedtest (ohne Server-Hostname
+        # in der Test-URL entfallen Ping und Traceroute zum Wachtl-Server)
+        self.assertEqual(sorted((c["type"], c["target"]) for c in cfg["checks"]), [
+            ("path", "1.1.1.1"), ("ping", "1.1.1.1"), ("ping", "8.8.8.8"), ("ping", "9.9.9.9"), ("ping", "gateway"),
+            ("speedtest", "speed.cloudflare.com")])
+        self.assertTrue(all(c["interval_s"] == 1 for c in cfg["checks"] if c["type"] == "ping"))
         r2 = self.client.get("/api/probe/v1/config", headers={**self.auth(data["token"]), "If-None-Match": r.headers["ETag"]})
         self.assertEqual(r2.status_code, 304)
 

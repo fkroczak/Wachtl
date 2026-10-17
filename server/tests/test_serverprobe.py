@@ -131,7 +131,7 @@ class ServerProbeEndToEndTest(AppTestCase):
                 self.assertEqual((self.state / STATE_FILE).stat().st_mode & 0o777, 0o600)
             types = sorted(c["type"] for c in probe.config["checks"])
             self.assertNotIn("iperf", types)                      # misst nicht gegen sich selbst
-            self.assertEqual(types, ["path", "ping", "ping", "ping", "speedtest"])
+            self.assertEqual(types, ["path", "path", "ping", "ping", "ping", "ping", "speedtest", "speedtest"])
             # Messwerte landen im Puffer und kommen durch den Ingest
             self.assertTrue(self.wait(lambda: len(probe.buffer) >= 6))
             self.assertTrue(probe.upload_pending())

@@ -1,6 +1,6 @@
 """Geführte Einrichtung: Standort, Messungen, Alarmierung und Token in einem Durchgang."""
 from wachtl import standardpaket
-from wachtl.db import q, q1
+from wachtl.db import ex, q, q1
 from wachtl.services import notify
 
 from .helpers import AppTestCase
@@ -49,6 +49,7 @@ class SetupWizardTest(AppTestCase):
 
     def test_vorhandener_standort_und_doppelter_name(self):
         sid = self.make_site("Lager")
+        ex("DELETE FROM checks WHERE type = 'speedtest'")  # Standard-Speedtest der Installation
         self.assertIn("gibt es schon", self.post(site_name="Lager").get_data(as_text=True))
         r = self.post(site_id=str(sid), site_name="", scope="site", items=["speedtest_wan"], max_uses="3")
         self.assertEqual(r.status_code, 200)

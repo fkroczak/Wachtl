@@ -76,9 +76,11 @@ def checks_for_probe(probe: dict) -> list[dict]:
           AND (a.scope = 'all'
                OR (a.scope = 'site' AND a.scope_id = ?)
                OR (a.scope = 'probe' AND a.scope_id = ?))
+          AND NOT EXISTS (SELECT 1 FROM check_assignments x
+                          WHERE x.check_id = c.id AND x.scope = 'exclude_probe' AND x.scope_id = ?)
         ORDER BY c.id
         """,
-        (probe["site_id"], probe["id"]),
+        (probe["site_id"], probe["id"], probe["id"]),
     )
     if probe.get("kind") == "server":
         rows = [c for c in rows if not is_server_iperf(c)]
@@ -201,7 +203,8 @@ def update_check(check_id: int, name: str, target: str, role: str, interval_s: i
         "WHERE id = ?",
         (name, target, role, interval_s, timeout_ms, json.dumps(params, sort_keys=True), now(), check_id),
     )
-    ex("DELETE FROM check_assignments WHERE check_id = ?", (check_id,))
+    # Ausnahmen einzelner Probes („für diese Probe entfernen“) bleiben beim Bearbeiten erhalten
+    ex("DELETE FROM check_assignments WHERE check_id = ? AND scope <> 'exclude_probe'", (check_id,))
     ins("INSERT INTO check_assignments (check_id, scope, scope_id) VALUES (?, ?, ?)", (check_id, scope, scope_id))
 
 
@@ -251,9 +254,18 @@ def seed_defaults() -> list[str]:
             )
             created.append(f"Alarmregel {kind}")
     if q1("SELECT id FROM checks LIMIT 1") is None:
-        for name, target, role in DEFAULT_CHECKS:
-            create_check(name, target, role, 1, 1000, "all", None)
-            created.append(f"Check {name}")
+        # Neue Installation: Standardpaket (Ping Gateway, drei Internet-Referenzen, Wachtl-Server, Traceroute
+        # ins Internet und zum Server, Speedtest) für alle Probes. iperf3 belastet das LAN und bleibt Wahl.
+        from flask import current_app
+
+        from . import standardpaket
+        keys = [i.key for i in standardpaket.ITEMS if i.key not in standardpaket.NOT_DEFAULT]
+        done, _skipped = standardpaket.apply(keys, "all", None, current_app.config.get("PUBLIC_URL", ""))
+        if not done:  # ohne App-Konfiguration: wenigstens Gateway und Internet
+            for name, target, role in DEFAULT_CHECKS:
+                create_check(name, target, role, 1, 1000, "all", None)
+                created.append(f"Check {name}")
+        created += [f"Check {item.name}" for _cid, item in done]
     return created
 
 
@@ -287,7 +299,39 @@ def scope_label(scope: str, scope_id, sites: dict, probes: dict) -> str:
         return "Alle Probes"
     if scope == "site":
         return f"Standort {sites.get(scope_id, {}).get('name', scope_id)}"
+    if scope == "exclude_probe":
+        return f"außer {probes.get(scope_id, {}).get('hostname', scope_id)}"
     return f"Probe {probes.get(scope_id, {}).get('hostname', scope_id)}"
+
+
+def remove_check_from_probe(check_id: int, probe: dict) -> str:
+    """Check bei einer Probe entfernen. Gilt er nur für sie, wird er gelöscht; sonst bekommt die Probe eine Ausnahme.
+
+    Gibt "deleted" oder "excluded" zurück.
+    """
+    scopes = [a for a in q("SELECT scope, scope_id FROM check_assignments WHERE check_id = ? AND scope <> 'exclude_probe'",
+                           (check_id,))]
+    only_this = scopes and all(a["scope"] == "probe" and a["scope_id"] == probe["id"] for a in scopes)
+    if only_this:
+        ex("DELETE FROM checks WHERE id = ?", (check_id,))
+        return "deleted"
+    if q1("SELECT id FROM check_assignments WHERE check_id = ? AND scope = 'probe' AND scope_id = ?",
+          (check_id, probe["id"])):
+        ex("DELETE FROM check_assignments WHERE check_id = ? AND scope = 'probe' AND scope_id = ?", (check_id, probe["id"]))
+    if not q1("SELECT id FROM check_assignments WHERE check_id = ? AND scope = 'exclude_probe' AND scope_id = ?",
+              (check_id, probe["id"])):
+        ins("INSERT INTO check_assignments (check_id, scope, scope_id) VALUES (?, 'exclude_probe', ?)",
+            (check_id, probe["id"]))
+    return "excluded"
+
+
+def excluded_checks(probe: dict) -> list[dict]:
+    """Checks, die für diese Probe entfernt wurden, aber noch für andere gelten (zum Wiederherstellen)."""
+    return q(
+        "SELECT c.id, c.name, c.type, c.target FROM checks c JOIN check_assignments x ON x.check_id = c.id "
+        "WHERE x.scope = 'exclude_probe' AND x.scope_id = ? ORDER BY c.name",
+        (probe["id"],),
+    )
 
 
 def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, history_days: int | None = None) -> None:

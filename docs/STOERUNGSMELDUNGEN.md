@@ -54,7 +54,7 @@ höchstens 30 Meldungen je Stunde und Benutzer und 300 je Rechner (sonst `429`).
   "site": "Zentrale",                   // Standort (leer, wenn unbekannt)
   "server_url": "https://wachtl.kunde.local",
   "dashboard_url": "https://wachtl.kunde.local",   // nur role=server, sonst ""
-  "version": "0.8.2",
+  "version": "0.8.3",
   "enrolled": true,
   "connected": true,                    // letzte Verbindung zum Server < 2 min her
   "last_contact": 1792230000,           // Unix-Sekunden, 0 = noch nie

@@ -54,7 +54,7 @@
   <span class="down-t">{{ state_counts.down }} gestört</span> · <span class="stale-t">{{ state_counts.stale }} ohne aktuelle Daten</span>
   {% if state_counts.waiting %} · {{ state_counts.waiting }} warten auf die erste Messung{% endif %}</p>
 <table>
-  <thead><tr><th>Zustand</th><th>Art</th><th>Check</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th></tr></thead>
+  <thead><tr><th>Zustand</th><th>Art</th><th>Check</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th>{% if has_role(user, 'admin') %}<th><span class="sr-only">Aktionen</span></th>{% endif %}</tr></thead>
   <tbody>{% for st in states %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
@@ -63,10 +63,26 @@
       <td>{{ check_target(st.check) }}</td>
       <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}</td>
       <td>{{ st.ts|ago if st.ts else '–' }}</td>
+      {% if has_role(user, 'admin') %}<td class="nowrap">
+        <form method="post" action="{{ url_for('web.probe_check_remove', probe_id=probe.id, check_id=st.check.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link danger" aria-label="Messung {{ st.check.name }} bei {{ probe.hostname }} entfernen"
+            data-confirm="Messung „{{ st.check.name }}“ bei {{ probe.hostname }} entfernen? Gilt sie auch für andere Probes, messen diese weiter.">Entfernen</button>
+        </form>
+      </td>{% endif %}
     </tr>
   {% endfor %}</tbody>
 </table>
 {% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
+
+{% if excluded_checks %}
+<div class="muted excluded">Für diese Probe entfernt:
+  {% for c in excluded_checks %}{{ ', ' if not loop.first }}{{ c.name }}{% if has_role(user, 'admin') %}
+  <form method="post" action="{{ url_for('web.probe_check_restore', probe_id=probe.id, check_id=c.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="link" aria-label="Messung {{ c.name }} bei {{ probe.hostname }} wieder aufnehmen">wieder aufnehmen</button>
+  </form>{% endif %}{% endfor %}</div>
+{% endif %}
 
 <h2>Dauerpings</h2>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}

@@ -31,6 +31,8 @@ def run(hostname: str, extra_loss: float) -> None:
     now = int(time.time())
     lines = []
     for c in checks:
+        if c["type"] != "ping":
+            continue  # Traceroute und Speedtest liefern keine Ping-Werte
         base, noise, loss = PROFILE.get(c["target"], (25.0, 3.0, 0.01))
         last = None
         for i, t in enumerate(range(now - int(HOURS * 3600), now, c["interval_s"])):

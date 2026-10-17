@@ -139,6 +139,7 @@ class StandardPackageTest(AppTestCase):
 
     def test_site_scope(self):
         site = self.make_site("Filiale")
+        ex("DELETE FROM checks WHERE type = 'speedtest'")  # Standard-Speedtest der Installation
         tok = self.session_csrf()
         self.client.post("/admin/standard-package", data={"csrf_token": tok, "scope": "site", "site_id": site,
                                                          "items": ["speedtest_wan"]})
@@ -192,7 +193,7 @@ class CheckStatusApiTest(AppTestCase):
         self.login("leser")
         with mock.patch("wachtl.services.vm.live_status", return_value={}):
             rows = self.client.get("/api/v1/check-status").get_json()
-        self.assertEqual({r["type"] for r in rows}, {"ping", "speedtest"})
+        self.assertEqual({r["type"] for r in rows}, {"ping", "path", "speedtest"})
         self.assertTrue(all(r["hostname"] == "PC-API" and r["online"] for r in rows))
         self.assertEqual({r["state"] for r in rows if r["type"] == "speedtest"}, {"waiting"})
         probes = self.client.get("/api/v1/probes").get_json()

@@ -3,6 +3,11 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.3
+
+- **Messungen ab Werk**: Eine neue Installation legt für alle Probes Ping auf Gateway, Cloudflare, Google und Quad9 (1 s), Ping auf den Wachtl-Server (5 s), Traceroute ins Internet und zum Server und einen Speedtest alle 6 Stunden an. iperf3 bleibt im Standardpaket wählbar. Bestehende Installationen behalten ihre Checks.
+- **Jede Messung einzeln entfernen**: Auf der Probe-Seite hat jede Messung den Knopf „Entfernen“. Gilt sie nur für diese Probe, wird sie gelöscht; gilt sie für mehrere, wird nur diese Probe ausgenommen („wieder aufnehmen“ macht es rückgängig, Verwaltung › Checks zeigt „außer PC-…“).
+
 ## Neu in 0.8.2
 
 - **Internet auf einen Blick im Tray-Menü**: Oben im Menü des Wachtl-Symbols stehen jetzt die aktuelle Antwortzeit ins Internet (bis zu drei Referenzen, mit Verlust der letzten Minute), der aktuelle Datenverkehr des PCs (↓ Download / ↑ Upload) und das Ergebnis des letzten Speedtests mit Uhrzeit. Solange das Menü offen ist, aktualisieren sich die Werte alle 2 s.
