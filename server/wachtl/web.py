@@ -32,7 +32,7 @@ def inject():
     user = current_user()
     return {
         "user": user,
-        "open_reports": _open_reports() if user else 0,
+        "open_reports": report_service.count("open") if user else 0,
         "csrf_token": csrf_token,
         "has_role": has_role,
         "ROLE_LABELS": ROLE_LABELS,
@@ -41,19 +41,6 @@ def inject():
         "check_url": check_url,
         "report_graph_url": report_graph_url,
     }
-
-
-def _open_reports() -> int:
-    """Zahl der offenen Störungsmeldungen für die Navigation (einmal je Request)."""
-    from flask import g
-
-    if "open_reports" not in g:
-        try:
-            g.open_reports = report_service.count("open")
-        except Exception:  # Navigation darf nie an der Zählung scheitern (z. B. Fehlerseite vor der Migration)
-            log.exception("Offene Meldungen nicht zählbar")
-            g.open_reports = 0
-    return g.open_reports
 
 
 def check_url(probe: dict, check: dict) -> str:

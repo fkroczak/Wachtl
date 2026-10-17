@@ -230,8 +230,7 @@ class ServerProbe:
                 })
                 self.last_contact = time.time()
                 self.handle_commands(resp.get("commands") or [])
-                if self.pending_reports.count():
-                    self.pending_reports.flush(self.send_report)
+                self.pending_reports.flush(self.send_report)
                 if resp.get("config_etag") != (self.config or {}).get("etag"):
                     self.config_changed.set()
             except (ApiError, OSError) as exc:

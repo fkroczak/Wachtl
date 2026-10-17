@@ -192,7 +192,6 @@ def ack(event_id: int):
 
 # -- Störungsmeldungen für die Graph-Markierungen (Pfad laut docs/STOERUNGSMELDUNGEN.md) ------
 reports_bp = Blueprint("api_reports", __name__, url_prefix="/api")
-REPORTS_MAX_SPAN_S = 400 * 86400
 
 
 def _int_arg(name: str, default: int | None = None) -> int | None:
@@ -214,5 +213,4 @@ def reports():
         return jsonify(error="from, to, probe_id und site_id müssen ganze Zahlen sein"), 400
     if since > until:
         return jsonify(error="from muss vor to liegen"), 400
-    since = max(since, until - REPORTS_MAX_SPAN_S)
     return jsonify(reports=report_service.for_chart(since, until, probe_id, site_id))

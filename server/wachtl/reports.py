@@ -30,7 +30,7 @@ STATUS_LABELS = {"open": "offen", "done": "erledigt"}
 MAX_AGE_S = 7 * 86400          # occurred_at höchstens 7 Tage alt …
 MAX_FUTURE_S = 300             # … und höchstens 5 Minuten in der Zukunft (Uhrabweichung)
 MAX_DESCRIPTION, MAX_USER, MAX_HOSTNAME, MAX_NOTE = 1000, 128, 255, 500
-REPORT_ID_RE = re.compile(r"^[A-Za-z0-9._:{}-]{1,128}$")
+REPORT_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 
@@ -79,30 +79,24 @@ def validate(data, now: int | None = None) -> dict:
 
 def store(probe: dict, values: dict) -> tuple[int, bool]:
     """Meldung speichern. Liefert (id, neu); dieselbe report_id derselben Probe wird nicht doppelt gespeichert."""
-    sql = "SELECT id FROM incident_reports WHERE probe_id = ? AND report_id = ?"
-    existing = q1(sql, (probe["id"], values["report_id"]))
+    existing = q1("SELECT id FROM incident_reports WHERE probe_id = ? AND report_id = ?",
+                  (probe["id"], values["report_id"]))
     if existing:
         return int(existing["id"]), False
-    try:
-        rid = ins(
-            "INSERT INTO incident_reports (probe_id, site_id, report_id, occurred_at, received_at, category, duration, "
-            "description, reported_user, hostname, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')",
-            (probe["id"], probe["site_id"], values["report_id"], values["occurred_at"], repo.now(),
-             values["category"], values["duration"], values["description"] or None, values["user"] or None,
-             values["hostname"] or probe["hostname"]),
-        )
-    except Exception:
-        # gleichzeitige Wiederholung derselben Meldung (UNIQUE probe_id, report_id)
-        existing = q1(sql, (probe["id"], values["report_id"]))
-        if existing:
-            return int(existing["id"]), False
-        raise
+    # Zwei gleichzeitige Zustellungen derselben Meldung scheitern am UNIQUE-Index (500); die Probe wiederholt dann.
+    rid = ins(
+        "INSERT INTO incident_reports (probe_id, site_id, report_id, occurred_at, received_at, category, duration, "
+        "description, reported_user, hostname, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')",
+        (probe["id"], probe["site_id"], values["report_id"], values["occurred_at"], repo.now(),
+         values["category"], values["duration"], values["description"] or None, values["user"] or None,
+         values["hostname"] or probe["hostname"]),
+    )
     return rid, True
 
 
 # -- Abfragen ----------------------------------------------------------------
 _SELECT = (
-    "SELECT r.*, p.hostname AS probe_name, p.site_id AS probe_site_id, s.name AS site_name "
+    "SELECT r.*, p.hostname AS probe_name, s.name AS site_name "
     "FROM incident_reports r LEFT JOIN probes p ON p.id = r.probe_id LEFT JOIN sites s ON s.id = r.site_id"
 )
 

@@ -11,6 +11,14 @@ from wachtl.db import ex, q, q1
 from .helpers import AppTestCase
 
 
+def enroll_at(case: AppTestCase, site_id: int, hostname: str, token: str) -> dict:
+    """Weitere Probe an einem vorhandenen Standort (helpers.enroll legt immer einen neuen an)."""
+    case.make_token(site_id, token=token)
+    r = case.client.post("/api/probe/v1/enroll", json={"enrollment_token": token, "hostname": hostname})
+    case.assertEqual(r.status_code, 201, r.get_json())
+    return r.get_json()
+
+
 class ReportApiTest(AppTestCase):
     def setUp(self):
         super().setUp()
@@ -52,7 +60,7 @@ class ReportApiTest(AppTestCase):
         self.assertEqual(first.get_json(), second.get_json())
         self.assertEqual(q1("SELECT COUNT(*) AS n FROM incident_reports")["n"], 1)
         # dieselbe report_id einer anderen Probe ist eine eigene Meldung
-        other = self.enroll("PC-02", token=self.make_token(1, token="tok-2"))
+        other = enroll_at(self, 1, "PC-02", "tok-2")
         r = self.post(data, headers={"Authorization": f"Bearer {other['token']}"})
         self.assertEqual(r.status_code, 201)
 
@@ -126,7 +134,7 @@ class ReportsJsonTest(AppTestCase):
         super().setUp()
         self.a = self.enroll("PC-A")
         site_b = self.make_site("Filiale")
-        self.b = self.enroll("PC-B", token=self.make_token(site_b, token="tok-b"))
+        self.b = enroll_at(self, site_b, "PC-B", "tok-b")
         self.now = repo.now()
         for probe, offset, cat in ((self.a, 3600, "slow"), (self.a, 60, "voice_video"), (self.b, 600, "other")):
             r = self.client.post("/api/probe/v1/report", headers={"Authorization": f"Bearer {probe['token']}"},

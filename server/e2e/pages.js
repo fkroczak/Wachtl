@@ -21,6 +21,7 @@ const PAGES = [
   ["Bandbreite", `/probes/${ids.probe}/bandwidth/${ids.wan_check}`],
   ["Alarme", "/alerts"],
   ["Ausfälle", "/outages"],
+  ["Meldungen", "/meldungen?status=all"],
   ["Verwaltung", "/admin"],
   ["Check-Formular Ping", "/admin/checks/new/ping"],
   ["Check-Formular iperf3", "/admin/checks/new/iperf"],
