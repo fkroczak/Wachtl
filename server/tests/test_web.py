@@ -181,7 +181,7 @@ class PrefilledSetupTest(AppTestCase):
         os.makedirs(self.probe_dir)
         with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
             f.write(b"MZ-alt")
-        with open(os.path.join(self.probe_dir, "WachtlSetup-0.8.2.exe"), "wb") as f:
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.8.3.exe"), "wb") as f:
             f.write(b"MZ" + b"x" * 5000)
         self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
                                SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])
@@ -270,6 +270,7 @@ class SiteDashboardTest(AppTestCase):
         now = repo.now()
         ex("UPDATE probes SET last_seen = ?", (now,))
         ex("UPDATE probes SET last_seen = ? WHERE id = ?", (now - 3600, self.off))
+        ex("DELETE FROM checks WHERE type <> 'ping'")  # nur Pings: Traceroute/Speedtest ohne Daten wären „Probleme“
         ex("UPDATE checks SET created_at = ?", (now - 3600,))
         probe = q1("SELECT * FROM probes WHERE id = ?", (self.ok,))
         self.pings = [c for c in repo.checks_for_probe(probe) if c["type"] == "ping"]

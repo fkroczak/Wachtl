@@ -36,7 +36,7 @@ Mehrere Server-Adressen mit Komma trennen. Ist die Probe schon installiert, frag
 ```powershell
 WachtlSetup-Standort.exe /VERYSILENT /SUPPRESSMSGBOXES
 # ohne Vorbelegung:
-WachtlSetup-0.8.2.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
+WachtlSetup-0.8.3.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
 Exit-Code 0 = Probe läuft (angemeldet oder Anmeldung folgt automatisch), 10 = nicht betriebsbereit (Grund im `/LOG`,

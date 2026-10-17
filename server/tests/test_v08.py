@@ -209,3 +209,78 @@ class ExactOutageTest(AppTestCase):
         self.assertEqual(rules["target_down"]["threshold"], 5)
         self.assertEqual(rules["wan_down"]["threshold"], 5)
         self.assertIn("Sekunden", rules["target_down"]["name"])
+
+
+class DefaultChecksAndRemoveTest(AppTestCase):
+    """0.8.3: Standard-Messungen bei neuer Installation, Messungen je Probe entfernen und wieder aufnehmen."""
+
+    def setUp(self):
+        super().setUp()
+        self.a = self.enroll("PC-A")
+        self.pa = q1("SELECT * FROM probes WHERE id = ?", (self.a["probe_id"],))
+        self.b = self.make_token(self.pa["site_id"], token="tok-b")
+        r = self.client.post("/api/probe/v1/enroll", json={"enrollment_token": "tok-b", "hostname": "PC-B"})
+        self.pb = q1("SELECT * FROM probes WHERE id = ?", (r.get_json()["probe_id"],))
+        self.make_user()
+        self.login()
+
+    def names(self, probe):
+        return [c["name"] for c in repo.checks_for_probe(probe)]
+
+    def test_new_install_gets_standard_checks(self):
+        self.assertEqual(sorted(self.names(self.pa)), sorted([
+            "Gateway", "Cloudflare DNS", "Google DNS", "Quad9 DNS", "Traceroute Internet", "Speedtest Internet"]))
+        self.assertIsNone(q1("SELECT id FROM checks WHERE type = 'iperf'"))  # iperf3 nur auf Wunsch
+
+    def test_with_server_hostname_server_checks_too(self):
+        ex("DELETE FROM checks")
+        self.app.config["PUBLIC_URL"] = "https://wachtl.kunde.example"
+        repo.seed_defaults()
+        names = self.names(self.pa)
+        self.assertIn("Wachtl-Server", names)
+        self.assertIn("Traceroute Wachtl-Server", names)
+        server = q1("SELECT * FROM checks WHERE name = 'Wachtl-Server'")
+        self.assertEqual((server["target"], server["interval_s"]), ("wachtl.kunde.example", 5))
+
+    def test_remove_global_check_only_for_this_probe(self):
+        quad9 = q1("SELECT id FROM checks WHERE target = '9.9.9.9'")["id"]
+        html = self.client.get(f"/probes/{self.pa['id']}").get_data(as_text=True)
+        self.assertIn(f"/probes/{self.pa['id']}/checks/{quad9}/remove", html)
+        r = self.client.post(f"/probes/{self.pa['id']}/checks/{quad9}/remove", data={"csrf_token": self.session_csrf()})
+        self.assertEqual(r.status_code, 302)
+        self.assertNotIn("Quad9 DNS", self.names(self.pa))
+        self.assertIn("Quad9 DNS", self.names(self.pb))           # andere Probe misst weiter
+        self.assertIsNotNone(q1("SELECT id FROM checks WHERE id = ?", (quad9,)))
+        # Konfiguration der Probe ohne diesen Check
+        cfg = self.client.get("/api/probe/v1/config", headers={"Authorization": f"Bearer {self.a['token']}"}).get_json()
+        self.assertNotIn(quad9, [c["id"] for c in cfg["checks"]])
+        # Anzeige „für diese Probe entfernt“, Bearbeiten behält die Ausnahme
+        html = self.client.get(f"/probes/{self.pa['id']}").get_data(as_text=True)
+        self.assertIn("Für diese Probe entfernt", html)
+        c = q1("SELECT * FROM checks WHERE id = ?", (quad9,))
+        repo.update_check(quad9, "Quad9", c["target"], c["role"], 1, 1000, "all", None, {})
+        self.assertNotIn("Quad9", self.names(self.pa))
+        self.assertIn("außer PC-A", self.client.get("/admin").get_data(as_text=True))
+        # wieder aufnehmen
+        self.client.post(f"/probes/{self.pa['id']}/checks/{quad9}/restore", data={"csrf_token": self.session_csrf()})
+        self.assertIn("Quad9", self.names(self.pa))
+        self.assertEqual(q1("SELECT action FROM audit_log ORDER BY id DESC LIMIT 1")["action"], "check.include")
+
+    def test_remove_check_assigned_only_to_this_probe_deletes_it(self):
+        cid = repo.create_check("Drucker", "10.0.0.9", "target", 5, 1000, "probe", self.pa["id"])
+        self.client.post(f"/probes/{self.pa['id']}/checks/{cid}/remove", data={"csrf_token": self.session_csrf()})
+        self.assertIsNone(q1("SELECT id FROM checks WHERE id = ?", (cid,)))
+        self.assertEqual(q1("SELECT action FROM audit_log ORDER BY id DESC LIMIT 1")["action"], "check.delete")
+
+    def test_only_admin_and_probe_delete_cleans_up(self):
+        quad9 = q1("SELECT id FROM checks WHERE target = '9.9.9.9'")["id"]
+        self.make_user(username="op", role="operator")
+        self.login("op")
+        r = self.client.post(f"/probes/{self.pa['id']}/checks/{quad9}/remove", data={"csrf_token": self.session_csrf()})
+        self.assertIn(r.status_code, (302, 403))
+        self.assertIn("Quad9 DNS", self.names(self.pa))
+        self.assertNotIn("/remove", self.client.get(f"/probes/{self.pa['id']}").get_data(as_text=True))
+        self.login()
+        repo.remove_check_from_probe(quad9, self.pa)
+        self.client.post(f"/probes/{self.pa['id']}/delete", data={"csrf_token": self.session_csrf()})
+        self.assertIsNone(q1("SELECT id FROM check_assignments WHERE scope = 'exclude_probe'"))

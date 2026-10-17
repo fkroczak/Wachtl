@@ -52,6 +52,8 @@ ITEMS: tuple[Item, ...] = (
          params={"method": "http", "direction": "both", "duration_s": 10, "streams": 4, "schedule_min": 360}),
 )
 BY_KEY = {i.key: i for i in ITEMS}
+# Nicht automatisch bei einer neuen Installation (belastet das LAN alle 6 Stunden) – im Standardpaket wählbar.
+NOT_DEFAULT = frozenset({"iperf_server"})
 
 
 def server_host(public_url: str) -> str | None:

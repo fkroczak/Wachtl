@@ -2,6 +2,16 @@
 
 Was gemessen wird, legst du zentral im Web-UI fest: **Verwaltung › Checks**. Jeder Check gilt für alle Probes, einen Standort oder eine einzelne Probe. Änderungen erreichen die Probes mit dem nächsten Heartbeat, ohne Neustart und ohne Zugriff auf die PCs.
 
+**Ab Werk** legt eine neue Installation diese Messungen für alle Probes an: Ping auf Gateway, Cloudflare (1.1.1.1),
+Google (8.8.8.8) und Quad9 (9.9.9.9) im 1-s-Takt, Ping auf den Wachtl-Server (5 s), Traceroute ins Internet und zum
+Server sowie ein Speedtest alle 6 Stunden. Ping und Traceroute zum Server entfallen, wenn die Server-URL keinen
+echten Hostnamen hat. Bestehende Installationen behalten ihre Checks.
+
+**Einzeln entfernen:** Auf der Seite einer Probe hat jede Messung den Knopf **Entfernen** (Administratoren). Gilt die
+Messung nur für diese Probe, wird sie gelöscht. Gilt sie für mehrere, wird sie nur bei dieser Probe ausgenommen, die
+anderen messen weiter; „wieder aufnehmen“ macht das rückgängig. Unter Verwaltung › Checks steht dann z. B.
+„Alle Probes, außer PC-01“. Ganz löschen geht weiter unter Verwaltung › Checks.
+
 Für einen neuen Kunden gibt es das **Standardpaket** (Verwaltung › Standardpaket): Ping auf Gateway, drei
 Internet-Referenzen und den Wachtl-Server, Traceroute ins Internet und zum Server, iperf3 zum Server und ein
 WAN-Speedtest – mit einem Klick, ohne doppelte Checks. Anleitung: [ROLLOUT.md](ROLLOUT.md).

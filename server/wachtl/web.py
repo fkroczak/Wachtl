@@ -408,7 +408,39 @@ def probe(probe_id: int):
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
         reports=report_service.search(probe_id=probe_id, limit=10),
         client_findings=finding_service.search(probe_id=probe_id, since=repo.now() - 30 * 86400, limit=20),
+        excluded_checks=repo.excluded_checks(p),
     )
+
+
+@bp.post("/probes/<int:probe_id>/checks/<int:check_id>/remove")
+@login_required("admin")
+def probe_check_remove(probe_id: int, check_id: int):
+    """Eine Messung bei dieser Probe entfernen: nur hier zugewiesen = löschen, sonst Ausnahme für diese Probe."""
+    p = _probe_or_404(probe_id)
+    c = q1("SELECT id, name FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    result = repo.remove_check_from_probe(check_id, p)
+    user = current_user()["username"]
+    if result == "deleted":
+        repo.audit(user, "check.delete", f"check:{check_id}", f"{c['name']} (nur {p['hostname']} zugewiesen)")
+        flash(f"Messung „{c['name']}“ gelöscht.", "ok")
+    else:
+        repo.audit(user, "check.exclude", f"check:{check_id}", f"{c['name']} für {p['hostname']} entfernt")
+        flash(f"Messung „{c['name']}“ für {p['hostname']} entfernt. Andere Probes messen weiter.", "ok")
+    _regen_rules()
+    return redirect(url_for("web.probe", probe_id=probe_id) + "#messungen")
+
+
+@bp.post("/probes/<int:probe_id>/checks/<int:check_id>/restore")
+@login_required("admin")
+def probe_check_restore(probe_id: int, check_id: int):
+    p = _probe_or_404(probe_id)
+    c = q1("SELECT id, name FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    ex("DELETE FROM check_assignments WHERE check_id = ? AND scope = 'exclude_probe' AND scope_id = ?",
+       (check_id, probe_id))
+    repo.audit(current_user()["username"], "check.include", f"check:{check_id}", f"{c['name']} für {p['hostname']}")
+    flash(f"Messung „{c['name']}“ läuft wieder auf {p['hostname']}.", "ok")
+    _regen_rules()
+    return redirect(url_for("web.probe", probe_id=probe_id) + "#messungen")
 
 
 @bp.post("/probes/<int:probe_id>/settings")
@@ -657,7 +689,7 @@ def probe_status(probe_id: int):
 @login_required("admin")
 def probe_delete(probe_id: int):
     p = q1("SELECT hostname FROM probes WHERE id = ?", (probe_id,)) or abort(404)
-    ex("DELETE FROM check_assignments WHERE scope = 'probe' AND scope_id = ?", (probe_id,))
+    ex("DELETE FROM check_assignments WHERE scope IN ('probe', 'exclude_probe') AND scope_id = ?", (probe_id,))
     ex("DELETE FROM probes WHERE id = ?", (probe_id,))
     repo.audit(current_user()["username"], "probe.delete", f"probe:{probe_id}", p["hostname"])
     flash(f"Probe {p['hostname']} gelöscht. Messdaten bleiben bis zum Ablauf der Aufbewahrung erhalten.", "ok")
@@ -725,7 +757,8 @@ def admin():
     assignments = defaultdict(list)
     for a in q("SELECT * FROM check_assignments"):
         url = (url_for("web.site", site_id=a["scope_id"]) if a["scope"] == "site" and a["scope_id"] in site_map
-               else url_for("web.probe", probe_id=a["scope_id"]) if a["scope"] == "probe" and a["scope_id"] in probe_map
+               else url_for("web.probe", probe_id=a["scope_id"])
+               if a["scope"] in ("probe", "exclude_probe") and a["scope_id"] in probe_map
                else None)
         assignments[a["check_id"]].append((repo.scope_label(a["scope"], a["scope_id"], site_map, probe_map), url))
     tokens = q(
@@ -1041,7 +1074,8 @@ def _check_form_context(ctype: str, check: dict | None, values: dict | None = No
         groups.setdefault(f.group, []).append(f)
     assignment = None
     if check:
-        assignment = q1("SELECT scope, scope_id FROM check_assignments WHERE check_id = ? ORDER BY id LIMIT 1",
+        assignment = q1("SELECT scope, scope_id FROM check_assignments WHERE check_id = ? AND scope <> 'exclude_probe' "
+                        "ORDER BY id LIMIT 1",
                         (check["id"],))
     return {
         "ctype": ct, "check": check, "params": params, "groups": groups,
