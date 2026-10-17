@@ -42,10 +42,24 @@ public sealed class ProbeWorker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
         _logger.LogInformation("Wachtl-Probe {Version} startet, Daten in {Dir}", AppInfo.Version, StateStore.DataDir);
+        var wait = TimeSpan.FromSeconds(20);
         while ((_state = StateStore.Load()) is null)
         {
-            _logger.LogError("Probe ist nicht registriert ({Path} fehlt). Bitte Install-Wachtl.ps1 ausführen.", StateStore.StatePath);
-            await Task.Delay(TimeSpan.FromMinutes(1), ct).ConfigureAwait(false);
+            if (StateStore.LoadPending() is { } pending)
+            {
+                // beim Setup war der Server nicht erreichbar – Registrierung jetzt nachholen
+                if (await TryPendingEnrollmentAsync(pending, ct).ConfigureAwait(false))
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                _logger.LogError("Probe ist nicht registriert ({Path} fehlt). Bitte das Wachtl-Setup ausführen.", StateStore.StatePath);
+            }
+
+            await Task.Delay(wait, ct).ConfigureAwait(false);
+            wait = TimeSpan.FromSeconds(Math.Min(600, wait.TotalSeconds * 2));
         }
 
         string token;
@@ -59,7 +73,12 @@ public sealed class ProbeWorker : BackgroundService
             throw;
         }
 
-        _api = new ApiClient(new Uri(_state.ServerUrl), _state.SpkiPin, _state.Proxy, token);
+        _api = new ApiClient(_state.AllServers(), _state.SpkiPin, _state.Proxy, token);
+        _api.ServerChanged += uri =>
+        {
+            _logger.LogWarning("Server über {Uri} erreichbar – andere Adressen antworten nicht", uri);
+            SaveServers(uri.ToString(), null);
+        };
         _buffer = new SampleBuffer(StateStore.BufferPath, _loggerFactory.CreateLogger<SampleBuffer>());
         _logger.LogInformation("Probe {Id} am Standort {Site}, Server {Server}, Puffer {Count} Werte",
             _state.ProbeId, _state.SiteName, _state.ServerUrl, _buffer.Count());
@@ -119,8 +138,79 @@ public sealed class ProbeWorker : BackgroundService
 
     private static readonly string[] SupportedTypes = { "ping", "path", "iperf", "speedtest" };
 
+    private async Task<bool> TryPendingEnrollmentAsync(PendingEnrollment pending, CancellationToken ct)
+    {
+        try
+        {
+            var servers = pending.ServerUrls.Select(u => new Uri(u)).ToList();
+            var token = StateStore.UnprotectToken(pending.ProtectedEnrollmentToken);
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(30 + 15 * servers.Count));
+            var (state, response) = await Enrollment.EnrollAsync(servers, pending.SpkiPin, token, pending.Proxy,
+                pending.Hostname, cts.Token).ConfigureAwait(false);
+            _logger.LogInformation("Registrierung nachgeholt: Probe {Id} ({Host}) am Standort {Site} über {Server}",
+                response.ProbeId, pending.Hostname, response.SiteName, state.ServerUrl);
+            return true;
+        }
+        catch (ApiException ex) when ((int)ex.Status is >= 400 and < 500)
+        {
+            _logger.LogError("Server lehnt die Registrierung ab: {Message} – bitte ein neues Setup aus dem Web-UI verwenden.", ex.Message);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("Server noch nicht erreichbar, Registrierung wird weiter versucht: {Message}",
+                ex.InnerException?.Message ?? ex.Message);
+        }
+
+        return false;
+    }
+
+    /// <summary>Bevorzugte Adresse und/oder Adressliste dauerhaft speichern.</summary>
+    private void SaveServers(string? preferred, List<string>? all)
+    {
+        lock (_runnerLock)
+        {
+            if (_state is null)
+            {
+                return;
+            }
+
+            if (preferred is not null)
+            {
+                _state.ServerUrl = preferred;
+            }
+
+            if (all is not null)
+            {
+                _state.ServerUrls = all;
+            }
+
+            try
+            {
+                StateStore.Save(_state);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning("Server-Adressen nicht gespeichert: {Message}", ex.Message);
+            }
+        }
+    }
+
     private void ApplyConfig(ProbeConfig config)
     {
+        if (config.ServerUrls.Count > 0 && _state is not null &&
+            !config.ServerUrls.SequenceEqual(_state.ServerUrls, StringComparer.OrdinalIgnoreCase))
+        {
+            // Server hat (weitere) Adressen gemeldet, z. B. eine neue IP: für Ausweichversuche merken
+            var urls = config.ServerUrls.Where(u => Uri.TryCreate(u, UriKind.Absolute, out var x) && x.Scheme == Uri.UriSchemeHttps).ToList();
+            if (urls.Count > 0)
+            {
+                _logger.LogInformation("Server-Adressen: {Urls}", string.Join(", ", urls));
+                SaveServers(null, urls);
+                _api?.UpdateServers(urls.Select(u => new Uri(u)));
+            }
+        }
+
         var wanted = config.Checks
             .Where(c => SupportedTypes.Contains(c.Type))
             .GroupBy(c => c.Key)

@@ -44,9 +44,28 @@ public sealed class ApiClient : IDisposable
     private readonly HttpClient _http;
     private readonly string? _spkiPin;
     private readonly string? _token;
+    private readonly object _serverLock = new();
+    private Uri[] _servers;
+    private int _current;
 
     public ApiClient(Uri serverUrl, string? spkiPin, string? proxyUrl, string? token = null)
+        : this(new[] { serverUrl }, spkiPin, proxyUrl, token)
     {
+    }
+
+    /// <summary>
+    /// Mehrere Adressen desselben Servers (Name, weitere Namen, IP-Adressen): ist eine nicht erreichbar –
+    /// etwa weil der Name am Standort nicht auflösbar ist –, nimmt der Client die nächste.
+    /// Der Pin prüft den Schlüssel, nicht den Namen: jede Adresse ist gleich sicher.
+    /// </summary>
+    public ApiClient(IEnumerable<Uri> servers, string? spkiPin, string? proxyUrl, string? token = null)
+    {
+        _servers = Normalize(servers);
+        if (_servers.Length == 0)
+        {
+            throw new ArgumentException("Keine Server-Adresse angegeben");
+        }
+
         _spkiPin = string.IsNullOrWhiteSpace(spkiPin) ? null : spkiPin.Trim();
         _token = token;
         var handler = new SocketsHttpHandler
@@ -62,9 +81,110 @@ public sealed class ApiClient : IDisposable
             handler.UseProxy = true;
         }
 
-        var baseUrl = serverUrl.ToString().TrimEnd('/') + "/";
-        _http = new HttpClient(handler) { BaseAddress = new Uri(baseUrl), Timeout = TimeSpan.FromSeconds(30) };
+        _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd($"wachtl-probe/{AppInfo.Version}");
+    }
+
+    /// <summary>Adresse, über die zuletzt erfolgreich verbunden wurde.</summary>
+    public Uri CurrentServer
+    {
+        get
+        {
+            lock (_serverLock)
+            {
+                return _servers[_current];
+            }
+        }
+    }
+
+    public IReadOnlyList<Uri> Servers
+    {
+        get
+        {
+            lock (_serverLock)
+            {
+                return _servers.ToArray();
+            }
+        }
+    }
+
+    /// <summary>Wird ausgelöst, wenn der Client auf eine andere Adresse wechselt.</summary>
+    public event Action<Uri>? ServerChanged;
+
+    /// <summary>Neue Adressliste vom Server übernehmen; die funktionierende Adresse bleibt vorn.</summary>
+    public void UpdateServers(IEnumerable<Uri> servers)
+    {
+        var list = Normalize(servers);
+        if (list.Length == 0)
+        {
+            return;
+        }
+
+        lock (_serverLock)
+        {
+            var current = _servers[_current];
+            var merged = new[] { current }.Concat(list).Distinct().ToArray();
+            _servers = merged;
+            _current = 0;
+        }
+    }
+
+    internal static Uri[] Normalize(IEnumerable<Uri> servers) =>
+        servers.Where(u => u is not null && u.IsAbsoluteUri)
+            .Select(u => new Uri(u.GetLeftPart(UriPartial.Authority) + "/"))
+            .Distinct()
+            .ToArray();
+
+    /// <summary>
+    /// Anfrage senden; bei Verbindungsfehlern (Name nicht auflösbar, Host nicht erreichbar, Zeitüberschreitung)
+    /// nacheinander die übrigen Adressen versuchen.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> build, CancellationToken ct)
+    {
+        Uri[] servers;
+        int start;
+        lock (_serverLock)
+        {
+            servers = _servers;
+            start = _current;
+        }
+
+        Exception? last = null;
+        for (var i = 0; i < servers.Length; i++)
+        {
+            var index = (start + i) % servers.Length;
+            using var request = build();
+            request.RequestUri = new Uri(servers[index], request.RequestUri!.OriginalString);
+            try
+            {
+                var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+                if (i > 0)
+                {
+                    lock (_serverLock)
+                    {
+                        if (ReferenceEquals(_servers, servers))
+                        {
+                            _current = index;
+                        }
+                    }
+
+                    ServerChanged?.Invoke(servers[index]);
+                }
+
+                return response;
+            }
+            catch (HttpRequestException ex) when (servers.Length > 1)
+            {
+                last = ex;
+            }
+            catch (TaskCanceledException ex) when (servers.Length > 1 && !ct.IsCancellationRequested)
+            {
+                last = ex;
+            }
+        }
+
+        System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(last!).Throw();
+        throw last!;
     }
 
     private bool ValidateCertificate(object sender, X509Certificate? certificate, X509Chain? chain, SslPolicyErrors errors)
@@ -86,7 +206,7 @@ public sealed class ApiClient : IDisposable
 
     private HttpRequestMessage Request(HttpMethod method, string path)
     {
-        var request = new HttpRequestMessage(method, Prefix + path);
+        var request = new HttpRequestMessage(method, new Uri(Prefix + path, UriKind.Relative));
         if (_token is not null)
         {
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _token);
@@ -116,9 +236,12 @@ public sealed class ApiClient : IDisposable
 
     public async Task<EnrollResponse> EnrollAsync(EnrollRequest enroll, CancellationToken ct)
     {
-        using var request = Request(HttpMethod.Post, "enroll");
-        request.Content = JsonContent.Create(enroll, options: JsonOptions);
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        using var response = await SendAsync(() =>
+        {
+            var request = Request(HttpMethod.Post, "enroll");
+            request.Content = JsonContent.Create(enroll, options: JsonOptions);
+            return request;
+        }, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw await ErrorAsync(response, ct).ConfigureAwait(false);
@@ -131,13 +254,15 @@ public sealed class ApiClient : IDisposable
     /// <summary>Holt die Konfiguration; null bedeutet „unverändert“ (HTTP 304).</summary>
     public async Task<ProbeConfig?> GetConfigAsync(string? etag, CancellationToken ct)
     {
-        using var request = Request(HttpMethod.Get, "config");
-        if (!string.IsNullOrEmpty(etag))
+        using var response = await SendAsync(() =>
         {
-            request.Headers.TryAddWithoutValidation("If-None-Match", $"\"{etag}\"");
-        }
-
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            var request = Request(HttpMethod.Get, "config");
+            if (!string.IsNullOrEmpty(etag))
+            {
+                request.Headers.TryAddWithoutValidation("If-None-Match", $"\"{etag}\"");
+            }
+            return request;
+        }, ct).ConfigureAwait(false);
         if (response.StatusCode == HttpStatusCode.NotModified)
         {
             return null;
@@ -164,13 +289,15 @@ public sealed class ApiClient : IDisposable
             }
         }
 
-        using var request = Request(HttpMethod.Post, "ingest");
-        request.Headers.Add("X-Batch-Id", batchId);
-        request.Content = new ByteArrayContent(buffer.ToArray());
-        request.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain") { CharSet = "utf-8" };
-        request.Content.Headers.ContentEncoding.Add("gzip");
-
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        using var response = await SendAsync(() =>
+        {
+            var request = Request(HttpMethod.Post, "ingest");
+            request.Headers.Add("X-Batch-Id", batchId);
+            request.Content = new ByteArrayContent(buffer.ToArray());
+            request.Content.Headers.ContentType = new MediaTypeHeaderValue("text/plain") { CharSet = "utf-8" };
+            request.Content.Headers.ContentEncoding.Add("gzip");
+            return request;
+        }, ct).ConfigureAwait(false);
         return response.StatusCode switch
         {
             HttpStatusCode.NoContent or HttpStatusCode.OK => IngestOutcome.Delivered,
@@ -183,9 +310,12 @@ public sealed class ApiClient : IDisposable
 
     public async Task<HeartbeatResponse> HeartbeatAsync(HeartbeatRequest heartbeat, CancellationToken ct)
     {
-        using var request = Request(HttpMethod.Post, "heartbeat");
-        request.Content = JsonContent.Create(heartbeat, options: JsonOptions);
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        using var response = await SendAsync(() =>
+        {
+            var request = Request(HttpMethod.Post, "heartbeat");
+            request.Content = JsonContent.Create(heartbeat, options: JsonOptions);
+            return request;
+        }, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw await ErrorAsync(response, ct).ConfigureAwait(false);
@@ -198,9 +328,12 @@ public sealed class ApiClient : IDisposable
     /// <summary>Probe am Server abmelden (Deinstallation): das Token wird dort sofort ungültig.</summary>
     public async Task DeregisterAsync(CancellationToken ct)
     {
-        using var request = Request(HttpMethod.Post, "deregister");
-        request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        using var response = await SendAsync(() =>
+        {
+            var request = Request(HttpMethod.Post, "deregister");
+            request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+            return request;
+        }, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw await ErrorAsync(response, ct).ConfigureAwait(false);
@@ -210,9 +343,12 @@ public sealed class ApiClient : IDisposable
     /// <summary>Ergebnisse (Pfad, Bandbreite) als JSON senden.</summary>
     public async Task PostResultAsync<T>(string path, T payload, CancellationToken ct)
     {
-        using var request = Request(HttpMethod.Post, path);
-        request.Content = JsonContent.Create(payload, options: JsonOptions);
-        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        using var response = await SendAsync(() =>
+        {
+            var request = Request(HttpMethod.Post, path);
+            request.Content = JsonContent.Create(payload, options: JsonOptions);
+            return request;
+        }, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             throw await ErrorAsync(response, ct).ConfigureAwait(false);

@@ -11,13 +11,15 @@ using Wachtl.Probe.Transport;
 namespace Wachtl.Probe;
 
 /// <summary>
-/// Befehle für Setup-Assistent, Install-Wachtl.ps1 und Diagnose.
-/// Exit-Codes: 0 ok, 2 Aufruf falsch, 3 Pin passt nicht, 4 Server nicht erreichbar, 5 Server lehnt ab, 6 nicht registriert.
+/// Befehle für den Setup-Assistenten und die Diagnose.
+/// Exit-Codes: 0 ok, 2 Aufruf falsch, 3 Pin passt nicht, 4 Server nicht erreichbar, 5 Server lehnt ab, 6 nicht registriert,
+/// 7 Server nicht erreichbar, Registrierung wird vom Dienst nachgeholt (enroll --defer-offline 1).
 /// Mit <c>--out datei.ini</c> schreiben enroll/check/configure ihr Ergebnis als INI (UTF-16) für den Assistenten.
 /// </summary>
 public static class Cli
 {
-    public const int ExitOk = 0, ExitUsage = 2, ExitPinMismatch = 3, ExitUnreachable = 4, ExitRejected = 5, ExitNotEnrolled = 6;
+    public const int ExitOk = 0, ExitUsage = 2, ExitPinMismatch = 3, ExitUnreachable = 4, ExitRejected = 5, ExitNotEnrolled = 6,
+        ExitDeferred = 7;
 
     private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "deregister", "--version", "help", "--help" };
 
@@ -101,21 +103,7 @@ public static class Cli
     private static string? Optional(Dictionary<string, string> options, string key) =>
         options.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
 
-    internal static Uri ParseServer(string value)
-    {
-        var text = value.Trim();
-        if (!text.Contains("://", StringComparison.Ordinal))
-        {
-            text = "https://" + text;
-        }
-
-        if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
-        {
-            throw new ArgumentException("Die Server-Adresse muss mit https:// beginnen, z. B. https://wachtl.kunde.local");
-        }
-
-        return new Uri(uri.GetLeftPart(UriPartial.Authority) + "/");
-    }
+    internal static Uri ParseServer(string value) => Enrollment.ParseServers(value)[0];
 
     // -- deregister ----------------------------------------------------------------------
     /// <summary>
@@ -138,7 +126,7 @@ public static class Cli
         try
         {
             var token = StateStore.UnprotectToken(state.ProtectedToken);
-            using var api = new ApiClient(new Uri(state.ServerUrl), state.SpkiPin, state.Proxy, token);
+            using var api = new ApiClient(state.AllServers(), state.SpkiPin, state.Proxy, token);
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             await api.DeregisterAsync(cts.Token);
             Console.WriteLine($"Probe {state.ProbeId} bei {state.ServerUrl} abgemeldet – ihr Token ist ab sofort ungültig.");
@@ -164,6 +152,7 @@ public static class Cli
 
     private static void DeleteState()
     {
+        StateStore.DeletePending();
         foreach (var path in new[] { StateStore.StatePath, StateStore.StatePath + ".tmp", StateStore.ConfigCachePath,
                                      StateStore.ConfigCachePath + ".tmp" })
         {
@@ -177,49 +166,45 @@ public static class Cli
     // -- enroll ------------------------------------------------------------------------
     private static async Task<int> EnrollAsync(Dictionary<string, string> options, CliResult result)
     {
-        var server = ParseServer(Required(options, "server"));
+        var servers = Enrollment.ParseServers(Required(options, "server"));
         var pin = Required(options, "pin");
+        var token = Required(options, "token");
         var proxy = Optional(options, "proxy");
         var hostname = Optional(options, "hostname") ?? Environment.MachineName;
+        var defer = Optional(options, "defer-offline") is "1" or "true";
 
-        using var api = new ApiClient(server, pin, proxy);
         try
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            var response = await api.EnrollAsync(new EnrollRequest
-            {
-                EnrollmentToken = Required(options, "token"),
-                Hostname = hostname,
-                Os = AppInfo.OsDescription,
-                Version = AppInfo.Version,
-            }, cts.Token);
-
-            StateStore.Save(new ProbeState
-            {
-                ServerUrl = server.ToString(),
-                SpkiPin = pin,
-                ProbeId = response.ProbeId,
-                ProtectedToken = StateStore.ProtectToken(response.Token),
-                Proxy = proxy,
-                SiteName = response.SiteName,
-                EnrolledAt = DateTimeOffset.UtcNow,
-            });
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30 + 15 * servers.Count));
+            var (state, response) = await Enrollment.EnrollAsync(servers, pin, token, proxy, hostname, cts.Token);
             result.Set("probe_id", response.ProbeId.ToString());
             result.Set("site", response.SiteName);
             result.Set("hostname", hostname);
-            Console.WriteLine($"Registriert: Probe {response.ProbeId} ({hostname}) am Standort {response.SiteName}");
+            result.Set("server", state.ServerUrl);
+            Console.WriteLine($"Registriert: Probe {response.ProbeId} ({hostname}) am Standort {response.SiteName} über {state.ServerUrl}");
             return ExitOk;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or ApiException)
         {
-            return Fail(ex, result);
+            var code = Fail(ex, result);
+            if (code == ExitUnreachable && defer)
+            {
+                // Server gerade nicht erreichbar (Standort offline, VPN aus …): der Dienst holt die Registrierung nach
+                Enrollment.Defer(servers, pin, token, proxy, hostname, ex.InnerException?.Message ?? ex.Message);
+                result.Set("deferred", "1");
+                result.Set("hostname", hostname);
+                Console.WriteLine("Server nicht erreichbar – die Registrierung wird automatisch nachgeholt, sobald er erreichbar ist.");
+                return ExitDeferred;
+            }
+
+            return code;
         }
     }
 
     // -- check: Server erreichbar? Pin richtig? Verbraucht keinen Token ---------------------------
     private static async Task<int> CheckAsync(Dictionary<string, string> options, CliResult result)
     {
-        Uri server;
+        List<Uri> servers;
         string? pin, proxy;
         if (options.ContainsKey("use-state"))
         {
@@ -230,17 +215,51 @@ public static class Cli
                 return ExitNotEnrolled;
             }
 
-            server = new Uri(state.ServerUrl);
+            servers = state.AllServers().ToList();
             pin = state.SpkiPin;
             proxy = options.ContainsKey("proxy") ? Optional(options, "proxy") : state.Proxy;
         }
         else
         {
-            server = ParseServer(Required(options, "server"));
+            servers = Enrollment.ParseServers(Required(options, "server"));
             pin = Optional(options, "pin");
             proxy = Optional(options, "proxy");
         }
 
+        // jede Adresse probieren: die erste, die antwortet, zählt; sonst der aussagekräftigste Fehler
+        var best = int.MaxValue;
+        CliResult? bestResult = null;
+        foreach (var server in servers)
+        {
+            var attempt = new CliResult(null);
+            var code = await CheckOneAsync(server, pin, proxy, attempt);
+            if (code == ExitOk)
+            {
+                result.CopyFrom(attempt);
+                return ExitOk;
+            }
+
+            var rank = code switch { ExitPinMismatch => 0, ExitRejected => 1, _ => 2 };
+            if (rank < best)
+            {
+                best = rank;
+                bestResult = attempt;
+                bestResult.Set("code_detail", code.ToString());
+            }
+        }
+
+        result.CopyFrom(bestResult!);
+        if (servers.Count > 1)
+        {
+            result.Set("error", "Keine der Adressen funktioniert (" + string.Join(", ", servers.Select(s => s.Authority)) + "). " +
+                                (bestResult!.Get("error") ?? string.Empty));
+        }
+
+        return int.Parse(bestResult!.Get("code_detail") ?? "4");
+    }
+
+    private static async Task<int> CheckOneAsync(Uri server, string? pin, string? proxy, CliResult result)
+    {
         string? seenPin = null;
         string? subject = null;
         var handler = new SocketsHttpHandler
@@ -427,8 +446,9 @@ public static class Cli
             Wachtl-Probe
 
               wachtl-probe.exe                    als Dienst starten (oder im Vordergrund testen)
-              wachtl-probe.exe check --server https://wachtl.firma.local [--pin <Pin>] [--proxy http://proxy:3128]
-              wachtl-probe.exe enroll --server https://wachtl.firma.local --token <Token> --pin <SPKI-Pin> [--proxy …] [--hostname NAME]
+              wachtl-probe.exe check --server https://wachtl.firma.local[,https://10.0.0.5] [--pin <Pin>] [--proxy http://proxy:3128]
+              wachtl-probe.exe enroll --server https://wachtl.firma.local[,https://10.0.0.5] --token <Token> --pin <SPKI-Pin>
+                               [--proxy …] [--hostname NAME] [--defer-offline 1]
               wachtl-probe.exe configure --proxy http://proxy:3128 | none
               wachtl-probe.exe show-pin --server https://wachtl.firma.local
               wachtl-probe.exe status
@@ -451,6 +471,19 @@ internal sealed class CliResult
 
     public void Set(string key, string value) =>
         _values[key] = value.Replace("\r", string.Empty, StringComparison.Ordinal).Replace("\n", "\\n", StringComparison.Ordinal);
+
+    public string? Get(string key) => _values.TryGetValue(key, out var value) ? value : null;
+
+    public void CopyFrom(CliResult other)
+    {
+        foreach (var (key, value) in other._values)
+        {
+            if (key != "code_detail")
+            {
+                _values[key] = value;
+            }
+        }
+    }
 
     public void Write(int exitCode)
     {

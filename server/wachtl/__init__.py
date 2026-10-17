@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 
 def _env(key: str, default: str | None = None) -> str | None:
@@ -29,6 +29,10 @@ def create_app(overrides: dict | None = None) -> Flask:
         TRUST_PROXY=_env("TRUST_PROXY", "1") == "1",
         WEBHOOK_SECRET=_env("WEBHOOK_SECRET", ""),
         PUBLIC_URL=_env("PUBLIC_URL", "https://wachtl.local"),
+        # weitere Adressen des Servers (Namen und IPs), die Probes der Reihe nach versuchen
+        SERVER_URLS=[u.strip() for u in (_env("SERVER_URLS", "") or "").split(",") if u.strip()],
+        # lokale IP-Adressen automatisch ergänzen (Windows-Server; im Docker-Container wären es interne Adressen)
+        AUTO_IPS=_env("AUTO_IPS", "0") == "1",
         SPKI_PIN=_env("SPKI_PIN", ""),
         PROBE_DIR=_env("PROBE_DIR", ""),
         IPERF_PORT=int(_env("IPERF_PORT", "5201") or 0),

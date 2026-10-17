@@ -10,7 +10,7 @@ on:
     types: [published]
 
 env:
-  WACHTL_VERSION: "0.4.0"
+  WACHTL_VERSION: "0.5.0"
 
 jobs:
   server:
@@ -114,9 +114,9 @@ jobs:
       - name: Unbeaufsichtigt installieren
         shell: pwsh
         run: |
-          $setup = "dist/WachtlServerSetup-$env:WACHTL_VERSION.exe"
+          $setup = "dist/WachtlSetup-$env:WACHTL_VERSION.exe"
           $p = Start-Process $setup -Wait -PassThru -ArgumentList @(
-            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/LOG=dist\setup-install.log',
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/LOG=dist\setup-install.log', '/Role=Server',
             '/Hostnames=localhost,127.0.0.1', '/HttpsPort=8443', '/HttpPort=8080',
             '/AdminPassword=ci-test-passwort-123', '/DataDir=C:\WachtlData')
           Write-Host "Setup beendet mit $($p.ExitCode)"
@@ -127,7 +127,7 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "Server-Prüfung" -Command "./.github/scripts/test-server.ps1"
 
-      - name: Probe-Setup unbeaufsichtigt installieren und anmelden lassen
+      - name: Vorbelegtes Setup aus dem Web-UI unbeaufsichtigt installieren (Probe)
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "Probe-Prüfung" -Command "./.github/scripts/test-probe.ps1"
 
@@ -166,9 +166,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wachtl-setups
-          path: |
-            dist/WachtlServerSetup-*.exe
-            dist/probe/WachtlProbeSetup-*.exe
+          path: dist/WachtlSetup-${{ env.WACHTL_VERSION }}.exe
 
   setups-ins-repo:
     name: Setups ins Repository legen

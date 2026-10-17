@@ -95,6 +95,7 @@ public sealed class ProbeConfig
     public long ProbeId { get; init; }
     public List<CheckConfig> Checks { get; init; } = new();
     public IperfServerConfig IperfServer { get; init; } = new();
+    public List<string> ServerUrls { get; init; } = new();
     public int UploadIntervalS { get; init; } = 10;
     public int HeartbeatIntervalS { get; init; } = 30;
     public int ConfigPollS { get; init; } = 300;
@@ -181,11 +182,50 @@ public sealed class BandwidthResult
 /// <summary>Dauerhafter Zustand der Probe nach dem Enrollment.</summary>
 public sealed class ProbeState
 {
+    /// <summary>Bevorzugte Adresse (die zuletzt funktionierende).</summary>
     public string ServerUrl { get; set; } = string.Empty;
+
+    /// <summary>Alle bekannten Adressen des Servers (Namen und IPs), der Reihe nach versucht.</summary>
+    public List<string> ServerUrls { get; set; } = new();
+
     public string SpkiPin { get; set; } = string.Empty;
     public long ProbeId { get; set; }
     public string ProtectedToken { get; set; } = string.Empty;
     public string? Proxy { get; set; }
     public string SiteName { get; set; } = string.Empty;
     public DateTimeOffset EnrolledAt { get; set; }
+
+    /// <summary>Adressen für den Client: bevorzugte zuerst, dann die übrigen.</summary>
+    public IEnumerable<Uri> AllServers()
+    {
+        var all = new List<string>();
+        if (!string.IsNullOrWhiteSpace(ServerUrl))
+        {
+            all.Add(ServerUrl);
+        }
+
+        all.AddRange(ServerUrls);
+        foreach (var url in all.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            {
+                yield return uri;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Registrierung, die nachgeholt wird: Beim Setup war der Server nicht erreichbar.
+/// Der Dienst versucht es im Hintergrund weiter, bis es klappt.
+/// </summary>
+public sealed class PendingEnrollment
+{
+    public List<string> ServerUrls { get; set; } = new();
+    public string SpkiPin { get; set; } = string.Empty;
+    public string ProtectedEnrollmentToken { get; set; } = string.Empty;
+    public string? Proxy { get; set; }
+    public string Hostname { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public string? LastError { get; set; }
 }
