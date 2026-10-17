@@ -95,3 +95,18 @@ test("Zeitraum-Buttons melden ihren Zustand", async ({ page }) => {
   await expect(day).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "false");
 });
+
+test("Graph: Werte je Messpunkt per Tastatur, Ansage für Screenreader", async ({ page }) => {
+  await page.goto(`/probes/${ids.probe}/checks/${ids.ping_check}`);
+  await expect(page.locator("#chart svg .c-med").first()).toBeAttached();
+  const chart = page.getByRole("group", { name: /Latenzgraph/ });
+  await chart.focus();
+  await page.keyboard.press("Home");
+  await expect(page.locator(".chart-tip")).toBeVisible();
+  await expect(page.locator("#chart-live")).toContainText("Mittlere 50 %");
+  const first = await page.locator("#chart-live").textContent();
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#chart-live")).not.toHaveText(first);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".chart-tip")).toBeHidden();
+});

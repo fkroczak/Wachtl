@@ -312,7 +312,10 @@ PAIRS = [
     ("--accent", "--accent-soft", 4.5), ("--text-muted", "--accent-soft", 4.5),
     ("--field-border", "--surface", 3.0), ("--off", "--surface", 3.0), ("--focus", "--bg", 3.0),
     ("--focus", "--surface", 3.0), ("--report", "--surface", 4.5), ("--report", "--bg", 4.5),
-    ("--jitter", "--surface", 3.0), ("--accent", "--band", 3.0),
+    ("--jitter", "--surface", 3.0),
+    # Graph: Median je Verlustklasse auf dem dunkleren Rauch-Band (und damit auch auf hellerem Grund) ≥ 3:1
+    ("--ok", "--band", 3.0), ("--loss-low", "--band", 3.0), ("--warn", "--band", 3.0), ("--bad", "--band", 3.0),
+    ("--loss-low", "--surface", 3.0),
 ]
 # Badges: Schrift auf 12 % der eigenen Farbe über --surface (siehe .badge.* in app.css)
 BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]

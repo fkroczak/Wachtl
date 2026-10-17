@@ -94,7 +94,8 @@
   tip.className = "chart-tip";
   tip.hidden = true;
   chartEl.appendChild(tip);
-  let lastData = null;
+  const live = document.getElementById("chart-live");
+  let lastData = null, zoom = null;   // zoom: [erster, letzter] Punkt des Ausschnitts
 
   function el(name, attrs, parent) {
     const node = document.createElementNS(SVGNS, name);
@@ -117,153 +118,244 @@
     return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) + (spanMs <= 3 * 86400000 ? " " + hm : "");
   }
 
-  // Zerlegt eine Reihe an Lücken (null) in zusammenhängende Abschnitte
-  function segments(points) {
-    const out = [];
-    let cur = [];
-    for (const p of points) {
-      if (p[1] === null || p[2] === null) {
-        if (cur.length) out.push(cur);
-        cur = [];
-      } else cur.push(p);
-    }
-    if (cur.length) out.push(cur);
-    return out;
-  }
-
+  // Smokeping-Darstellung wie HOP7: Rauch p10–p90 und p25–p75, Median nach Paketverlust gefärbt,
+  // Latenzschwelle gestrichelt, Zeiten über Schwelle hinterlegt, Verluststreifen unter der Zeitachse.
   function render(data) {
     lastData = data;
-    const s = data.series;
-    const times = s.avg.map((p) => p[0]);
     chartEl.querySelector("svg")?.remove();
+    chartEl.onkeydown = null;
+    tip.hidden = true;
+    const s = data.series, thr = data.thr || {}, step = data.step_s;
+    // Punkte auf feste Zeitschlitze legen: fehlende Schritte werden Lücken statt Verbindungslinien
+    const base = Math.floor(data.start / step), n = Math.floor(data.end / step) - base + 1;
+    const slots = (key) => {
+      const out = new Array(n).fill(null);
+      for (const [t, v] of s[key] || []) {
+        const i = Math.round(t / 1000 / step) - base;
+        if (i >= 0 && i < n) out[i] = v;
+      }
+      return out;
+    };
+    const [p10, p25, med, p75, p90, loss] = ["p10", "p25", "p50", "p75", "p90", "loss"].map(slots);
     const W = chartEl.clientWidth || 800;
     const H = chartEl.clientHeight || 420;
-    const pad = { l: 52, r: 16, t: 16, b: 28 };
-    const lossH = Math.round((H - pad.t - pad.b) * 0.2);
-    const latH = H - pad.t - pad.b - lossH - 18;
+    const pad = { l: 52, r: 16, t: 16, b: 44 };
+    const PH = H - pad.t - pad.b, bottom = pad.t + PH, PW = W - pad.l - pad.r;
     const svg = el("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
-      "aria-label": "Graph: Latenz und Paketverlust im gewählten Zeitraum. Zahlenwerte stehen in der Tabelle Statistik." });
+      "aria-label": "Graph: Latenz (Median und Streuung) und Paketverlust im gewählten Zeitraum. Zahlenwerte stehen in der Tabelle Statistik." });
     chartEl.insertBefore(svg, tip);
 
-    if (!times.length) {
+    if (![med, p90, loss].some((arr) => arr.some((v) => v !== null))) {
       el("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "c-muted" }, svg).textContent =
         "Keine Messdaten im gewählten Zeitraum";
       sourceLabel.textContent = "";
       return;
     }
 
-    const t0 = times[0], t1 = times[times.length - 1] || t0 + 1;
-    const span = Math.max(t1 - t0, 1);
-    const x = (t) => pad.l + ((t - t0) / span) * (W - pad.l - pad.r);
-    const maxVals = s.max.map((p) => p[1]).filter((v) => v !== null);
-    const yMax = niceMax(Math.max(1, ...maxVals) * 1.05);
-    const y = (v) => pad.t + latH - (v / yMax) * latH;
-    const lossTop = pad.t + latH + 18;
-    const lossMaxRaw = Math.max(0, ...s.loss.map((p) => p[1] || 0));
-    const lossMax = Math.max(5, niceMax(lossMaxRaw));
-    const yl = (v) => lossTop + lossH - (v / lossMax) * lossH;
+    const a = zoom ? zoom[0] : 0, b = zoom ? zoom[1] : n - 1, span = Math.max(b - a, 1);
+    const x = (i) => pad.l + ((i - a) / span) * PW;
+    const tOf = (i) => (base + i) * step * 1000;
+    const bw = PW / span;
+    const shown = (arr) => arr.slice(a, b + 1).filter((v) => v !== null);
+    const vals = shown(p90).concat(shown(med)).sort((u, v) => u - v);
+    let top = (vals[Math.floor(vals.length * 0.98)] || 1) * 1.15;   // einzelne Ausreißer kappen statt alles zu stauchen
+    const lw = thr.lat_warn_ms, warn = thr.loss_warn_pct, bad = thr.loss_bad_pct;
+    if (lw && lw < top * 1.3) top = Math.max(top, lw * 1.08);
+    const yMax = niceMax(top);
+    const y = (v) => bottom - (Math.min(v, yMax) / yMax) * PH;
+    // Verlustklasse: 0 = kein Verlust, 1 = bis Warnschwelle, 2 = bis kritisch, 3 = darüber
+    const lossCls = (l) => (l === null ? null : l <= 0 ? 0 : bad != null && l > bad ? 3 : warn != null && l > warn ? 2 : 1);
+    // Hinterlegung wie die Alarmregeln: Mittel über deren Fenster (meist 5 min) statt je Punkt.
+    // Die Latenzregel mittelt Einzelpings, hier wird der Median gemittelt – für die Anzeige nah genug.
+    const roll = (arr, win) => {
+      const k = Math.max(1, Math.round((win || step) / step));
+      return arr.map((_, i) => {
+        const w = arr.slice(Math.max(0, i - k + 1), i + 1).filter((v) => v !== null);
+        return w.length ? w.reduce((p, v) => p + v, 0) / w.length : null;
+      });
+    };
+    const lossW = roll(loss, thr.loss_window_s), latW = roll(med, thr.lat_window_s);
+    const overLat = (i) => !!lw && latW[i] > lw;
+    const level = (i) => (lossCls(lossW[i]) === 3 ? 2 : lossCls(lossW[i]) === 2 || overLat(i) ? 1 : 0);
+
+    // Hinterlegung: Zeiträume über Schwelle gelb bzw. rot, benachbarte Punkte zu einem Balken
+    for (let i = a; i <= b; i++) {
+      const lv = level(i);
+      if (!lv) continue;
+      let j = i;
+      while (j < b && level(j + 1) === lv) j++;
+      const x0 = Math.max(pad.l, x(i) - bw / 2), x1 = Math.min(W - pad.r, x(j) + bw / 2);
+      el("rect", { x: x0, y: pad.t, width: Math.max(x1 - x0, 1.5), height: PH, class: lv === 2 ? "c-over-bad" : "c-over-warn" }, svg);
+      i = j;
+    }
 
     // Raster und Achsen
     const grid = el("g", { class: "c-grid" }, svg);
-    for (let i = 0; i <= 4; i++) {
-      const v = (yMax / 4) * i;
+    for (let k = 0; k <= 4; k++) {
+      const v = (yMax / 4) * k;
       el("line", { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v) }, grid);
       el("text", { x: pad.l - 6, y: y(v) + 4, "text-anchor": "end", class: "c-axis" }, svg).textContent =
-        (yMax < 5 ? v.toFixed(1) : Math.round(v)) + (i === 4 ? " ms" : "");
+        (yMax < 5 ? v.toFixed(1) : Math.round(v)) + (k === 4 ? " ms" : "");
     }
-    el("line", { x1: pad.l, x2: W - pad.r, y1: lossTop + lossH, y2: lossTop + lossH }, grid);
-    el("text", { x: pad.l - 6, y: lossTop + 8, "text-anchor": "end", class: "c-axis" }, svg).textContent = lossMax + " %";
-    el("text", { x: pad.l - 6, y: lossTop + lossH, "text-anchor": "end", class: "c-axis" }, svg).textContent = "0";
-    const ticks = Math.max(2, Math.floor((W - pad.l - pad.r) / 110));
-    for (let i = 0; i <= ticks; i++) {
-      const t = t0 + (span / ticks) * i;
-      el("line", { x1: x(t), x2: x(t), y1: pad.t, y2: lossTop + lossH }, grid);
-      el("text", { x: x(t), y: H - 8, "text-anchor": i === 0 ? "start" : i === ticks ? "end" : "middle",
-        class: "c-axis" }, svg).textContent = fmtTime(t, span);
+    const ticks = Math.max(2, Math.floor(PW / 110));
+    for (let k = 0; k <= ticks; k++) {
+      const i = a + (span / ticks) * k;
+      el("line", { x1: x(i), x2: x(i), y1: pad.t, y2: bottom }, grid);
+      el("text", { x: x(i), y: bottom + 15, "text-anchor": k === 0 ? "start" : k === ticks ? "end" : "middle",
+        class: "c-axis" }, svg).textContent = fmtTime(tOf(i), tOf(b) - tOf(a));
     }
 
-    // Min-Max-Band und Durchschnitt
-    const minMap = new Map(s.min.map((p) => [p[0], p[1]]));
-    const band = s.max.map((p) => [p[0], minMap.get(p[0]) ?? null, p[1]]);
-    for (const seg of segments(band)) {
-      const top = seg.map((p) => `${x(p[0]).toFixed(1)},${y(p[2]).toFixed(1)}`);
-      const bottom = seg.slice().reverse().map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`);
-      el("polygon", { points: top.concat(bottom).join(" "), class: "c-band" }, svg);
-    }
-    for (const seg of segments(s.avg.map((p) => [p[0], p[1], 0]))) {
-      el("polyline", { points: seg.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" "),
-        class: "c-avg" }, svg);
-    }
-    // Jitter als gestrichelte Linie auf derselben ms-Achse
-    for (const seg of segments((s.jitter || []).map((p) => [p[0], p[1], 0]))) {
-      el("polyline", { points: seg.map((p) => `${x(p[0]).toFixed(1)},${y(Math.min(p[1], yMax)).toFixed(1)}`).join(" "),
-        class: "c-jitter" }, svg);
-    }
+    // Rauch: 80 % der Pings hell, mittlere 50 % dunkler
+    const area = (lo, hi, cls) => {
+      let d = "", seg = [];
+      const flush = () => {
+        if (seg.length > 1) d += "M" + seg.map((i) => `${x(i).toFixed(1)},${y(hi[i]).toFixed(1)}`).join("L") + "L" +
+          seg.reverse().map((i) => `${x(i).toFixed(1)},${y(lo[i]).toFixed(1)}`).join("L") + "Z";
+        seg = [];
+      };
+      for (let i = a; i <= b; i++) lo[i] !== null && hi[i] !== null ? seg.push(i) : flush();
+      flush();
+      if (d) el("path", { d, class: cls }, svg);
+    };
+    area(p10, p90, "c-smoke-out");
+    area(p25, p75, "c-smoke-in");
+    if (lw && lw <= yMax) el("line", { x1: pad.l, x2: W - pad.r, y1: y(lw), y2: y(lw), class: "c-thr-lat" }, svg);
 
-    // Paketverlust als Balken
-    const bw = Math.max(1, ((W - pad.l - pad.r) / times.length) * 0.8);
-    for (const [t, v] of s.loss) {
-      if (v > 0) el("rect", { x: x(t) - bw / 2, y: yl(v), width: bw, height: lossTop + lossH - yl(v), class: "c-loss" }, svg);
+    // Median, abschnittsweise in der Farbe der Verlustklasse
+    let run = null;
+    const flushRun = () => {
+      if (run) el("polyline", { points: run.pts.join(" "), class: "c-med c-l" + run.c }, svg);
+      run = null;
+    };
+    const pt = (i) => `${x(i).toFixed(1)},${y(med[i]).toFixed(1)}`;
+    for (let i = a + 1; i <= b; i++) {
+      if (med[i - 1] === null || med[i] === null) { flushRun(); continue; }
+      const c = lossCls(loss[i]) || 0;
+      if (!run || run.c !== c) { flushRun(); run = { c, pts: [pt(i - 1)] }; }
+      run.pts.push(pt(i));
     }
+    flushRun();
+
+    // Verluststreifen unter der Zeitachse: ein Kästchen je Punkt mit Verlust
+    for (let i = a; i <= b; i++) {
+      const c = lossCls(loss[i]);
+      if (c) el("rect", { x: x(i) - bw / 2, y: bottom + 22, width: Math.max(bw, 1.5), height: 8, class: "c-lossbox c-l" + c }, svg);
+    }
+    el("text", { x: pad.l - 6, y: bottom + 30, "text-anchor": "end", class: "c-axis" }, svg).textContent = "Verlust";
 
     // Störungsmeldungen: senkrechte Markierung mit Dreieck zum gemeldeten Zeitpunkt
     const marks = [];
     for (const r of data.reports || []) {
-      const t = r.ts * 1000;
-      if (t < t0 || t > t1) continue;
-      const g = el("g", {}, svg);
-      drawReportMark(el, g, x(t), pad.t, lossTop + lossH);
-      marks.push({ x: x(t), r });
+      const i = r.ts / step - base;
+      if (i < a || i > b) continue;
+      drawReportMark(el, el("g", {}, svg), x(i), pad.t, bottom);
+      marks.push({ x: x(i), r });
     }
     if (marks.length) svg.setAttribute("aria-label", svg.getAttribute("aria-label") + reportAria(marks.length));
 
-    // Tooltip
-    const cursor = el("line", { y1: pad.t, y2: lossTop + lossH, class: "c-cursor", visibility: "hidden" }, svg);
-    const lookup = (key, t) => s[key].find((p) => p[0] === t)?.[1] ?? null;
-    svg.addEventListener("mousemove", (ev) => {
-      const rect = svg.getBoundingClientRect();
-      const px = ev.clientX - rect.left;
-      if (px < pad.l || px > W - pad.r) return;
-      const target = t0 + ((px - pad.l) / (W - pad.l - pad.r)) * span;
-      let best = times[0];
-      for (const t of times) if (Math.abs(t - target) < Math.abs(best - target)) best = t;
-      cursor.setAttribute("x1", x(best));
-      cursor.setAttribute("x2", x(best));
+    // Tooltip per Maus, Finger oder Tastatur; Bereich aufziehen vergrößert, Doppelklick zeigt wieder alles
+    const sel = el("rect", { x: pad.l, y: pad.t, width: 0, height: PH, class: "c-sel", visibility: "hidden" }, svg);
+    const cursor = el("line", { y1: pad.t, y2: bottom, class: "c-cursor", visibility: "hidden" }, svg);
+    const hit = el("rect", { x: pad.l, y: pad.t, width: PW, height: PH + 32, class: "c-hit" }, svg);
+    const tipLines = (i) => {
+      const mins = (w) => ` im ${Math.max(1, Math.round((w || step) / 60))}-min-Mittel`;
+      const why = [overLat(i) && "Latenz " + fmtMs(latW[i]) + mins(thr.lat_window_s),
+        lossCls(lossW[i]) >= 2 && "Verlust " + fmtPct(lossW[i]) + mins(thr.loss_window_s)];
+      const lines = [new Date(tOf(i)).toLocaleString("de-DE"), "Median: " + fmtMs(med[i]),
+        `Mittlere 50 %: ${fmtMs(p25[i])} – ${fmtMs(p75[i])}`, `80 %: ${fmtMs(p10[i])} – ${fmtMs(p90[i])}`,
+        "Verlust: " + fmtPct(loss[i])];
+      if (level(i)) lines.push("Über Schwelle: " + why.filter(Boolean).join(", "));
+      return lines;
+    };
+    const showAt = (i) => {
+      cursor.setAttribute("x1", x(i));
+      cursor.setAttribute("x2", x(i));
       cursor.setAttribute("visibility", "visible");
       tip.innerHTML = "";
-      const rows = [
-        [new Date(best).toLocaleString("de-DE"), ""],
-        ["Durchschnitt", fmtMs(lookup("avg", best))],
-        ["Min / Max", fmtMs(lookup("min", best)) + " / " + fmtMs(lookup("max", best))],
-        ["Jitter", fmtMs(s.jitter ? lookup("jitter", best) : null)],
-        ["Verlust", fmtPct(lookup("loss", best))],
-      ];
-      for (const [k, v] of rows) {
+      const rows = tipLines(i).map((t) => [t, ""]);
+      for (const m of marks.filter((m) => Math.abs(m.x - x(i)) <= Math.max(8, bw / 2))) {
+        reportLines(m.r).forEach((t, k) => rows.push([t, k === 0 ? "tip-report" : ""]));
+      }
+      for (const [t, cls] of rows) {
         const row = document.createElement("div");
-        row.textContent = v ? `${k}: ${v}` : k;
+        row.textContent = t;
+        row.className = cls;
         tip.appendChild(row);
       }
-      for (const m of marks.filter((m) => Math.abs(m.x - px) <= 8)) {
-        reportLines(m.r).forEach((line, i) => {
-          const row = document.createElement("div");
-          row.textContent = line;
-          if (i === 0) row.className = "tip-report";
-          tip.appendChild(row);
-        });
-      }
       tip.hidden = false;
-      const left = x(best) + 12;
       const tw = tip.offsetWidth || 190;
-      tip.style.left = Math.max(0, left + tw > W ? x(best) - tw - 10 : left) + "px";
+      tip.style.left = Math.max(4, Math.min(x(i) > W * 0.6 ? x(i) - tw - 12 : x(i) + 12, W - tw - 4)) + "px";
       tip.style.top = pad.t + 4 + "px";
-    });
-    svg.addEventListener("mouseleave", () => {
+      return rows.map((r) => r[0]).join(". ");
+    };
+    const hide = () => {
       tip.hidden = true;
       cursor.setAttribute("visibility", "hidden");
+    };
+    const idx = (ev) => {
+      const px = ev.clientX - svg.getBoundingClientRect().left;
+      return Math.max(a, Math.min(b, Math.round(a + ((px - pad.l) / PW) * span)));
+    };
+    let drag = null;
+    hit.addEventListener("pointermove", (ev) => {
+      const i = idx(ev);
+      if (drag !== null) {
+        sel.setAttribute("x", x(Math.min(drag, i)));
+        sel.setAttribute("width", Math.abs(x(i) - x(drag)));
+        sel.setAttribute("visibility", "visible");
+      }
+      if (ev.pointerType === "mouse" || drag !== null) showAt(i);
     });
+    hit.addEventListener("pointerleave", (ev) => ev.pointerType === "mouse" && drag === null && hide());
+    hit.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0) return;
+      drag = idx(ev);
+      hit.setPointerCapture(ev.pointerId);
+      if (ev.pointerType === "mouse") ev.preventDefault();
+    });
+    hit.addEventListener("pointerup", (ev) => {
+      if (drag === null) return;
+      const i = idx(ev), lo = Math.min(drag, i), hi = Math.max(drag, i);
+      drag = null;
+      sel.setAttribute("visibility", "hidden");
+      // shortcut: Zoom vergrößert nur die geladenen Punkte (Auflösung bleibt), für feinere Punkte from/to an die API geben
+      if (x(hi) - x(lo) >= 12) {
+        zoom = [lo, hi];
+        render(data);
+      } else if (ev.pointerType !== "mouse") showAt(i);
+    });
+    hit.addEventListener("pointercancel", () => {
+      drag = null;
+      sel.setAttribute("visibility", "hidden");
+    });
+    hit.addEventListener("dblclick", () => {
+      if (!zoom) return;
+      zoom = null;
+      render(data);
+    });
+    // Tastatur: Pfeiltasten je Punkt, Bild auf/ab zehn Punkte, Pos1/Ende, Esc blendet aus; Werte gehen an die Live-Region
+    let ki = null;
+    chartEl.onkeydown = (ev) => {
+      if (ev.key === "Escape" && ki !== null) {
+        ev.preventDefault();
+        ki = null;
+        hide();
+        return;
+      }
+      const d = { ArrowLeft: -1, ArrowRight: 1, PageUp: -10, PageDown: 10 }[ev.key];
+      if (d === undefined && ev.key !== "Home" && ev.key !== "End") return;
+      ev.preventDefault();
+      ki = ev.key === "Home" ? a : ev.key === "End" ? b : Math.max(a, Math.min(b, (ki ?? (d > 0 ? a - 1 : b + 1)) + d));
+      live.textContent = showAt(ki);
+    };
+    chartEl.onblur = () => {
+      if (ki === null) return;
+      ki = null;
+      hide();
+    };
 
-    sourceLabel.textContent =
-      (data.source === "agg" ? "1-min-Aggregate" : "Rohdaten") + ", Auflösung " + data.step_s + " s";
+    sourceLabel.textContent = (data.source === "agg" ? "1-min-Aggregate" : "Rohdaten") + ", Auflösung " + step + " s" +
+      (zoom ? " · Ausschnitt, Doppelklick zeigt alles" : "");
   }
 
   window.addEventListener("resize", () => lastData && render(lastData));
@@ -324,6 +416,7 @@
       btn.classList.add("active");
       btn.setAttribute("aria-pressed", "true");
       current = btn.dataset.range;
+      zoom = null;
       loadSeries(current);
     })
   );
@@ -331,7 +424,7 @@
   loadStats();
   setInterval(() => {
     if (document.hidden) return;
-    if (!at && (current === "1h" || current === "6h")) loadSeries(current);
+    if (!at && !zoom && (current === "1h" || current === "6h")) loadSeries(current);
     loadStats();
   }, 30000);
 

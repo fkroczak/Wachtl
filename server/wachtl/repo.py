@@ -261,12 +261,13 @@ def graph_thresholds() -> dict[str, float | None]:
     """Schwellen der aktiven Alarmregeln für den Latenzgraphen (Linien, Hinterlegung, Farbe nach Verlust)."""
     rules = alert_rules()
 
-    def thr(kind: str) -> float | None:
+    def thr(kind: str, key: str = "threshold") -> float | None:
         r = rules.get(kind)
-        return r["threshold"] if r and r["enabled"] else None
+        return r[key] if r and r["enabled"] else None
 
-    return {"lat_warn_ms": thr("latency_high"), "loss_warn_pct": thr("packet_loss_warning"),
-            "loss_bad_pct": thr("packet_loss_critical")}
+    return {"lat_warn_ms": thr("latency_high"), "lat_window_s": thr("latency_high", "window_s"),
+            "loss_warn_pct": thr("packet_loss_warning"), "loss_bad_pct": thr("packet_loss_critical"),
+            "loss_window_s": thr("packet_loss_warning", "window_s") or thr("packet_loss_critical", "window_s")}
 
 
 # -- Status -----------------------------------------------------------------

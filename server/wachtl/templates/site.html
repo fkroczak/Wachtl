@@ -17,8 +17,8 @@
   <div class="card stat {{ {'gestört': 'bad', 'auffällig': 'warn'}.get(net, '') }}"><span class="num word">{{ net or '–' }}</span><span>Internet (Referenz-Pings)</span></div>
   {% if bw %}{% set p, st = bw %}
   <a class="card stat {{ {'down': 'bad', 'warn': 'warn', 'stale': 'warn'}.get(st.state, '') }}" href="{{ check_url(p, st.check) }}">
-    <span class="num word">↓ {{ (st.values.down.mbps if st.values.down else None)|mbps }}<br>↑ {{ (st.values.up.mbps if st.values.up else None)|mbps }}</span>
-    <span>{{ KIND_LABELS[st.kind] }} {{ st.ts|ago }}{% if st.problem %} · {{ st.label }}{% endif %}</span></a>
+    <span class="num word">{% for d, arrow in (('down', '↓'), ('up', '↑')) %}{% set r = st.values[d] %}{{ arrow }} {{ '%.0f'|format(r.mbps) if r and r.mbps is not none else '–' }}{{ '<br>'|safe if loop.first }}{% endfor %}</span>
+    <span>Mbit/s · {{ KIND_LABELS[st.kind] }} {{ st.ts|ago }}{% if st.problem %} · {{ st.label }}{% endif %}</span></a>
   {% endif %}
 </section>
 
@@ -50,7 +50,7 @@
       {% if w.gateway %}<dt>Gateway</dt><dd><span class="dot {{ w.gateway.state }}"></span> {{ w.gateway.label }}</dd>{% endif %}
     </dl>
     {% endif %}
-    <p class="small">Checks: <span class="ok-t">{{ w.counts.ok }} ok</span> · <span class="warn-t">{{ w.counts.warn }} auffällig</span> · <span class="down-t">{{ w.counts.down }} gestört</span> · <span class="stale-t">{{ w.counts.stale }} keine Daten</span></p>
+    <p class="small">Checks:{% for k, lbl in (('ok', 'ok'), ('warn', 'auffällig'), ('down', 'gestört'), ('stale', 'keine Daten')) %}{{ ' ·' if not loop.first }} <span class="{{ k ~ '-t' if w.counts[k] else 'muted' }}">{{ w.counts[k] }} {{ lbl }}</span>{% endfor %}</p>
     {% if w.spark %}
     <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" role="img" aria-label="{{ w.spark.label }}">
       <path d="{{ w.spark.d }}"/>{% for x, h in w.spark.loss %}<rect x="{{ x }}" y="{{ 30 - h }}" width="2" height="{{ h }}"/>{% endfor %}
@@ -66,13 +66,12 @@
 {% if alerts %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Stufe</th><th>Alarm</th><th>Betrifft</th><th>seit</th></tr></thead>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th></tr></thead>
   <tbody>
   {% for a in alerts %}
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
-      <td>{{ a.summary or a.alertname }}</td>
-      <td>{{ alert_links(a) or '–' }}</td>
+      <td>{{ a.summary or a.alertname }}{% set refs = alert_links(a) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
       <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
     </tr>
   {% endfor %}
