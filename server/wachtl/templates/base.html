@@ -7,24 +7,25 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='wachtl-icon-180.png') }}">
+  <meta name="description" content="Wachtl – Netzwerk-Monitoring für Standorte, Probes und Alarme">
   <meta name="theme-color" content="#6b4a2e">
   <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 <body>
+<a class="skip-link" href="#inhalt">Zum Inhalt springen</a>
 {% if user %}
 <header class="topbar">
-  <a class="brand" href="{{ url_for('web.overview') }}"><img src="{{ url_for('static', filename='wachtl-logo-dark.svg') }}" alt="">Wachtl</a>
-  <nav>
-    <a href="{{ url_for('web.overview') }}" class="{{ 'active' if request.endpoint == 'web.overview' }}">Übersicht</a>
-    <a href="{{ url_for('web.alerts') }}" class="{{ 'active' if request.endpoint == 'web.alerts' }}">Alarme</a>
-    <a href="{{ url_for('web.outages_view') }}" class="{{ 'active' if request.endpoint == 'web.outages_view' }}">Ausfälle</a>
-    {% if has_role(user, 'admin') %}
-    <a href="{{ url_for('web.admin') }}" class="{{ 'active' if request.endpoint == 'web.admin' }}">Verwaltung</a>
-    {% endif %}
+  <a class="brand" href="{{ url_for('web.overview') }}"><img src="{{ url_for('static', filename='wachtl-logo-dark.svg') }}" alt="" width="40" height="40">Wachtl</a>
+  <nav aria-label="Hauptnavigation">
+    {% set nav = [('web.overview', 'Übersicht'), ('web.alerts', 'Alarme'), ('web.outages_view', 'Ausfälle')]
+                 + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
+    {% for endpoint, label in nav %}
+    <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
   </nav>
   <div class="who">
-    <a href="{{ url_for('web.account') }}">{{ user.username }}</a>
-    <span class="muted">{{ ROLE_LABELS[user.role] }}</span>
+    <a href="{{ url_for('web.account') }}" aria-label="Konto {{ user.username }} ({{ ROLE_LABELS[user.role] }})">{{ user.username }}</a>
+    <span class="muted" aria-hidden="true">{{ ROLE_LABELS[user.role] }}</span>
     <form method="post" action="{{ url_for('web.logout') }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="link">Abmelden</button>
@@ -32,9 +33,9 @@
   </div>
 </header>
 {% endif %}
-<main>
+<main id="inhalt" tabindex="-1">
   {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+    {% for cat, msg in messages %}<div class="flash {{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}">{{ msg }}</div>{% endfor %}
   {% endwith %}
   {% block content %}{% endblock %}
 </main>

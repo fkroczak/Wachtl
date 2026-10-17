@@ -55,7 +55,7 @@ nur bei der Ersteinrichtung einmalig übernommen.
 1. `https://wachtl.kunde.local` öffnen. Die Browserwarnung ist bei selbstsignierten Zertifikaten normal; dauerhaft beheben, indem `deploy/certs/wachtl.crt` per GPO als vertrauenswürdige Stammzertifizierungsstelle verteilt wird.
 2. Mit `admin` und dem Passwort aus Schritt 3 anmelden, unter **admin › Konto** das Passwort ändern.
 3. **Verwaltung › Standorte**: Standorte anlegen (Name, Kundennummer).
-4. **Verwaltung › Checks**: Standard sind Gateway, 8.8.8.8 und 1.1.1.1 im 1-s-Takt für alle Probes. Eigene Ziele (Server, Firewall, Cloud-Dienste) ergänzen, global, je Standort oder je Probe.
+4. **Verwaltung › Standardpaket**: mit einem Klick Ping, Traceroute, iperf3 und Speedtest für alle Probes anlegen (Schritt-für-Schritt: [ROLLOUT.md](ROLLOUT.md)). Eigene Ziele (Server, Firewall, Cloud-Dienste) unter **Verwaltung › Checks** ergänzen, global, je Standort oder je Probe.
 5. **Verwaltung › Probes registrieren**: Enrollment-Token erzeugen; die Seite zeigt den fertigen Installationsbefehl für die Probes.
 6. **Verwaltung › Benutzer**: Operatoren (dürfen Alarme bestätigen) und Nur-lesen-Konten anlegen.
 
@@ -85,3 +85,17 @@ sudo docker compose exec app flask --app wachtl create-user admin --role admin
 | vm-agg | 1-min-Aggregate (`AGG_RETENTION`, Standard 13 Monate) | nein |
 | vmalert | Aggregate berechnen, Alarmregeln auswerten | nein |
 | alertmanager | Benachrichtigungen, Stummschaltungen | nein |
+| iperf3 | Gegenstelle für Bandbreitenmessungen der Probes (`IPERF_PORT`, TCP+UDP) | ja |
+| serverprobe | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, WAN), im Host-Netz, nur ausgehend; `SERVER_PROBE=0` schaltet sie ab | nein (kein Port) |
+
+## Deinstallieren
+
+```bash
+cd /opt/wachtl/deploy
+sudo ./uninstall.sh            # Container, Netzwerke, Images, Cron-Eintrag – Daten bleiben für eine Neuinstallation
+sudo ./uninstall.sh --alles    # zusätzlich Datenbank, Messwerte, .env, Zertifikat (privater Schlüssel), Sicherungen
+```
+
+Mit den Containern verschwinden auch die Portfreigaben (80, 443, iperf3), die Docker als iptables-Regeln setzt.
+Das Skript prüft am Ende, dass keine Container, Netzwerke oder von Docker freigegebenen Ports des Projekts übrig sind,
+und endet sonst mit Code 2. Die Probes vorher mit ihrem Deinstaller entfernen – sie melden sich dabei am Server ab.

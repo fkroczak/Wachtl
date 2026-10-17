@@ -15,10 +15,10 @@ from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
-from . import checktypes
+from . import checktypes, standardpaket
 from .services import alertgen
 from .services import alerts as alert_service
-from .services import notify, outages, pathanalysis, vm
+from .services import checkstatus, notify, outages, pathanalysis, vm
 from .services import settings as settings_service
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,17 @@ def inject():
         "ROLE_LABELS": ROLE_LABELS,
         "CHECK_ROLES": repo.CHECK_ROLES,
         "probe_online": repo.probe_online,
+        "check_url": check_url,
     }
+
+
+def check_url(probe: dict, check: dict) -> str:
+    """Detailseite eines Checks auf einer Probe – je nach Art Ziel, Pfad oder Bandbreite."""
+    if check["type"] == "path":
+        return url_for("web.path_view", probe_id=probe["id"], check_id=check["id"])
+    if check["type"] in checktypes.SCHEDULED_TYPES:
+        return url_for("web.bandwidth_view", probe_id=probe["id"], check_id=check["id"])
+    return url_for("web.target", probe_id=probe["id"], check_id=check["id"])
 
 
 @bp.app_template_filter("dt")
@@ -55,6 +65,14 @@ def fmt_ago(ts):
     if d < 86400:
         return f"vor {d // 3600} h"
     return f"vor {d // 86400} Tagen"
+
+
+SEVERITY_LABELS = {"critical": "kritisch", "warning": "Warnung", "info": "Info"}
+
+
+@bp.app_template_filter("severity")
+def fmt_severity(v):
+    return SEVERITY_LABELS.get(v, v or "–")
 
 
 def _missing(v) -> bool:
@@ -180,18 +198,32 @@ def overview():
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"
     )
     live, live_ok = _live()
-    per_probe: dict[str, dict[str, int]] = defaultdict(lambda: {"ok": 0, "warn": 0, "down": 0, "unknown": 0})
-    for (probe_id, _check), v in live.items():
-        per_probe[probe_id][_cell_state(v)] += 1
-    site_stats = {s["id"]: {"probes": 0, "online": 0} for s in sites}
+    active = [p for p in probes if p["status"] == "active"]
+    states = checkstatus.overview(active, live)
+    per_probe = {p["id"]: checkstatus.counts(states[p["id"]]) for p in active}
+    site_stats = {s["id"]: {"probes": 0, "online": 0, "problems": 0} for s in sites}
+    problems = []      # (Probe, CheckState) – jede Messung, die gerade nicht funktioniert
+    offline = []       # Probes ohne Heartbeat: ihre Checks liefern zwangsläufig nichts
+    bandwidth = []     # (Probe, CheckState) aller Bandbreiten-Checks
     for p in probes:
         site_stats[p["site_id"]]["probes"] += 1
-        if repo.probe_online(p) and p["status"] == "active":
+        if p["status"] != "active":
+            continue
+        if repo.probe_online(p):
             site_stats[p["site_id"]]["online"] += 1
+            for st in states[p["id"]]:
+                if st.problem:
+                    problems.append((p, st))
+        else:
+            offline.append(p)
+        site_stats[p["site_id"]]["problems"] += sum(1 for st in states[p["id"]] if st.problem)
+        bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.SCHEDULED_TYPES]
+    problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
     return render_template(
         "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
-        alerts=alerts, live_ok=live_ok,
+        alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth,
+        KIND_LABELS=checkstatus.KIND_LABELS,
     )
 
 
@@ -204,18 +236,19 @@ def site(site_id: int):
         "WHERE p.site_id = ? ORDER BY p.hostname",
         (site_id,),
     )
-    checks_by_probe = {p["id"]: {c["id"]: c for c in repo.checks_for_probe(p) if c["type"] == "ping"} for p in probes}
-    all_checks: dict[int, dict] = {}
-    for cmap in checks_by_probe.values():
-        all_checks.update(cmap)
     live, live_ok = _live()
-    matrix = {
-        (c_id, p["id"]): live.get((str(p["id"]), str(c_id)))
-        for c_id in all_checks for p in probes if c_id in checks_by_probe[p["id"]]
-    }
+    states = checkstatus.overview(probes, live)
+    all_checks: dict[int, dict] = {}
+    matrix = {}
+    for p in probes:
+        for st in states[p["id"]]:
+            all_checks.setdefault(st.check["id"], st.check)
+            matrix[(st.check["id"], p["id"])] = st
+    order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3}
     return render_template(
-        "site.html", site=s, probes=probes, checks=sorted(all_checks.values(), key=lambda c: c["id"]),
-        matrix=matrix, cell_state=_cell_state, live_ok=live_ok,
+        "site.html", site=s, probes=probes,
+        checks=sorted(all_checks.values(), key=lambda c: (order.get(c["type"], 9), c["id"])),
+        matrix=matrix, live_ok=live_ok, KIND_LABELS=checkstatus.KIND_LABELS,
     )
 
 
@@ -257,8 +290,11 @@ def probe(probe_id: int):
         if json.loads(a["labels"]).get("probe") == str(probe_id)
     ][:20]
     measure = settings_service.get()
+    latest_paths, latest_bw = checkstatus.latest_runs([probe_id])
+    states = checkstatus.probe_states(p, checks, live, latest_paths, latest_bw)
     return render_template(
         "probe.html", probe=p, rows=rows, paths=paths, bandwidth=bandwidth, cell_state=_cell_state,
+        states=states, state_counts=checkstatus.counts(states), KIND_LABELS=checkstatus.KIND_LABELS,
         live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
         default_iperf_port=measure["probe_iperf_port"],
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
@@ -417,6 +453,11 @@ def outages_view():
 @login_required("admin")
 def probe_status(probe_id: int):
     new = "disabled" if request.form.get("action") == "disable" else "active"
+    p = q1("SELECT deregistered_at FROM probes WHERE id = ?", (probe_id,)) or abort(404)
+    if new == "active" and p["deregistered_at"]:
+        flash("Die Probe wurde deinstalliert und hat kein gültiges Token mehr – zum erneuten Messen neu installieren.",
+              "error")
+        return redirect(url_for("web.probe", probe_id=probe_id))
     ex("UPDATE probes SET status = ? WHERE id = ?", (new, probe_id))
     repo.audit(current_user()["username"], f"probe.{new}", f"probe:{probe_id}")
     flash("Probe deaktiviert – ihr Token wird abgelehnt." if new == "disabled" else "Probe aktiviert.", "ok")
@@ -482,7 +523,8 @@ def admin():
         assignments[a["check_id"]].append(repo.scope_label(a["scope"], a["scope_id"], site_map, probe_map))
     tokens = q(
         "SELECT t.*, s.name AS site_name FROM enrollment_tokens t JOIN sites s ON s.id = t.site_id "
-        "WHERE t.revoked = FALSE AND t.expires_at > ? AND t.uses < t.max_uses ORDER BY t.created_at DESC",
+        "WHERE t.revoked = FALSE AND t.expires_at > ? AND t.uses < t.max_uses AND t.probe_kind = 'probe' "
+        "ORDER BY t.created_at DESC",
         (repo.now(),),
     )
     return render_template(
@@ -493,7 +535,38 @@ def admin():
         notify_enabled=bool(current_app.config.get("AM_CONFIG")),
         check_types=checktypes.TYPES, summary=checktypes.summary, merged=checktypes.merged,
         measure=settings_service.get(), measure_fields=settings_service.FIELDS,
+        package=standardpaket.preview(current_app.config["PUBLIC_URL"]),
     )
+
+
+@bp.post("/admin/standard-package")
+@login_required("admin")
+def standard_package():
+    """Standardpaket anlegen: Ping, Traceroute, iperf3 und Speedtest mit einem Klick."""
+    scope = request.form.get("scope", "all")
+    scope_id = None
+    if scope == "site":
+        scope_id = int(request.form.get("site_id", 0) or 0)
+        if not q1("SELECT id FROM sites WHERE id = ?", (scope_id,)):
+            flash("Bitte einen Standort auswählen.", "error")
+            return redirect(url_for("web.admin") + "#standardpaket")
+    elif scope != "all":
+        abort(400)
+    keys = request.form.getlist("items")
+    if not keys:
+        flash("Bitte mindestens einen Check auswählen.", "error")
+        return redirect(url_for("web.admin") + "#standardpaket")
+    created, skipped = standardpaket.apply(keys, scope, scope_id, current_app.config["PUBLIC_URL"])
+    user = current_user()["username"]
+    for cid, item in created:
+        repo.audit(user, "check.create", f"check:{cid}", f"Standardpaket: {item.name}")
+    if created:
+        _regen_rules()
+        flash(f"Standardpaket: {len(created)} Checks angelegt ({', '.join(i.name for _, i in created)}). "
+              "Die Probes übernehmen sie mit dem nächsten Heartbeat.", "ok")
+    if skipped:
+        flash("Nicht angelegt: " + "; ".join(skipped) + ".", "ok" if created else "error")
+    return redirect(url_for("web.admin") + "#checks")
 
 
 @bp.post("/admin/measure")
@@ -624,11 +697,15 @@ def _probe_names() -> dict[int, str]:
             q("SELECT p.id, p.hostname, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname")}
 
 
-def _check_form_context(ctype: str, check: dict | None, values: dict | None = None) -> dict:
+def _check_form_context(ctype: str, check: dict | None, values: dict | None = None,
+                        errors: list | None = None) -> dict:
     ct = checktypes.TYPES[ctype]
     params = checktypes.merged(ctype, json.loads(check["params"] or "{}") if check else None)
     if values:
         params.update(values)
+    # Fehler in der Reihenfolge der Felder im Formular, damit die Übersicht dem Lesefluss folgt
+    order = ["name", "target", "role", "interval_s", "timeout_ms"] + [f.key for f in ct.fields] + ["scope"]
+    errors = sorted(errors or [], key=lambda e: order.index(e.field) if getattr(e, "field", None) in order else len(order))
     groups: dict[str, list] = {}
     for f in ct.fields:
         groups.setdefault(f.group, []).append(f)
@@ -642,6 +719,9 @@ def _check_form_context(ctype: str, check: dict | None, values: dict | None = No
         "probes": q("SELECT p.id, p.hostname, p.iperf_server, s.name AS site_name FROM probes p "
                     "JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"),
         "intervals": repo.ALLOWED_INTERVALS, "assignment": assignment or {"scope": "all", "scope_id": None},
+        "visible": checktypes.visible_keys(ctype, params),
+        "errors": errors,
+        "field_errors": {e.field: e for e in reversed(errors) if getattr(e, "field", None)},
     }
 
 
@@ -683,10 +763,11 @@ def check_create():
         scope_id = int(f.get("probe_id", 0) or 0)
     names = _probe_names()
     params, errors = checktypes.parse_params(ctype, f, probe_ids=set(names))
+    FieldError = checktypes.FieldError
     if not name:
-        errors.append("Name fehlt.")
+        errors.append(FieldError("Name fehlt.", "name"))
     if scope not in ("all", "site", "probe") or (scope != "all" and not scope_id):
-        errors.append("Zuweisung unvollständig.")
+        errors.append(FieldError("Zuweisung unvollständig.", "scope"))
 
     target, role, interval, timeout = "", checktypes.ROLE_DEFAULT[ctype], 3600, 60000
     if ctype in ("ping", "path"):
@@ -697,27 +778,26 @@ def check_create():
         except ValueError:
             interval, timeout = -1, -1
         if not repo.valid_target(target) or (ctype == "path" and target == "gateway"):
-            errors.append("Ziel ist keine gültige IP-Adresse oder kein gültiger Hostname"
-                          + ("." if ctype == "path" else " und nicht 'gateway'."))
+            errors.append(FieldError("Ziel ist keine gültige IP-Adresse oder kein gültiger Hostname"
+                                     + ("." if ctype == "path" else " und nicht 'gateway'."), "target"))
         if interval not in repo.ALLOWED_INTERVALS:
-            errors.append("Ungültiges Intervall.")
+            errors.append(FieldError("Ungültiges Intervall.", "interval_s"))
         if not 100 <= timeout <= 5000:
-            errors.append("Timeout muss zwischen 100 und 5000 ms liegen.")
+            errors.append(FieldError("Timeout muss zwischen 100 und 5000 ms liegen.", "timeout_ms"))
         if ctype == "ping":
             role = f.get("role", "target")
             if role not in repo.CHECK_ROLES:
-                errors.append("Ungültige Rolle.")
+                errors.append(FieldError("Ungültige Rolle.", "role"))
     elif not errors:
         target = checktypes.target_for(ctype, params, names)
         interval = params["schedule_min"] * 60 if params["schedule_min"] else 3600
         timeout = params["timeout_s"] * 1000
         if ctype == "iperf" and params["peer"] == "probe" and scope == "probe" and scope_id == params["peer_probe_id"]:
-            errors.append("Eine Probe kann nicht gegen sich selbst messen.")
+            errors.append(FieldError("Eine Probe kann nicht gegen sich selbst messen.", "peer_probe_id"))
 
     if errors:
-        for e in errors:
-            flash(e, "error")
-        ctx = _check_form_context(ctype, existing, params)
+        # Fehler stehen gesammelt über dem Formular und jeweils am Feld (kein Flash)
+        ctx = _check_form_context(ctype, existing, params, errors)
         ctx["form"] = f
         return render_template("check_form.html", **ctx), 400
 

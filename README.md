@@ -18,7 +18,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
                                               Alertmanager ─▶ E-Mail / Teams, Historie zurück an Flask
 ```
 
-## Stand: 0.3
+## Stand: 0.4
 
 | Bereich | Enthalten |
 | --- | --- |
@@ -32,6 +32,10 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Benachrichtigungen | E-Mail und Teams im Web-UI einstellbar, mit Testnachricht |
 | Pfade (0.3) | Traceroute + Dauerpings auf jeden Hop, MTR-Tabelle mit Bewertung (echter Verlust vs. ICMP-Drosselung, Latenzsprung), Pfadverlauf, Alarm bei Pfadwechsel |
 | Bandbreite (0.3) | iperf3 Probe ↔ Server und Probe ↔ Probe (TCP/UDP), WAN per HTTP oder iperf3; Zeitplan, Zeitfenster, Wochentage, „Jetzt messen“, Schwellwert-Alarm |
+| Zustand (0.4) | Übersicht, Standort und Probe bewerten jede Check-Art (Ping, Pfad, iperf3, WAN); „Messungen mit Problemen“ zeigt jede fehlgeschlagene, auffällige oder ausbleibende Messung mit Grund |
+| Server-Probe (0.4) | Der Server misst selbst – dieselben Checks wie die Probes, über das Probe-API, ohne offenen Port |
+| Standardpaket (0.4) | Ping, Traceroute, iperf3 und Speedtest mit einem Klick; Rollout-Anleitung [docs/ROLLOUT.md](docs/ROLLOUT.md) |
+| Deinstallation (0.4) | Probe meldet sich am Server ab, alle Firewall-Regeln und das Token werden entfernt; Server Windows/Linux (`deploy/uninstall.sh`) mit Prüfung auf offene Ports |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
@@ -51,21 +55,22 @@ Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unte
 | `server/` | Flask-Collector und Dashboard (Python 3.12), Tests unter `server/tests` |
 | `probe/` | Windows-Probe (C# / .NET 8) und xUnit-Tests, `build.ps1` |
 | `installer/` | `Install-Wachtl.ps1` – Installation, Update, Status, Deinstallation der Probe |
-| `deploy/` | Linux: Docker-Compose-Stack, `setup.sh`, Backup und Restore |
+| `server/wachtl/serverprobe/` | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, HTTP-Speedtest) |
+| `deploy/` | Linux: Docker-Compose-Stack, `setup.sh`, `uninstall.sh`, Backup und Restore |
 | `windows/` | Windows-Server: Setup-Assistent (`WachtlServer.iss`), `build-server.ps1`, `wachtl-server.cmd`, `assets/` (Symbole, Assistenten-Bilder) |
 | `probe/setup/` | Client-Setup-Assistent (`WachtlProbe.iss`) |
 | `brand/` | Logo-Quelle und Generator für SVG, PNG, ICO und Assistenten-Bilder |
 | `server/wachtl/win/` | Windows-Laufzeit: Dienst-Supervisor, HTTPS-Server, Einrichtung, Backup |
-| `docs/` | Installationsanleitungen, Betrieb, Sicherheit, API |
+| `docs/` | Installationsanleitungen, Betrieb, Sicherheit, API, UI-Qualitäts-Guardrails |
 
 ## Schnellstart
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.3.0.exe` starten
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.4.0.exe` starten
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
-3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md)
+3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md) – kompakt für den Rollout beim Kunden: [docs/ROLLOUT.md](docs/ROLLOUT.md)
 4. Betrieb, Backup, Updates, Sicherheit, Alarme: [docs/BETRIEB.md](docs/BETRIEB.md)
 
 ## Entwicklung
@@ -73,7 +78,7 @@ Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unte
 ```bash
 cd server
 pip install -r requirements-dev.txt
-python -m pytest -q                              # 49 Tests (inkl. Windows-Logik im Trockenlauf)
+python -m pytest -q                              # Server-Tests inkl. Windows-Logik und UI-Guardrails
 
 # Lokal ohne Docker: Fake-VictoriaMetrics + SQLite
 python devtools/fake_vm.py 18428 &
@@ -85,6 +90,9 @@ flask --app wachtl init && flask --app wachtl run
 # Enrollment-Token im UI erzeugen, dann Demodaten einspielen:
 python devtools/simulate_probes.py http://127.0.0.1:5000 <token> 2
 ```
+
+Web-UI: Barrierefreiheit, Tastatur, Performance-Budgets und Formular-Konventionen stehen in
+[docs/quality-guardrails.md](docs/quality-guardrails.md); Browser-Tests unter `server/e2e` (`e2e/start-server.sh`, dann `npx playwright test`).
 
 ```powershell
 cd probe

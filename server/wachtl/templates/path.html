@@ -2,12 +2,12 @@
 {% block title %}Pfad {{ check.target }} – {{ probe.hostname }}{% endblock %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Pfad</p>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Pfad</nav>
 <h1>{{ check.name }} <span class="muted">· {{ probe.hostname }} → {{ check.target }}</span></h1>
 <p class="muted">Jeder Hop wird alle {{ check.interval_s }} s angepingt, der Pfad alle {{ params.trace_interval_min }} min neu ermittelt{{ ' und sofort bei Verlust am Ziel' if params.retrace_on_loss }}.</p>
 
 <div class="actions">
-  <span class="range-buttons">{% for w in windows %}<a class="button {{ 'active' if w == window }}" href="?window={{ w }}">{{ w }}</a>{% endfor %}</span>
+  <span class="range-buttons">{% for w in windows %}<a class="button {{ 'active' if w == window }}" href="?window={{ w }}"{% if w == window %} aria-current="true"{% endif %}>{{ w }}</a>{% endfor %}</span>
   {% if has_role(user, 'operator') %}
   <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=check.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -25,7 +25,7 @@
 </div>
 
 <table class="hops">
-  <thead><tr><th>Hop</th><th>Adresse</th><th>Bereich</th><th>Verlust</th><th>Letzte</th><th>Ø</th><th>Min</th><th>Max</th><th>Jitter</th><th>Pings</th><th></th></tr></thead>
+  <thead><tr><th>Hop</th><th>Adresse</th><th>Bereich</th><th>Verlust</th><th>Letzte</th><th>Ø</th><th>Min</th><th>Max</th><th>Jitter</th><th>Pings</th><th>Bewertung</th></tr></thead>
   <tbody>
   {% for r in rows %}
     {% set mark = analysis.hop_marks.get(r.hop) %}

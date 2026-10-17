@@ -2,12 +2,12 @@
 ; Bauen: siehe build-server.ps1 (übergibt AppVersion und BuildDir)
 ;
 ; Unbeaufsichtigte Installation, z. B.:
-;   WachtlServerSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Hostnames="wachtl.kunde.local,10.0.0.5"
+;   WachtlServerSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Hostnames="wachtl.kunde.local,10.0.0.5"
 ;       /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/IperfPort=5201] [/DataDir="D:\Wachtl"] [/RawDays=30] [/AggMonths=13]
 ;       [/EmailTo=… /EmailFrom=… /SmtpHost=mail:587 /SmtpUser=… /SmtpPassword=…] [/TeamsUrl=https://…]
 
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.4.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build\server"
@@ -76,7 +76,8 @@ Filename: "{code:GetUrl}"; Description: "Wachtl im Browser öffnen"; Flags: post
 Filename: "notepad.exe"; Parameters: """{code:GetDataDir}\setup-info.txt"""; Description: "Zugangsdaten und SPKI-Pin anzeigen"; Flags: postinstall nowait skipifsilent unchecked; Check: SetupSucceeded
 
 [UninstallRun]
-Filename: "{app}\python\python.exe"; Parameters: "-m wachtl.win.installer uninstall"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "WachtlUninstall"
+; Dienst (samt Server-Probe), Firewall-Regeln und geplante Sicherung entfernen, danach prüfen, dass kein Port offen bleibt
+Filename: "{app}\python\python.exe"; Parameters: "-m wachtl.win.installer uninstall --result ""{commonappdata}\Wachtl Server Deinstallation.ini"""; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "WachtlUninstall"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\app"
@@ -616,13 +617,48 @@ begin
   Result := True;
 end;
 
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+{ Unbeaufsichtigt: /REMOVEDATA löscht auch den Datenordner (Datenbank, Schlüssel, Sicherungen) }
+function RemoveDataParam(): Boolean;
+var
+  I: Integer;
 begin
-  if (CurUninstallStep = usPostUninstall) and (UninstallDataDir <> '') and DirExists(UninstallDataDir) then
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/REMOVEDATA') = 0 then
+      Result := True;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultIni, Leftovers: String;
+begin
+  if CurUninstallStep <> usPostUninstall then
+    Exit;
+  ResultIni := ExpandConstant('{commonappdata}\Wachtl Server Deinstallation.ini');
+  Leftovers := '';
+  if FileExists(ResultIni) then
+  begin
+    Leftovers := GetIniString('result', 'error', '', ResultIni);
+    StringChangeEx(Leftovers, '\n', #13#10, True);
+    DeleteFile(ResultIni);
+  end;
+  if Leftovers <> '' then
+  begin
+    Log('Wachtl Server: nach der Deinstallation noch vorhanden: ' + Leftovers);
     if not UninstallSilent() then
-      if MsgBox('Sollen auch alle Daten gelöscht werden?' + #13#10#13#10 + UninstallDataDir + #13#10#13#10 +
-                'Datenbank, Messwerte, Zertifikat und Sicherungen gehen dabei verloren. ' +
-                'Bei „Nein“ bleiben sie für eine spätere Neuinstallation erhalten.',
-                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      MsgBox('Nicht alles konnte entfernt werden:' + #13#10#13#10 + Leftovers, mbError, MB_OK);
+  end;
+  if (UninstallDataDir <> '') and DirExists(UninstallDataDir) then
+  begin
+    if UninstallSilent() then
+    begin
+      if RemoveDataParam() then
         DelTree(UninstallDataDir, True, True, True);
+    end
+    else if MsgBox('Sollen auch alle Daten gelöscht werden?' + #13#10#13#10 + UninstallDataDir + #13#10#13#10 +
+                'Datenbank, Messwerte, Zertifikat mit privatem Schlüssel und Sicherungen gehen dabei verloren. ' +
+                'Bei „Nein“ bleiben sie für eine spätere Neuinstallation erhalten – dann den Ordner sicher verwahren.',
+                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      DelTree(UninstallDataDir, True, True, True);
+  end;
 end;

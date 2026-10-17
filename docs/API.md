@@ -12,6 +12,7 @@ Authentifizierung: `Authorization: Bearer <probe_id>.<secret>` (außer `enroll`)
 | GET | `/config` | Header `If-None-Match: "<etag>"` | 200 Konfiguration (siehe BETRIEB.md) · 304 unverändert |
 | POST | `/ingest` | Prometheus-Text, optional `Content-Encoding: gzip`, Header `X-Batch-Id` | 204 gespeichert oder bereits bekannt · 422 alle Zeilen verworfen · 503 Speicher nicht erreichbar (Probe wiederholt) |
 | POST | `/heartbeat` | `{"version", "os", "hostname", "buffer_items", "uptime_s"}` | 200 `{"config_etag", "server_time"}` |
+| POST | `/deregister` | `{}` | 204 – Probe abgemeldet (Deinstallation): deaktiviert, Token ab sofort ungültig, offene Aufträge verworfen |
 
 Fehler bei Authentifizierung: 401 (Token fehlt/falsch), 403 (Probe deaktiviert).
 
@@ -35,8 +36,9 @@ Authentifizierung über die Web-Sitzung; ändernde Aufrufe brauchen den Header `
 | Methode | Pfad | Rolle | Antwort |
 | --- | --- | --- | --- |
 | GET | `/sites` | Nur lesen | Standorte |
-| GET | `/probes` | Nur lesen | Probes inkl. `online` |
+| GET | `/probes` | Nur lesen | Probes inkl. `online`, `kind` (`probe` oder `server` = Server-Probe), `deregistered_at` |
 | GET | `/checks` | Nur lesen | Checks |
+| GET | `/check-status` | Nur lesen | `[{"probe_id", "hostname", "online", "check_id", "name", "type", "state", "detail", "ts"}]` – Zustand jeder Messung aller aktiven Probes; `state` = `ok`, `warn`, `down`, `stale` (keine Daten/überfällig) oder `waiting` |
 | GET | `/status` | Nur lesen | `[{"probe", "check_id", "up", "rtt", "loss"}]` – letzter Zustand aller Ziele |
 | GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "series": {"avg", "min", "max", "loss": [[ts_ms, wert], …]}}` |
 | GET | `/probes/{id}/checks/{id}/stats` | Nur lesen | `{"1m"\|"5m"\|"15m"\|"1h"\|"24h": {"min", "median", "avg", "max", "jitter", "loss"}}` |

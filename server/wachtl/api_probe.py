@@ -68,15 +68,18 @@ def enroll():
         action = "probe.reenroll"
     else:
         probe_id = ins(
-            "INSERT INTO probes (site_id, hostname, os, version, token_hash, status, created_at) "
-            "VALUES (?, ?, ?, ?, 'pending', 'active', ?)",
-            (site["id"], hostname, str(data.get("os", ""))[:200], str(data.get("version", ""))[:50], ts),
+            "INSERT INTO probes (site_id, hostname, os, version, token_hash, status, kind, created_at) "
+            "VALUES (?, ?, ?, ?, 'pending', 'active', ?, ?)",
+            (site["id"], hostname, str(data.get("os", ""))[:200], str(data.get("version", ""))[:50],
+             et["probe_kind"] or "probe", ts),
         )
         action = "probe.enroll"
     probe_token = f"{probe_id}.{secret}"
     ex(
-        "UPDATE probes SET token_hash = ?, status = 'active', os = ?, version = ?, last_ip = ? WHERE id = ?",
-        (hash_token(probe_token), str(data.get("os", ""))[:200], str(data.get("version", ""))[:50], _client_ip(), probe_id),
+        "UPDATE probes SET token_hash = ?, status = 'active', kind = ?, deregistered_at = NULL, os = ?, version = ?, "
+        "last_ip = ? WHERE id = ?",
+        (hash_token(probe_token), et["probe_kind"] or "probe", str(data.get("os", ""))[:200],
+         str(data.get("version", ""))[:50], _client_ip(), probe_id),
     )
     ex("UPDATE enrollment_tokens SET uses = uses + 1 WHERE id = ?", (et["id"],))
     repo.audit(f"probe:{hostname}", action, f"probe:{probe_id}", f"Standort {site['name']}, IP {_client_ip()}")
@@ -151,6 +154,24 @@ def heartbeat():
         repo.prune()
     _, etag = repo.probe_config(g.probe)
     return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]))
+
+
+@bp.post("/deregister")
+@probe_auth
+def deregister():
+    """Abmeldung durch den Deinstaller: Probe deaktivieren und ihr Token sofort ungültig machen.
+
+    Messwerte und Verlauf bleiben bis zum Ablauf der Aufbewahrung erhalten; im Dashboard erscheint
+    die Probe als „abgemeldet“ und kann dort gelöscht werden.
+    """
+    ts = repo.now()
+    ex("UPDATE probes SET status = 'disabled', token_hash = ?, deregistered_at = ?, iperf_server = FALSE WHERE id = ?",
+       ("deregistered:" + new_secret(16), ts, g.probe["id"]))
+    ex("DELETE FROM probe_commands WHERE probe_id = ? AND delivered_at IS NULL", (g.probe["id"],))
+    repo.audit(f"probe:{g.probe['hostname']}", "probe.deregister", f"probe:{g.probe['id']}",
+               f"Deinstallation, IP {_client_ip()}")
+    log.info("Probe %s (%s) hat sich abgemeldet", g.probe["id"], g.probe["hostname"])
+    return "", 204
 
 
 def _addresses(raw) -> list[str]:

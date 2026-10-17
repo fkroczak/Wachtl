@@ -1,16 +1,17 @@
 {% extends "base.html" %}
 {% block title %}Verwaltung{% endblock %}
+{% from "_forms.html" import field %}
 {% block content %}
 <h1>Verwaltung</h1>
-<nav class="subnav">
-  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#checks">Checks</a><a href="#messung">Messung</a>
+<nav class="subnav" aria-label="Abschnitte der Verwaltung">
+  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#standardpaket">Standardpaket</a><a href="#checks">Checks</a><a href="#messung">Messung</a>
   <a href="#alarme">Alarmregeln</a><a href="#benachrichtigungen">Benachrichtigungen</a><a href="#benutzer">Benutzer</a><a href="{{ url_for('web.audit') }}">Audit-Log</a>
 </nav>
 
 <section id="standorte">
   <h2>Standorte</h2>
   <table>
-    <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>
     {% for s in sites %}
       <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
@@ -36,7 +37,7 @@
     {% if probe_setup %}<a href="{{ url_for('web.probe_setup_download') }}">{{ probe_setup.name }} herunterladen</a>{% endif %}</p>
   {% if tokens %}
   <table>
-    <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th></th></tr></thead>
+    <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for t in tokens %}
       <tr><td>{{ t.site_name }}</td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
         <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
@@ -56,6 +57,54 @@
   </form>
 </section>
 
+<section id="standardpaket">
+  <h2>Standardpaket</h2>
+  <p class="muted">Fertige Checks für einen neuen Kunden: anhaken, Zuweisung wählen, anlegen – fertig. Danach nur noch die Probes installieren.
+    Vorhandene Checks mit gleichem Ziel werden nicht doppelt angelegt; alles lässt sich später unter Checks ändern.</p>
+  <form method="post" action="{{ url_for('web.standard_package') }}" class="settings-form" data-check-form>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset class="table-fieldset">
+      <legend>Checks</legend>
+      <div class="scroll">
+      <table>
+        <thead><tr><th><span class="sr-only">Auswahl</span></th><th>Check</th><th>Art</th><th>Ziel</th><th>Einstellungen</th><th>Wofür</th></tr></thead>
+        <tbody>{% for e in package %}
+          <tr class="{{ 'disabled' if e.exists or not e.available }}">
+            <td><input type="checkbox" name="items" value="{{ e.item.key }}" id="pkg-{{ e.item.key }}"
+                       {{ 'checked' if e.available and not e.exists }} {{ 'disabled' if not e.available }}></td>
+            <td><label for="pkg-{{ e.item.key }}">{{ e.item.name }}</label>
+              {% if e.exists %}<span class="muted small">(schon vorhanden)</span>{% elif not e.available %}<span class="muted small">(Server-URL ohne Hostnamen)</span>{% endif %}</td>
+            <td>{{ check_types[e.item.ctype].label }}</td>
+            <td>{{ e.target or '–' }}</td>
+            <td class="small">{{ e.summary }}</td>
+            <td class="small">{{ e.item.description }}</td>
+          </tr>
+        {% endfor %}</tbody>
+      </table>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Zuweisung</legend>
+      <div class="grid-form">
+        <div class="field">
+          <label for="pkg-scope">Gilt für</label>
+          <select name="scope" id="pkg-scope">
+            <option value="all">alle Probes</option>
+            {% if sites %}<option value="site">einen Standort</option>{% endif %}
+          </select>
+        </div>
+        {% if sites %}
+        <div class="field" data-show-if="scope:site">
+          <label for="pkg-site">Standort</label>
+          <select name="site_id" id="pkg-site">{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+        </div>
+        {% endif %}
+      </div>
+    </fieldset>
+    <button class="primary">Standardpaket anlegen</button>
+  </form>
+</section>
+
 <section id="checks">
   <h2>Checks</h2>
   <p class="muted">Was die Probes messen. Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt.
@@ -64,7 +113,7 @@
     {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
   </div>
   <table>
-    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for c in checks %}
       <tr class="{{ '' if c.enabled else 'disabled' }}">
         <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
@@ -96,14 +145,11 @@
       <div class="grid-form">
       {% for f in group.list %}
         {% set v = measure[f.key] %}
-        <label class="{{ 'check' if f.kind == 'bool' }}">
-          {% if f.kind == 'bool' %}<input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }}> {{ f.label }}
-          {% else %}{{ f.label }}
-            {% if f.kind == 'int' %}<span class="unit-input"><input name="{{ f.key }}" type="number" min="{{ f.min }}" max="{{ f.max }}" value="{{ v }}">{% if f.unit %}<span>{{ f.unit }}</span>{% endif %}</span>
-            {% else %}<input name="{{ f.key }}" value="{{ v }}" maxlength="253">{% endif %}
-          {% endif %}
-          {% if f.help %}<small>{{ f.help }}</small>{% endif %}
-        </label>
+        {% call(attrs) field(f.key, f.label, help=f.help, unit=f.unit if f.kind == 'int' else None, check=f.kind == 'bool') %}
+          {%- if f.kind == 'bool' %}<input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }} {{ attrs }}>
+          {%- elif f.kind == 'int' %}<input name="{{ f.key }}" type="number" min="{{ f.min }}" max="{{ f.max }}" value="{{ v }}" {{ attrs }}>
+          {%- else %}<input name="{{ f.key }}" value="{{ v }}" maxlength="253" {{ attrs }}>{% endif -%}
+        {% endcall %}
       {% endfor %}
       </div>
     </fieldset>
@@ -120,13 +166,13 @@
       <thead><tr><th>Aktiv</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
       <tbody>{% for r in rules %}
         <tr>
-          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="aktiv"></td>
-          <td>{{ r.name }}</td>
-          <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num"></td>
+          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="{{ r.name }}: aktiv"></td>
+          <th scope="row">{{ r.name }}</th>
+          <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num" aria-label="{{ r.name }}: Schwellwert"></td>
           <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
-              {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num">{% endif %}</td>
-          <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num"></td>
-          <td><select name="severity_{{ r.kind }}">{% for sv in ('info','warning','critical') %}<option {{ 'selected' if sv == r.severity }}>{{ sv }}</option>{% endfor %}</select></td>
+              {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num" aria-label="{{ r.name }}: Fenster in Sekunden">{% endif %}</td>
+          <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num" aria-label="{{ r.name }}: Dauer bis Alarm in Sekunden"></td>
+          <td><select name="severity_{{ r.kind }}" aria-label="{{ r.name }}: Stufe">{% for sv in ('info','warning','critical') %}<option value="{{ sv }}" {{ 'selected' if sv == r.severity }}>{{ sv|severity }}</option>{% endfor %}</select></td>
         </tr>
       {% endfor %}</tbody>
     </table>
@@ -162,7 +208,7 @@
 <section id="benutzer">
   <h2>Benutzer</h2>
   <table>
-    <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th></th></tr></thead>
+    <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for u in users %}
       <tr><td>{{ u.username }}</td><td>{{ ROLE_LABELS[u.role] }}</td><td>{{ u.last_login|dt }}</td>
         <td>{% if u.id != user.id %}<form method="post" action="{{ url_for('web.user_delete', user_id=u.id) }}" class="inline">

@@ -6,11 +6,11 @@
 <h2>Aktiv</h2>
 {% if firing %}
 <table>
-  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th><th>Bestätigt</th>{% if has_role(user,'operator') %}<th></th>{% endif %}</tr></thead>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th><th>Bestätigt</th>{% if has_role(user,'operator') %}<th><span class="sr-only">Aktionen</span></th>{% endif %}</tr></thead>
   <tbody>
   {% for a in firing %}
     <tr>
-      <td><span class="badge {{ a.severity }}">{{ a.severity }}</span></td>
+      <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
       <td>{{ a.summary or a.alertname }}<br><span class="muted small">{{ a.alertname }}{% set l = a.labels|fromjson %}{% if l.cause %} · Ursache: {{ l.cause }}{% endif %}</span></td>
       <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
       <td>{% if a.acked_by %}{{ a.acked_by }}<br><span class="muted small">{{ a.acked_at|dt }}</span>{% else %}–{% endif %}</td>
@@ -19,11 +19,12 @@
         {% if not a.acked_by %}
         <form method="post" action="{{ url_for('web.alert_ack', event_id=a.id) }}" class="ack">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <select name="hours" aria-label="Dauer">
+          {% set what = a.summary or a.alertname %}
+          <select name="hours" aria-label="Stummschalten für (Alarm: {{ what }})">
             <option value="1">1 h</option><option value="4" selected>4 h</option><option value="24">24 h</option><option value="72">3 Tage</option>
           </select>
-          <input name="comment" placeholder="Kommentar" maxlength="500">
-          <button>Bestätigen</button>
+          <input name="comment" placeholder="Kommentar" maxlength="500" aria-label="Kommentar (Alarm: {{ what }})">
+          <button aria-label="Bestätigen: {{ what }}">Bestätigen</button>
         </form>
         {% endif %}
       </td>
@@ -41,7 +42,7 @@
   <tbody>
   {% for a in history %}
     <tr>
-      <td><span class="badge {{ a.severity }}">{{ a.severity }}</span></td>
+      <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
       <td>{{ a.summary or a.alertname }}</td>
       <td>{{ a.starts_at|dt }}</td>
       <td>{{ a.ends_at|dt }}</td>

@@ -15,7 +15,7 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 
 ## Installation mit dem Assistenten
 
-`WachtlServerSetup-0.3.0.exe` als Administrator starten und den Seiten folgen:
+`WachtlServerSetup-0.4.0.exe` als Administrator starten und den Seiten folgen:
 
 1. **Zielordner** – Programmdateien, Standard `C:\Program Files\Wachtl Server`.
 2. **Server-Adresse** – DNS-Namen und IP-Adressen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
@@ -43,7 +43,7 @@ ZIP für die PCs (Server, Pin und Token vorbelegt).
 ## Unbeaufsichtigte Installation
 
 ```powershell
-.\WachtlServerSetup-0.3.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log `
+.\WachtlServerSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log `
     /Hostnames="wachtl.kunde.local,10.0.0.5" /AdminPassword="…" `
     /HttpsPort=443 /HttpPort=80 /DataDir="D:\Wachtl" /RawDays=30 /AggMonths=13 `
     /EmailTo=it@kunde.de /EmailFrom=wachtl@kunde.de /SmtpHost=mail.kunde.de:587 /TeamsUrl=https://…
@@ -74,6 +74,10 @@ $w = "C:\Program Files\Wachtl Server\wachtl-server.cmd"
 Restart-Service WachtlServer
 ```
 
+Der Server misst selbst mit (Server-Probe, Teilprozess `serverprobe`): dieselben Checks wie die Probes, sichtbar als
+Probe „Server“ am Standort „Wachtl-Server“. Abschalten: in `wachtl.env` `SERVER_PROBE=0` und den Dienst neu starten,
+oder die Probe im Web-UI deaktivieren.
+
 Konfiguration (Ports, Aufbewahrung) steht in `<Daten>\config\wachtl.env`. Nach Änderungen `Restart-Service WachtlServer`.
 Neue Servernamen: Setup erneut ausführen ist der einfachste Weg; alternativ `WACHTL_HOSTNAMES` anpassen – das Zertifikat
 wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin bleibt gleich.
@@ -87,7 +91,8 @@ wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin blei
 | `<Daten>\certs\` | `wachtl.key`, `wachtl.crt` (für die GPO-Verteilung an Browser) |
 | `<Daten>\data\wachtl.db` | SQLite-Datenbank (Standorte, Probes, Checks, Benutzer, Alarme, Audit) |
 | `<Daten>\vm-raw\`, `<Daten>\vm-agg\` | Messwerte: 1-s-Rohdaten und 1-min-Verlauf |
-| `<Daten>\logs\` | `supervisor.log`, `web.log`, `vm-raw.log`, `vm-agg.log`, `vmalert.log`, `alertmanager.log`, `setup.log`, `backup.log` |
+| `<Daten>\logs\` | `supervisor.log`, `web.log`, `serverprobe.log`, `vm-raw.log`, `vm-agg.log`, `vmalert.log`, `alertmanager.log`, `setup.log`, `backup.log` |
+| `<Daten>\serverprobe\` | Registrierung der Server-Probe (Token) |
 | `<Daten>\backups\` | tägliche Sicherungen |
 
 ## Unterschiede zur Linux-Variante
@@ -112,4 +117,4 @@ Sind diese Ports belegt, meldet das Setup das; sie lassen sich in `wachtl.env` (
 | Graphen leer | `logs\vm-raw.log`; Probes senden? (Übersicht › Letzter Kontakt) |
 | Keine Alarme | `logs\vmalert.log`, `logs\alertmanager.log`; Verwaltung › Benachrichtigungen › Testnachricht |
 | Dienst startet nicht, Fehler 1069 | Eine Domänen-GPO überschreibt „Anmelden als Dienst“. `NT SERVICE\ALL SERVICES` dort wieder aufnehmen |
-| Deinstallation | Programme und Features › Wachtl Server. Am Ende fragt das Setup, ob der Datenordner gelöscht werden soll |
+| Deinstallation | Programme und Features › Wachtl Server, unbeaufsichtigt `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES [/REMOVEDATA]`. Entfernt Dienst (samt Server-Probe), Firewall-Regeln – auch von Windows für `python.exe`/`iperf3.exe` angelegte –, die geplante Sicherung und den Registry-Eintrag und prüft danach, dass kein Port mehr lauscht. Am Ende fragt das Setup, ob der Datenordner (Datenbank, privater Schlüssel, Sicherungen) gelöscht werden soll; `/REMOVEDATA` tut das unbeaufsichtigt |

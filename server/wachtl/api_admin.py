@@ -44,8 +44,8 @@ def sites():
 @login_required(api=True)
 def probes():
     rows = q(
-        "SELECT p.id, p.hostname, p.site_id, s.name AS site_name, p.status, p.version, p.last_seen, "
-        "p.buffer_items FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"
+        "SELECT p.id, p.hostname, p.site_id, s.name AS site_name, p.status, p.kind, p.deregistered_at, p.version, "
+        "p.last_seen, p.buffer_items FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"
     )
     for r in rows:
         r["online"] = repo.probe_online(r)
@@ -134,6 +134,26 @@ def status():
     except vm.VMError as exc:
         return jsonify(error=str(exc)), 502
     return jsonify([{"probe": p, "check_id": c, **v} for (p, c), v in live.items()])
+
+
+@bp.get("/check-status")
+@login_required(api=True)
+def check_status():
+    """Zustand jeder Messung (Ping, Pfad, iperf3, WAN) je aktiver Probe – wie „Messungen mit Problemen“."""
+    from .services import checkstatus
+
+    try:
+        live = vm.live_status()
+    except vm.VMError:
+        live = {}
+    probes = q("SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
+               "WHERE p.status = 'active' ORDER BY s.name, p.hostname")
+    states = checkstatus.overview(probes, live)
+    return jsonify([
+        {"probe_id": p["id"], "hostname": p["hostname"], "online": repo.probe_online(p), "check_id": st.check["id"],
+         "name": st.check["name"], "type": st.kind, "state": st.state, "detail": st.detail, "ts": st.ts}
+        for p in probes for st in states[p["id"]]
+    ])
 
 
 @bp.get("/alerts")

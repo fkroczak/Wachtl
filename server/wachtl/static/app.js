@@ -11,7 +11,7 @@
   });
 
   // Check-Zuweisung: Standort/Probe-Auswahl ein- und ausblenden
-  const scopeSelect = document.getElementById("scope-select");
+  const scopeSelect = document.querySelector("[data-scope-select]");
   if (scopeSelect) {
     const update = () => {
       document.querySelectorAll("[data-scope]").forEach((el) => {
@@ -22,13 +22,23 @@
     update();
   }
 
-  // Übersichten automatisch aktualisieren
+  // Fehlerübersicht nach dem Absenden fokussieren, damit Screenreader sie vorlesen
+  document.querySelector("[data-error-summary]")?.focus();
+
+  // Übersichten automatisch aktualisieren – aber nie mitten in einer Eingabe:
+  // ein Neuladen würde Eingaben verwerfen und Fokus/Leseposition zurücksetzen.
   const auto = document.querySelector("[data-autorefresh]");
   if (auto) {
     const seconds = parseInt(auto.dataset.autorefresh, 10) || 30;
-    setTimeout(() => {
-      if (!document.hidden) window.location.reload();
-    }, seconds * 1000);
+    let dirty = false;
+    document.addEventListener("input", () => (dirty = true));
+    document.addEventListener("change", () => (dirty = true));
+    const busy = () => {
+      const a = document.activeElement;
+      return dirty || document.hidden || (a && a.matches("input, select, textarea, [contenteditable]"));
+    };
+    const tick = () => (busy() ? setTimeout(tick, seconds * 1000) : window.location.reload());
+    setTimeout(tick, seconds * 1000);
   }
 
   // Check-Formular: Felder abhängig von Auswahlfeldern ein- und ausblenden
@@ -132,7 +142,7 @@
     const lossH = Math.round((H - pad.t - pad.b) * 0.2);
     const latH = H - pad.t - pad.b - lossH - 18;
     const svg = el("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
-      "aria-label": "Latenz und Paketverlust" });
+      "aria-label": "Graph: Latenz und Paketverlust im gewählten Zeitraum. Zahlenwerte stehen in der Tabelle Statistik." });
     chartEl.insertBefore(svg, tip);
 
     if (!times.length) {
@@ -269,8 +279,12 @@
   let current = "1h";
   panel.querySelectorAll("[data-range]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      panel.querySelectorAll("[data-range]").forEach((b) => b.classList.remove("active"));
+      panel.querySelectorAll("[data-range]").forEach((b) => {
+        b.classList.remove("active");
+        b.setAttribute("aria-pressed", "false");
+      });
       btn.classList.add("active");
+      btn.setAttribute("aria-pressed", "true");
       current = btn.dataset.range;
       loadSeries(current);
     })
@@ -296,7 +310,8 @@
       host.querySelector("svg")?.remove();
       const W = host.clientWidth || 800, H = host.clientHeight || 320;
       const pad = { l: 64, r: 16, t: 16, b: 28 };
-      const svg = mk("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Bandbreite" });
+      const svg = mk("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
+        "aria-label": "Graph: Download und Upload im Zeitverlauf. Einzelwerte stehen in der Tabelle Messungen." });
       host.appendChild(svg);
       const all = data.down.concat(data.up);
       if (!all.length) {

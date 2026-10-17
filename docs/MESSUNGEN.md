@@ -2,6 +2,13 @@
 
 Was gemessen wird, legst du zentral im Web-UI fest: **Verwaltung › Checks**. Jeder Check gilt für alle Probes, einen Standort oder eine einzelne Probe. Änderungen erreichen die Probes mit dem nächsten Heartbeat, ohne Neustart und ohne Zugriff auf die PCs.
 
+Für einen neuen Kunden gibt es das **Standardpaket** (Verwaltung › Standardpaket): Ping auf Gateway, drei
+Internet-Referenzen und den Wachtl-Server, Traceroute ins Internet und zum Server, iperf3 zum Server und ein
+WAN-Speedtest – mit einem Klick, ohne doppelte Checks. Anleitung: [ROLLOUT.md](ROLLOUT.md).
+
+Der **Wachtl-Server misst selbst mit** (Server-Probe). Er bekommt dieselben Checks wie die Probes, nur iperf3 gegen
+den Server selbst entfällt.
+
 | Art | Wofür | Ergebnis |
 |---|---|---|
 | **Ping (Dauerping)** | Erreichbarkeit, Latenz, Paketverlust, Jitter zu einem Ziel | Ziel-Detailseite mit Graph und Statistik |
@@ -92,6 +99,22 @@ Eigene Server (z. B. ein Webserver im Rechenzentrum) lassen sich genauso eintrag
 
 Bandbreitentests belasten die Leitung. Bei vielen PCs an einem Standort genügt meist ein Check für eine einzelne Probe je Standort.
 
+## Zustand der Messungen
+
+Übersicht, Standort und Probe bewerten jede Messung gleich:
+
+| Zustand | Ping | Pfad | Bandbreite (iperf3, WAN) |
+|---|---|---|---|
+| **ok** | Ziel antwortet, Verlust ≤ 2 % | Ziel im Traceroute erreicht | letzte Messung ohne Fehler, über den Schwellwerten |
+| **auffällig** | Verlust > 2 % (5 min) | Ziel im Traceroute nicht erreicht | unter dem Schwellwert des Checks |
+| **gestört** | Ziel antwortet nicht | – | Fehler der letzten Messung (z. B. „Connection refused“, „HTTP 403“) |
+| **keine Daten** | seit über 3 min kein Wert | kein Traceroute seit 3 × Intervall | geplante Messung überfällig (laut Zeitplan) |
+| wartet | Check neu | erster Traceroute läuft | noch nicht fällig oder nur manuell |
+
+Alles außer „ok“ und „wartet“ steht auf der Übersicht unter **Messungen mit Problemen** – mit Grund und Link zur
+Detailseite. Ist eine Probe offline, steht sie dort einmal als „offline“ statt mit jeder einzelnen Messung.
+Dieselbe Liste liefert `GET /api/v1/check-status`.
+
 ## Ausfälle
 
 **Ausfälle** im Hauptmenü listet alle Störungen mit Beginn, Dauer und Ursache:
@@ -123,6 +146,7 @@ Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispi
 | Verbindung | Port |
 |---|---|
 | Probe → Wachtl-Server (Messwerte) | TCP 443 bzw. der gewählte HTTPS-Port |
+| Server-Probe | nur ausgehend wie eine Probe, kein eigener Port |
 | Probe → Wachtl-Server (iperf3) | TCP **und** UDP 5201 |
 | Probe → Probe (iperf3) | TCP und UDP 5201 bzw. der Port der Gegenstelle |
 | Probe → Internet (WAN-Messung) | TCP 443 zu den eingetragenen URLs |

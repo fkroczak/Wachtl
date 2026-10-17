@@ -3,8 +3,8 @@
 {% block content %}
 <div class="login">
   <h1 class="sr-only">Wachtl</h1>
-  <img class="wordmark wordmark-light" src="{{ url_for('static', filename='wachtl-wordmark.svg') }}" alt="Wachtl">
-  <img class="wordmark wordmark-dark" src="{{ url_for('static', filename='wachtl-wordmark-dark.svg') }}" alt="Wachtl">
+  <img class="wordmark wordmark-light" src="{{ url_for('static', filename='wachtl-wordmark.svg') }}" alt="Wachtl" width="230" height="70">
+  <img class="wordmark wordmark-dark" src="{{ url_for('static', filename='wachtl-wordmark-dark.svg') }}" alt="Wachtl" width="230" height="70">
   <p class="tagline">Netzwerk-Monitoring</p>
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

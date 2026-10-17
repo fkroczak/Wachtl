@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}{{ probe.hostname }}{% endblock %}
+{% from "_forms.html" import field %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<p class="crumbs"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</p>
-<h1>{{ probe.hostname }}</h1>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
+<h1>{{ probe.hostname }}{% if probe.kind == 'server' %} <span class="badge info">Wachtl-Server</span>{% endif %}</h1>
 
 <section class="cards">
   <div class="card kv">
     <dl>
       <dt>Status</dt><dd>
-        {% if probe.status != 'active' %}<span class="dot off"></span> deaktiviert
+        {% if probe.deregistered_at %}<span class="dot off"></span> abgemeldet (deinstalliert am {{ probe.deregistered_at|dt }})
+        {% elif probe.status != 'active' %}<span class="dot off"></span> deaktiviert
         {% elif probe_online(probe) %}<span class="dot ok"></span> online
         {% else %}<span class="dot down"></span> offline{% endif %}</dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
@@ -41,6 +43,27 @@
 </div>
 {% endif %}
 
+<h2 id="messungen">Alle Messungen</h2>
+{% if not probe_online(probe) and probe.status == 'active' %}<div class="flash error">Die Probe ist offline – ihre Messungen laufen gerade nicht.</div>{% endif %}
+{% if states %}
+<p class="muted"><span class="ok-t">{{ state_counts.ok }} ok</span> · <span class="warn-t">{{ state_counts.warn }} auffällig</span> ·
+  <span class="down-t">{{ state_counts.down }} gestört</span> · <span class="stale-t">{{ state_counts.stale }} ohne aktuelle Daten</span>
+  {% if state_counts.waiting %} · {{ state_counts.waiting }} warten auf die erste Messung{% endif %}</p>
+<table>
+  <thead><tr><th>Zustand</th><th>Art</th><th>Check</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th></tr></thead>
+  <tbody>{% for st in states %}
+    <tr>
+      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
+      <td>{{ KIND_LABELS[st.kind] }}</td>
+      <td><a href="{{ check_url(probe, st.check) }}">{{ st.check.name }}</a></td>
+      <td>{{ st.check.target }}</td>
+      <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}</td>
+      <td>{{ st.ts|ago if st.ts else '–' }}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
+
 <h2>Dauerpings</h2>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
 <table>
@@ -48,7 +71,8 @@
   <tbody>
   {% for c, v in rows %}
     <tr>
-      <td><span class="dot {{ cell_state(v) }}"></span></td>
+      {% set st = cell_state(v) %}
+      <td><span class="dot {{ st }}"></span> {{ {'ok': 'ok', 'warn': 'Verlust', 'down': 'gestört', 'unknown': 'keine Daten'}[st] }}</td>
       <td><a href="{{ url_for('web.target', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
       <td>{{ c.target }}</td>
       <td>{{ CHECK_ROLES[c.role] }}</td>
@@ -65,7 +89,7 @@
 <h2>Pfade</h2>
 {% if paths %}
 <table>
-  <thead><tr><th>Name</th><th>Ziel</th><th>Hops</th><th>Ziel erreicht</th><th>Pfad seit</th><th>Zuletzt ermittelt</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Ziel</th><th>Hops</th><th>Ziel erreicht</th><th>Pfad seit</th><th>Zuletzt ermittelt</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
   <tbody>{% for c, run, hops in paths %}
     <tr>
       <td><a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
@@ -84,7 +108,7 @@
 <h2>Bandbreite</h2>
 {% if bandwidth %}
 <table>
-  <thead><tr><th>Name</th><th>Gegenstelle</th><th>Download</th><th>Upload</th><th>Letzte Messung</th><th>Zeitplan</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Gegenstelle</th><th>Download</th><th>Upload</th><th>Letzte Messung</th><th>Zeitplan</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
   <tbody>{% for c, last, pending, params in bandwidth %}
     {% set ref = last.down or last.up %}
     <tr>
@@ -115,11 +139,17 @@
   <fieldset>
     <legend>iperf3-Gegenstelle</legend>
     <div class="grid-form">
-      <label class="check"><input type="checkbox" name="iperf_server" {{ 'checked' if probe.iperf_server }}> Diese Probe nimmt iperf3-Messungen anderer Probes an
-        <small>Startet iperf3 als Server auf der Probe. Das Probe-Setup hat dafür eine Firewall-Regel angelegt.</small></label>
-      <label>Port <input name="iperf_port" type="number" min="1" max="65535" value="{{ probe.iperf_port or default_iperf_port }}"></label>
-      <label>Adresse für andere Probes <input name="iperf_address" value="{{ probe.iperf_address or '' }}" maxlength="253" placeholder="automatisch: {{ iperf_endpoint[0] or 'unbekannt' }}">
-        <small>Leer = erste lokale Adresse der Probe{% if addresses %} ({{ addresses|join(', ') }}){% endif %}.</small></label>
+      {% call(attrs) field("iperf_server", "Diese Probe nimmt iperf3-Messungen anderer Probes an", check=True,
+                           help="Startet iperf3 als Server auf der Probe. Das Probe-Setup hat dafür eine Firewall-Regel angelegt.") %}
+        <input type="checkbox" name="iperf_server" {{ 'checked' if probe.iperf_server }} {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("iperf_port", "Port") %}
+        <input name="iperf_port" type="number" min="1" max="65535" value="{{ probe.iperf_port or default_iperf_port }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("iperf_address", "Adresse für andere Probes",
+                           help="Leer = erste lokale Adresse der Probe" ~ ((" (" ~ addresses|join(", ") ~ ")") if addresses else "") ~ ".") %}
+        <input name="iperf_address" value="{{ probe.iperf_address or '' }}" maxlength="253" placeholder="automatisch: {{ iperf_endpoint[0] or 'unbekannt' }}" {{ attrs }}>
+      {% endcall %}
     </div>
   </fieldset>
   <button class="primary">Speichern</button>
@@ -131,7 +161,7 @@
 <table>
   <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Ende</th></tr></thead>
   <tbody>{% for a in alerts %}
-    <tr><td><span class="badge {{ a.severity }}">{{ a.severity }}</span></td><td>{{ a.summary or a.alertname }}</td>
+    <tr><td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td><td>{{ a.summary or a.alertname }}</td>
       <td>{{ a.starts_at|dt }}</td><td>{{ a.ends_at|dt if a.ends_at else 'aktiv' }}</td></tr>
   {% endfor %}</tbody>
 </table>

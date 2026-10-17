@@ -153,3 +153,22 @@ class ProbePackageTest(AppTestCase):
             self.assertIn(part, ini)
         self.assertEqual(self.client.post("/admin/tokens/package", data={"token": "falsch", "csrf_token": tok}).status_code, 400)
         self.assertEqual(self.client.get("/admin/probe-setup").data, b"MZ-setup")
+
+
+class LiveStatusGapsTest(AppTestCase):
+    """Ziel komplett gestört: VictoriaMetrics liefert up/loss, aber keine rtt."""
+
+    def test_pages_render_without_rtt(self):
+        enrolled = self.enroll()
+        self.make_user()
+        self.login()
+
+        def instant(query):
+            if "rtt" in query:
+                return []
+            return [{"metric": {"probe": str(enrolled["probe_id"]), "check_id": "1"}, "value": [0, "0"]}]
+
+        with mock.patch("wachtl.services.vm.instant", side_effect=instant):
+            for url in ("/", "/sites/1", f"/probes/{enrolled['probe_id']}"):
+                r = self.client.get(url)
+                self.assertEqual(r.status_code, 200, url)

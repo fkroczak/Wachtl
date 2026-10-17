@@ -63,10 +63,13 @@ def valid_probe_hostname(hostname: str) -> bool:
 
 # -- Checks und Konfiguration ----------------------------------------------
 def checks_for_probe(probe: dict) -> list[dict]:
-    """Alle aktiven Checks, die dieser Probe zugewiesen sind (global, Standort, Probe)."""
-    return q(
+    """Alle aktiven Checks, die dieser Probe zugewiesen sind (global, Standort, Probe).
+
+    Die Server-Probe misst kein iperf3 gegen den Wachtl-Server – das wäre eine Messung gegen sich selbst.
+    """
+    rows = q(
         """
-        SELECT DISTINCT c.id, c.name, c.type, c.target, c.role, c.interval_s, c.timeout_ms, c.params
+        SELECT DISTINCT c.id, c.name, c.type, c.target, c.role, c.interval_s, c.timeout_ms, c.params, c.created_at
         FROM checks c
         JOIN check_assignments a ON a.check_id = c.id
         WHERE c.enabled = TRUE
@@ -77,6 +80,16 @@ def checks_for_probe(probe: dict) -> list[dict]:
         """,
         (probe["site_id"], probe["id"]),
     )
+    if probe.get("kind") == "server":
+        rows = [c for c in rows if not is_server_iperf(c)]
+    return rows
+
+
+def is_server_iperf(check: dict) -> bool:
+    if check["type"] != "iperf":
+        return False
+    params = json.loads(check.get("params") or "{}")
+    return params.get("peer", "server") == "server"
 
 
 def _schedule_offset(probe_id: int, check_id: int, schedule_min: int, offset_min: int) -> int:
@@ -291,14 +304,16 @@ def probe_ini(server_url: str, pin: str, token: str = "", proxy: str = "") -> st
     )
 
 
-def create_enrollment_token(site_id: int, max_uses: int, days: int, created_by: str, description: str = "") -> str:
+def create_enrollment_token(site_id: int, max_uses: int, days: int, created_by: str, description: str = "",
+                            probe_kind: str = "probe") -> str:
     from .security import hash_token, new_secret
 
     token = "wachtl-" + new_secret(24)
     ins(
         "INSERT INTO enrollment_tokens (site_id, token_hash, description, expires_at, max_uses, uses, revoked, "
-        "created_by, created_at) VALUES (?, ?, ?, ?, ?, 0, FALSE, ?, ?)",
-        (site_id, hash_token(token), description[:200], now() + days * 86400, max_uses, created_by, now()),
+        "created_by, created_at, probe_kind) VALUES (?, ?, ?, ?, ?, 0, FALSE, ?, ?, ?)",
+        (site_id, hash_token(token), description[:200], now() + days * 86400, max_uses, created_by, now(),
+         probe_kind),
     )
     audit(created_by, "token.create", f"site:{site_id}", f"{max_uses} Nutzungen, {days} Tage")
     return token

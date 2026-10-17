@@ -1,0 +1,14 @@
+{
+  "name": "wachtl-ui-quality",
+  "private": true,
+  "description": "Browser-Guardrails für das Wachtl-Web-UI: axe-core, Tastatur, Reflow, Lighthouse CI",
+  "scripts": {
+    "test": "playwright test",
+    "lighthouse": "lhci autorun --config=lighthouserc.cjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
+    "@lhci/cli": "0.15.1",
+    "@playwright/test": "1.56.1"
+  }
+}

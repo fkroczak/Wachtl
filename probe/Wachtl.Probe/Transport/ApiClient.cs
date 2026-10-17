@@ -195,6 +195,18 @@ public sealed class ApiClient : IDisposable
                ?? new HeartbeatResponse();
     }
 
+    /// <summary>Probe am Server abmelden (Deinstallation): das Token wird dort sofort ungültig.</summary>
+    public async Task DeregisterAsync(CancellationToken ct)
+    {
+        using var request = Request(HttpMethod.Post, "deregister");
+        request.Content = new StringContent("{}", Encoding.UTF8, "application/json");
+        using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await ErrorAsync(response, ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Ergebnisse (Pfad, Bandbreite) als JSON senden.</summary>
     public async Task PostResultAsync<T>(string path, T payload, CancellationToken ct)
     {

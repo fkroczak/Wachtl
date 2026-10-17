@@ -142,18 +142,41 @@ function Update-Probe {
 }
 
 function Uninstall-Probe {
+    # Lässt nichts zurück, was von außen erreichbar wäre: Token am Server ungültig machen, Dienst, Prozesse,
+    # Firewall-Regeln (auch von Windows selbst angelegte) und das lokale Token entfernen.
     Assert-Admin
+    if (Test-Path $ExePath) {
+        Write-Step 'Melde Probe am Server ab'
+        & $ExePath deregister
+        if ($LASTEXITCODE -eq 4) { Write-Warning 'Server nicht erreichbar – Probe bitte im Dashboard löschen.' }
+    }
     Stop-WachtlService
     if (Get-WachtlService) {
         Write-Step 'Entferne Dienst'
         & sc.exe delete $ServiceName | Out-Null
     }
+    Get-Process -Name iperf3, wachtl-probe -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -like "$InstallDir\*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+    Write-Step 'Entferne Firewall-Regeln'
+    & netsh.exe advfirewall firewall delete rule "name=Wachtl Probe iperf3" | Out-Null
+    foreach ($program in @((Join-Path $InstallDir 'iperf3\iperf3.exe'), $ExePath)) {
+        & netsh.exe advfirewall firewall delete rule name=all "program=$program" | Out-Null
+    }
     if (Test-Path $InstallDir) { Remove-Item -Path $InstallDir -Recurse -Force }
+    foreach ($file in 'state.json', 'state.json.tmp', 'config.json', 'config.json.tmp') {
+        Remove-Item -Path (Join-Path $DataDir $file) -Force -ErrorAction SilentlyContinue
+    }
     if ($RemoveData -and (Test-Path $DataDir)) {
-        Write-Step 'Entferne Daten (Token, Puffer, Logs)'
+        Write-Step 'Entferne Puffer und Logs'
         Remove-Item -Path $DataDir -Recurse -Force
     }
-    Write-Ok 'Wachtl-Probe entfernt. Im Dashboard die Probe ggf. noch löschen.'
+
+    $left = @()
+    if (Get-WachtlService) { Write-Warning 'Dienst Wachtl ist zum Löschen markiert und verschwindet nach einem Neustart.' }
+    if (Get-NetFirewallRule -DisplayName 'Wachtl Probe iperf3' -ErrorAction SilentlyContinue) { $left += 'Firewall-Regel Wachtl Probe iperf3' }
+    if (Test-Path (Join-Path $DataDir 'state.json')) { $left += 'Token (state.json)' }
+    if ($left) { throw "Nicht vollständig entfernt: $($left -join ', ')" }
+    Write-Ok 'Wachtl-Probe vollständig entfernt (Dienst, Firewall-Regeln, Token).'
 }
 
 function Show-Status {
