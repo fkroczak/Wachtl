@@ -20,12 +20,28 @@ public static class StateStore
 
     public static string StatePath => Path.Combine(DataDir, "state.json");
     public static string ConfigCachePath => Path.Combine(DataDir, "config.json");
+    public static string PendingPath => Path.Combine(DataDir, "enroll-pending.json");
     public static string BufferPath => Path.Combine(DataDir, "buffer.db");
     public static string LogDir => Path.Combine(DataDir, "logs");
 
     public static ProbeState? Load() => Read<ProbeState>(StatePath);
 
     public static void Save(ProbeState state) => Write(StatePath, state);
+
+    public static PendingEnrollment? LoadPending() => Read<PendingEnrollment>(PendingPath);
+
+    public static void SavePending(PendingEnrollment pending) => Write(PendingPath, pending);
+
+    public static void DeletePending()
+    {
+        foreach (var path in new[] { PendingPath, PendingPath + ".tmp" })
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+    }
 
     public static ProbeConfig? LoadCachedConfig() => Read<ProbeConfig>(ConfigCachePath);
 

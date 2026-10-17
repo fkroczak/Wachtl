@@ -182,6 +182,8 @@ class Layout:
             "WACHTL_WEBHOOK_SECRET": e["WACHTL_WEBHOOK_SECRET"],
             "WACHTL_SPKI_PIN": e["WACHTL_SPKI_PIN"],
             "WACHTL_PUBLIC_URL": e["WACHTL_PUBLIC_URL"],
+            "WACHTL_SERVER_URLS": ",".join(public_url(h, self.https_port) for h in self.hostnames),
+            "WACHTL_AUTO_IPS": "0" if e.get("AUTO_IPS", "1") == "0" else "1",
             "WACHTL_DATABASE_URL": "sqlite:///" + str(self.db_file),
             "WACHTL_VM_RAW_URL": self.local("VM_RAW"),
             "WACHTL_VM_AGG_URL": self.local("VM_AGG"),

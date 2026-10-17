@@ -53,7 +53,7 @@ class WebTest(AppTestCase):
         self.assertIsNotNone(site)
         r = self.client.post("/admin/tokens", data={"site_id": site["id"], "max_uses": 3, "days": 7, "csrf_token": tok})
         html = r.get_data(as_text=True)
-        self.assertIn("Install-Wachtl.ps1", html)
+        self.assertIn("WachtlSetup", html)
         self.assertIn("wachtl-", html)
         self.client.post("/admin/checks", data={"name": "Fileserver", "target": "10.1.1.10", "role": "target",
                                                 "interval_s": 5, "timeout_ms": 800, "scope": "site",
@@ -143,7 +143,7 @@ class ProbePackageTest(AppTestCase):
         html = self.client.post("/admin/tokens", data={"site_id": 1, "max_uses": 5, "days": 7, "csrf_token": tok}).get_data(as_text=True)
         import re
         token = re.search(r'name="token" value="([^"]+)"', html).group(1)
-        self.assertIn("Paket herunterladen", html)
+        self.assertIn("Setup herunterladen", html)
         r = self.client.post("/admin/tokens/package", data={"token": token, "proxy": "http://p:3128", "csrf_token": tok})
         self.assertEqual(r.status_code, 200)
         zf = zipfile.ZipFile(io.BytesIO(r.data))
@@ -153,6 +153,73 @@ class ProbePackageTest(AppTestCase):
             self.assertIn(part, ini)
         self.assertEqual(self.client.post("/admin/tokens/package", data={"token": "falsch", "csrf_token": tok}).status_code, 400)
         self.assertEqual(self.client.get("/admin/probe-setup").data, b"MZ-setup")
+
+
+class PrefilledSetupTest(AppTestCase):
+    """Ein Setup für alle: Vorbelegung (Adressen, Pin, Token) hängt am Ende der Datei."""
+
+    def setUp(self):
+        super().setUp()
+        import os
+
+        self.probe_dir = os.path.join(self.tmp, "probe")
+        os.makedirs(self.probe_dir)
+        with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
+            f.write(b"MZ-alt")
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.6.0.exe"), "wb") as f:
+            f.write(b"MZ" + b"x" * 5000)
+        self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
+                               SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])
+        self.make_user()
+        self.login()
+        self.tok = self.session_csrf()
+        self.client.post("/admin/sites", data={"name": "Filiale Nürnberg", "csrf_token": self.tok})
+
+    def test_direct_download_from_admin_form(self):
+        from wachtl import setupfile
+        from wachtl.db import q1
+        from wachtl.security import hash_token
+
+        r = self.client.post("/admin/tokens", data={"site_id": 1, "max_uses": 25, "days": 30, "proxy": "",
+                                                   "action": "setup", "csrf_token": self.tok})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('filename="WachtlSetup-Filiale-Nuernberg.exe"', r.headers["Content-Disposition"])
+        self.assertTrue(r.data.startswith(b"MZ" + b"x" * 5000))
+        self.assertEqual(int(r.headers["Content-Length"]), len(r.data))
+        values = setupfile.read_block(r.data)
+        self.assertEqual(values["role"], "client")
+        self.assertEqual(values["servers"], "https://wachtl.test:8443,https://wachtl:8443,https://10.0.0.5:8443")
+        self.assertEqual(values["pin"], "PIN=")
+        self.assertEqual(values["site"], "Filiale Nuernberg")
+        token_row = q1("SELECT * FROM enrollment_tokens WHERE token_hash = ?", (hash_token(values["token"]),))
+        self.assertEqual(token_row["max_uses"], 25)
+
+    def test_download_for_existing_token_and_errors(self):
+        import re
+
+        from wachtl import setupfile
+
+        html = self.client.post("/admin/tokens", data={"site_id": 1, "max_uses": 2, "days": 7, "action": "token",
+                                                      "csrf_token": self.tok}).get_data(as_text=True)
+        token = re.search(r'name="token" value="([^"]+)"', html).group(1)
+        self.assertIn("https://10.0.0.5:8443", html)
+        r = self.client.post("/admin/tokens/setup", data={"token": token, "proxy": "http://proxy:3128", "csrf_token": self.tok})
+        self.assertEqual(setupfile.read_block(r.data)["proxy"], "http://proxy:3128")
+        self.assertEqual(self.client.post("/admin/tokens/setup", data={"token": token, "proxy": "proxy:3128",
+                                                                       "csrf_token": self.tok}).status_code, 400)
+        self.assertEqual(self.client.post("/admin/tokens/setup", data={"token": "falsch", "csrf_token": self.tok}).status_code, 400)
+        with self.assertRaises(ValueError):
+            setupfile.config_block(["https://a"], "PIN", "tok\r\nrole=server", "x")
+
+    def test_probe_config_carries_all_server_urls(self):
+        from unittest import mock
+
+        self.app.config.update(AUTO_IPS=True)
+        with mock.patch("wachtl.netinfo.local_ipv4", return_value=["10.0.0.5", "192.168.7.2"]):
+            data = self.enroll()
+            cfg = self.client.get("/api/probe/v1/config", headers={"Authorization": f"Bearer {data['token']}"}).get_json()
+        self.assertEqual(cfg["server_urls"], ["https://wachtl.test:8443", "https://wachtl:8443", "https://10.0.0.5:8443",
+                                              "https://192.168.7.2:8443"])
 
 
 class LiveStatusGapsTest(AppTestCase):

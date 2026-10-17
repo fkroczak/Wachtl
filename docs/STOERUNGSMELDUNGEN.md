@@ -1,4 +1,4 @@
-# Störungsmeldungen und Tray-Symbol (0.5)
+# Störungsmeldungen und Tray-Symbol (0.6)
 
 Auf jedem Windows-Client mit Probe und auf dem Windows-Server sitzt rechts unten neben der Uhr das
 Wachtl-Symbol (`wachtl-tray.exe`). Rechtsklick (oder Linksklick) öffnet das Menü:
@@ -50,7 +50,7 @@ höchstens 30 Meldungen je Stunde und Benutzer und 300 je Rechner (sonst `429`).
   "site": "Zentrale",                   // Standort (leer, wenn unbekannt)
   "server_url": "https://wachtl.kunde.local",
   "dashboard_url": "https://wachtl.kunde.local",   // nur role=server, sonst ""
-  "version": "0.5.0",
+  "version": "0.6.0",
   "enrolled": true,
   "connected": true,                    // letzte Verbindung zum Server < 2 min her
   "last_contact": 1792230000,           // Unix-Sekunden, 0 = noch nie
@@ -124,11 +124,11 @@ für die Graph-Markierungen:
 
 ## Installation
 
-- **Probe-Setup** legt `wachtl-tray.exe` neben `wachtl-probe.exe`, trägt es unter
+- **`WachtlSetup`, Rolle Probe** legt `wachtl-tray.exe` neben `wachtl-probe.exe`, trägt es unter
   `HKLM\Software\Microsoft\Windows\CurrentVersion\Run` (Wert `Wachtl Tray`) für alle Benutzer ein und startet es
   nach der Installation für den angemeldeten Benutzer. Abschalten für alle: Setup-Parameter `/NoTray` – das Setup merkt
   sich die Wahl auch für spätere Updates, `/Tray` schaltet das Symbol wieder ein.
-- **Server-Setup** genauso für den Server (Symbol mit „Dashboard öffnen“).
+- **Rolle Server** genauso (Wert `Wachtl Server Tray`, Symbol mit „Dashboard öffnen“).
 - **Update** (auch unbeaufsichtigt) beendet laufende Symbole nicht: die alte `wachtl-tray.exe` wird umbenannt, die neue
   gilt ab der nächsten Anmeldung.
 - **Deinstallation** beendet alle `wachtl-tray.exe`-Prozesse und entfernt den Autostart-Eintrag.

@@ -10,15 +10,15 @@
     Voraussetzungen: Windows, Python 3.12 (für pip), Inno Setup 6 (wird sonst per choco installiert).
 
 .EXAMPLE
-    .\windows\build-server.ps1 -Version 0.5.0
+    .\windows\build-server.ps1 -Version 0.6.0
 #>
 param(
-    [string]$Version = '0.5.0',
+    [string]$Version = '0.6.0',
     [string]$PythonVersion = '3.12.10',
     [string]$VmVersion = 'v1.149.0',
     [string]$AlertmanagerVersion = '0.28.1',
     [string]$WinSWVersion = 'v2.12.0',
-    [string]$ProbeDir = '',                       # optional: Ordner mit wachtl-probe.exe + Install-Wachtl.ps1
+    [string]$ProbeDir = (Join-Path $PSScriptRoot '..\dist\probe'),   # wachtl-probe.exe + iperf3 aus probe\build.ps1
     [string]$IperfUrl = 'https://github.com/ar51an/iperf3-win-builds/releases/download/3.21/iperf-3.21-win64.zip',
     [string]$Output = (Join-Path $PSScriptRoot '..\dist')
 )
@@ -138,16 +138,6 @@ Step 'Begleitdateien'
 Copy-Item (Join-Path $PSScriptRoot 'wachtl-server.cmd') $Build
 Copy-Item (Join-Path $PSScriptRoot 'THIRD-PARTY.txt') $Build
 Copy-Item (Join-Path $Root 'docs\*') (Join-Path $Build 'docs') -Recurse
-if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-probe.exe'))) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $Build 'probe') | Out-Null
-    Copy-Item (Join-Path $ProbeDir '*') (Join-Path $Build 'probe') -Recurse
-    Write-Host '    Probe-Paket beigelegt'
-}
-# Tray-Symbol auch auf dem Server (Störung melden, Dashboard öffnen) – aus dem Probe-Build
-if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-tray.exe'))) {
-    Copy-Item (Join-Path $ProbeDir 'wachtl-tray.exe') $Build -Force
-    Write-Host '    Tray-Symbol beigelegt'
-}
 
 Step 'Selbsttest mit dem eingebetteten Python'
 $py = Join-Path $Build 'python\python.exe'
@@ -172,7 +162,10 @@ if (-not $iscc) {
     $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
-& $iscc "/DAppVersion=$Version" "/DBuildDir=$Build" "/O$((Resolve-Path $Output).Path)" (Join-Path $PSScriptRoot 'WachtlServer.iss') 2>&1 | ForEach-Object { "$_" }
+# ein Setup für beide Rollen: Server-Dateien aus $Build, Probe aus $ProbeDir
+if (-not (Test-Path (Join-Path $ProbeDir 'wachtl-probe.exe'))) { throw "wachtl-probe.exe fehlt in $ProbeDir (zuerst probe\build.ps1)" }
+& $iscc "/DAppVersion=$Version" "/DBuildDir=$Build" "/DProbeDir=$((Resolve-Path $ProbeDir).Path)" "/O$((Resolve-Path $Output).Path)" (Join-Path $PSScriptRoot 'WachtlSetup.iss') 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup fehlgeschlagen' }
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
-Write-Host "Fertig: $Output\WachtlServerSetup-$Version.exe" -ForegroundColor Green
+$setup = Get-Item (Join-Path $Output "WachtlSetup-$Version.exe")
+Write-Host "Fertig: $($setup.FullName) ($([math]::Round($setup.Length / 1MB, 1)) MB)" -ForegroundColor Green

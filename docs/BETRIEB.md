@@ -56,8 +56,8 @@ Versionen der Fremdkomponenten (VictoriaMetrics, Alertmanager, Traefik, PostgreS
 
 **Probes**
 
-1. Neue `wachtl-probe.exe` bauen, auf die Freigabe legen.
-2. `Install-Wachtl.ps1 -Action Update -SourceExe \\…\wachtl-probe.exe` (per Softwareverteilung oder `Invoke-Command`).
+1. Server aktualisieren – er legt das neue `WachtlSetup` für die Probes ab.
+2. Auf den PCs `WachtlSetup-x.y.z.exe /VERYSILENT /SUPPRESSMSGBOXES` (Softwareverteilung): aktualisiert nur das Programm, die Registrierung bleibt.
 3. Dashboard zeigt die neue Version je Probe. Während des Updates puffert nichts verloren: der Puffer liegt in `C:\ProgramData\Wachtl\buffer.db`.
 
 Automatische, signierte Updates sind für Phase 4 geplant (Ed25519-signiertes Manifest).

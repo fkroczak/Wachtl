@@ -15,10 +15,10 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 
 ## Installation mit dem Assistenten
 
-`WachtlServerSetup-0.5.0.exe` als Administrator starten und den Seiten folgen:
+`WachtlSetup-0.6.0.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
 
-1. **Zielordner** – Programmdateien, Standard `C:\Program Files\Wachtl Server`.
-2. **Server-Adresse** – DNS-Namen und IP-Adressen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
+1. **Rolle** – „Wachtl-Server“ wählen (Standard ist Probe). Programmordner: `C:\Program Files\Wachtl Server`.
+2. **Server-Adresse** – DNS-Namen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). Die IP-Adressen des Servers ergänzt das Setup selbst – Probes weichen darauf aus, wenn ein Name am Standort nicht auflösbar ist. HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
 3. **Administrator** – Passwort für die Anmeldung als `admin` (mindestens 12 Zeichen).
 4. **Benachrichtigungen** (optional) – E-Mail über SMTP und/oder Microsoft-Teams-Webhook. Später im Web-UI änderbar.
 5. **Daten und Aufbewahrung** – Datenordner (Standard `C:\ProgramData\Wachtl Server`, für größere Installationen gern eine eigene Platte), Aufbewahrung der Rohdaten (Tage) und des Verlaufs (Monate).
@@ -36,15 +36,15 @@ Das Setup erledigt anschließend:
 - Dienst starten und warten, bis er antwortet
 
 Die letzte Seite zeigt Adresse und **SPKI-Pin** (zum Kopieren). Beides steht auch in `setup-info.txt` im Datenordner.
-Im Startmenü liegen „Wachtl Dashboard“, „Wachtl Status“, „Zugangsdaten“, „Logdateien“ und das Probe-Paket.
-Das Probe-Setup liegt dem Server bei: Im Web-UI erzeugt **Verwaltung › Probes registrieren** daraus ein fertiges
-ZIP für die PCs (Server, Pin und Token vorbelegt).
+Im Startmenü liegen „Wachtl Dashboard“, „Wachtl Status“, „Zugangsdaten“, „Logdateien“ und „Setups für die Probes“.
+Das Setup legt eine Kopie von sich selbst auf dem Server ab: Im Web-UI erzeugt **Verwaltung › Probes registrieren**
+daraus mit einem Klick ein vorbelegtes Setup für die PCs (alle Adressen, Pin und Token eingetragen).
 
 ## Unbeaufsichtigte Installation
 
 ```powershell
-.\WachtlServerSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log `
-    /Hostnames="wachtl.kunde.local,10.0.0.5" /AdminPassword="…" `
+.\WachtlSetup-0.6.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
+    /Hostnames="wachtl.kunde.local" /AdminPassword="…" `
     /HttpsPort=443 /HttpPort=80 /DataDir="D:\Wachtl" /RawDays=30 /AggMonths=13 `
     /EmailTo=it@kunde.de /EmailFrom=wachtl@kunde.de /SmtpHost=mail.kunde.de:587 /TeamsUrl=https://…
 ```
@@ -53,7 +53,7 @@ Exit-Code 0 = Server läuft; 10 = Dateien installiert, Einrichtung fehlgeschlage
 
 ## Update
 
-Neue `WachtlServerSetup-x.y.z.exe` starten. Das Setup erkennt die Installation, überspringt die Eingabeseiten,
+Neue `WachtlSetup-x.y.z.exe` starten (auch über eine Installation mit dem alten `WachtlServerSetup`). Das Setup erkennt die Installation, überspringt die Eingabeseiten,
 stoppt den Dienst, ersetzt die Programmdateien und startet wieder. Datenbank-Migrationen laufen beim Start automatisch.
 Daten, Zertifikat (und damit der Pin der Probes) und Einstellungen bleiben erhalten. Vorher eine Sicherung zu ziehen schadet nie:
 `wachtl-server.cmd backup`.

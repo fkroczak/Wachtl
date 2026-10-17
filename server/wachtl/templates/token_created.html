@@ -8,37 +8,40 @@
 
 <section class="steps">
   <div class="card">
-    <h2>1 · Fertiges Paket (empfohlen)</h2>
+    <h2>1 · Vorbelegtes Setup (empfohlen)</h2>
     {% if setup_name %}
-    <p>ZIP mit <code>{{ setup_name }}</code> und einer <code>wachtl-probe.ini</code>, in der Server, Pin und Token schon stehen.
-       Auf dem PC entpacken, Setup starten, nur noch <em>Weiter</em> klicken.</p>
-    <form method="post" action="{{ url_for('web.token_package') }}" class="row">
+    <p>Eine einzelne Datei mit allen Adressen des Servers, Pin und Token. Auf dem PC starten, <em>Installieren</em> klicken – fertig.
+       Ist der Server gerade nicht erreichbar, meldet sich die Probe automatisch, sobald er es ist.</p>
+    <form method="post" action="{{ url_for('web.token_setup') }}" class="row">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="token" value="{{ token }}">
       <label class="grow">Proxy für diese PCs (optional) <input name="proxy" placeholder="http://proxy.kunde.local:3128"></label>
-      <button class="primary">Paket herunterladen</button>
+      <button class="primary">Setup herunterladen</button>
     </form>
     {% else %}
-    <p class="muted">Auf diesem Server liegt kein Probe-Setup. Windows-Server: im Setup enthalten. Linux: <code>WachtlProbeSetup-*.exe</code>
+    <p class="muted">Auf diesem Server liegt kein Setup. Windows-Server: wird beim Installieren abgelegt. Linux: <code>WachtlSetup-*.exe</code>
       in den Ordner <code>deploy/probe</code> legen.</p>
     {% endif %}
   </div>
 
   <div class="card">
     <h2>2 · Setup von Hand</h2>
-    <p>Probe-Setup starten und diese Werte eintragen:</p>
+    <p>Setup starten, „Probe“ wählen und diese Werte eintragen:</p>
     <dl class="kvlist">
-      <dt>Server-Adresse</dt><dd><code class="copy">{{ server_url }}</code></dd>
+      <dt>Server</dt><dd><code class="copy">{{ server_urls|join(', ') }}</code></dd>
       <dt>SPKI-Pin</dt><dd><code class="copy">{{ pin }}</code></dd>
       <dt>Token</dt><dd><code class="copy">{{ token }}</code></dd>
     </dl>
+    <p class="muted small">Mehrere Adressen probiert die Probe der Reihe nach – so klappt es auch ohne Namensauflösung.</p>
   </div>
 
   <div class="card">
-    <h2>3 · Softwareverteilung / unbeaufsichtigt</h2>
-    <pre class="copy"><code>{{ setup_name or 'WachtlProbeSetup-0.2.0.exe' }} /VERYSILENT /SUPPRESSMSGBOXES /Server="{{ server_url }}" /Pin="{{ pin }}" /Token="{{ token }}"</code></pre>
-    <p class="muted small">Exit-Code 0 = Probe läuft. Alternativ per PowerShell-Skript:</p>
-    <pre class="copy"><code>.\Install-Wachtl.ps1 -Action Install -ServerUrl "{{ server_url }}" -EnrollToken "{{ token }}" -SpkiPin "{{ pin }}"</code></pre>
+    <h2>3 · Softwareverteilung</h2>
+    <p>Das vorbelegte Setup läuft auch unbeaufsichtigt:</p>
+    <pre class="copy"><code>WachtlSetup-Standort.exe /VERYSILENT /SUPPRESSMSGBOXES</code></pre>
+    <p class="muted small">Mit dem Setup ohne Vorbelegung:</p>
+    <pre class="copy"><code>{{ setup_name or 'WachtlSetup.exe' }} /VERYSILENT /SUPPRESSMSGBOXES /Server="{{ server_urls|join(',') }}" /Pin="{{ pin }}" /Token="{{ token }}"</code></pre>
+    <p class="muted small">Exit-Code 0 = Probe installiert und angemeldet (oder Anmeldung folgt automatisch, sobald der Server erreichbar ist).</p>
   </div>
 </section>
 <p><a href="{{ url_for('web.admin') }}#enrollment">Zurück zur Verwaltung</a></p>

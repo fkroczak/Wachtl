@@ -29,6 +29,7 @@ import time
 import urllib.request
 from pathlib import Path
 
+from ..netinfo import with_local_ips
 from . import certs, winsys
 from .layout import DEFAULTS, Layout, public_url, write_env
 
@@ -87,7 +88,8 @@ def parse_input(data: dict) -> dict:
     errors += validate(notify)
     if errors:
         raise SetupError("\n".join(errors))
-    return {"hostnames": hostnames, "https_port": https_port, "http_port": http_port, "iperf_port": iperf_port,
+    return {"hostnames": hostnames, "auto_ips": bool(data.get("auto_ips", True)),
+            "https_port": https_port, "http_port": http_port, "iperf_port": iperf_port,
             "raw_days": raw_days,
             "agg_months": agg_months, "admin_password": password, "data_dir": Path(data_dir), "notify": notify}
 
@@ -117,6 +119,11 @@ def write_configuration(layout: Layout, cfg: dict) -> str:
     """Konfigurationsdatei und Zertifikat. Vorhandene Geheimnisse bleiben erhalten."""
     layout.ensure_dirs()
     env = dict(layout.env)
+    # IP-Adressen des Servers mit ins Zertifikat, damit auch der Browser über die IP ohne Namensfehler öffnet
+    hostnames = cfg["hostnames"] if cfg.get("auto_ips") is False else with_local_ips(cfg["hostnames"])
+    if hostnames != cfg["hostnames"]:
+        log.info("Lokale IP-Adressen ergänzt: %s", ", ".join(hostnames[len(cfg["hostnames"]):]))
+    cfg["hostnames"] = hostnames
     env["WACHTL_HOSTNAMES"] = ",".join(cfg["hostnames"])
     env["WACHTL_PUBLIC_URL"] = public_url(cfg["hostnames"][0], cfg["https_port"])
     env["WACHTL_HTTPS_PORT"] = str(cfg["https_port"])

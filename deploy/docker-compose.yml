@@ -54,7 +54,7 @@ services:
       - rules:/rules
       - amconfig:/amconfig
       - serverprobe:/serverprobe
-      - ./probe:/probe:ro   # WachtlProbeSetup-*.exe hier ablegen -> Download im Web-UI
+      - ./probe:/probe:ro   # WachtlSetup-*.exe hier ablegen -> vorbelegtes Setup im Web-UI
     depends_on:
       postgres:
         condition: service_healthy

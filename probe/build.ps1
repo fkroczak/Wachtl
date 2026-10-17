@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
   Baut die Wachtl-Probe: wachtl-probe.exe (selbstständig, kein .NET auf den Ziel-PCs nötig)
-  und den Setup-Assistenten WachtlProbeSetup-<Version>.exe.
+  und legt iperf3 dazu. Das gemeinsame Setup (Probe + Server) baut windows\build-server.ps1.
   Voraussetzungen auf dem Build-Rechner: .NET 8 SDK, Inno Setup 6 (sonst per choco).
 #>
 param(
-    [string]$Version = '0.5.0',
+    [string]$Version = '0.6.0',
     [string]$Output = "$PSScriptRoot\..\dist\probe",
     # Windows-Build von iperf3 (BSD-Lizenz), https://github.com/ar51an/iperf3-win-builds
     [string]$IperfVersion = '3.21',
@@ -20,7 +20,6 @@ dotnet publish "$PSScriptRoot\Wachtl.Probe\Wachtl.Probe.csproj" -c Release -r wi
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none `
   -p:Version=$Version -o $Output
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish fehlgeschlagen' }
-Copy-Item "$PSScriptRoot\..\installer\Install-Wachtl.ps1" $Output -Force
 
 # Tray-Symbol (Problem melden, Über, Beenden): .NET Framework 4.6.2 – in Windows enthalten, keine Laufzeit beilegen
 dotnet build "$PSScriptRoot\Wachtl.Tray\Wachtl.Tray.csproj" -c Release -p:Version=$Version
@@ -53,13 +52,4 @@ Get-ChildItem $iperfDir | ForEach-Object { Write-Host "  iperf3: $($_.Name) $($_
 & "$iperfDir\iperf3.exe" --version
 if ($LASTEXITCODE -ne 0) { throw 'iperf3.exe startet nicht' }
 
-$iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe") |
-    Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $iscc) {
-    choco install innosetup --no-progress -y | Out-Null
-    $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-}
-$out = (Resolve-Path $Output).Path
-& $iscc "/DAppVersion=$Version" "/DPublishDir=$out" "/O$out" "$PSScriptRoot\setup\WachtlProbe.iss" 2>&1 | ForEach-Object { "$_" }
-if ($LASTEXITCODE -ne 0) { throw 'Inno Setup fehlgeschlagen' }
-Write-Host "Fertig: $out\wachtl-probe.exe, $out\wachtl-tray.exe, $out\WachtlProbeSetup-$Version.exe" -ForegroundColor Green
+Write-Host "Fertig: $Output\wachtl-probe.exe und iperf3 (das Setup baut windows\build-server.ps1)" -ForegroundColor Green

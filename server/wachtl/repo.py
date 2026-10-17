@@ -161,6 +161,7 @@ def probe_config(probe: dict) -> tuple[dict, str]:
             "enabled": bool(probe.get("iperf_server")),
             "port": int(probe.get("iperf_port") or settings["probe_iperf_port"]),
         },
+        "server_urls": server_urls(),
         "upload_interval_s": settings["upload_interval_s"],
         "heartbeat_interval_s": settings["heartbeat_interval_s"],
         "config_poll_s": settings["config_poll_s"],
@@ -288,13 +289,40 @@ def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, hi
 
 
 def probe_setup_file(probe_dir: str) -> "Path | None":
-    """Neueste WachtlProbeSetup-*.exe im Probe-Ordner (vom Server-Setup beigelegt)."""
-    from pathlib import Path
+    """Neuestes Setup im Probe-Ordner (WachtlSetup-*.exe, ältere Server: WachtlProbeSetup-*.exe)."""
+    from .setupfile import find_setup
 
-    if not probe_dir:
-        return None
-    files = sorted(Path(probe_dir).glob("WachtlProbeSetup-*.exe"), key=lambda f: f.stat().st_mtime)
-    return files[-1] if files else None
+    return find_setup(probe_dir)
+
+
+def server_urls() -> list[str]:
+    """Alle Adressen, unter denen Probes den Server erreichen können – Name zuerst, dann weitere Namen und IPs.
+
+    Die Probe prüft nur den Schlüssel-Pin, nicht den Namen im Zertifikat: jede Adresse funktioniert,
+    auch eine IP, wenn die Namensauflösung am Standort fehlt.
+    """
+    from urllib.parse import urlparse
+
+    from flask import current_app
+
+    cfg = current_app.config
+    urls: list[str] = []
+
+    def add(url: str) -> None:
+        url = url.strip().rstrip("/")
+        if url.startswith("https://") and url not in urls:
+            urls.append(url)
+
+    add(cfg["PUBLIC_URL"])
+    for url in cfg.get("SERVER_URLS") or []:
+        add(url)
+    if cfg.get("AUTO_IPS"):
+        from .netinfo import local_ipv4
+
+        port = urlparse(cfg["PUBLIC_URL"]).port
+        for ip in local_ipv4():
+            add(f"https://{ip}" + (f":{port}" if port and port != 443 else ""))
+    return urls
 
 
 def probe_ini(server_url: str, pin: str, token: str = "", proxy: str = "") -> str:

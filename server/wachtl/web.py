@@ -729,12 +729,53 @@ def token_create():
     max_uses = min(max(int(request.form.get("max_uses", 1) or 1), 1), 500)
     token = repo.create_enrollment_token(site_id, max_uses, days, current_user()["username"],
                                          request.form.get("description", ""))
+    if request.form.get("action") == "setup":
+        # direkt das vorbelegte Setup – auf dem PC nur noch „Installieren“
+        return _prefilled_setup_response(token, s, request.form.get("proxy", "").strip())
     setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
     return render_template(
         "token_created.html", token=token, site=s, days=days, max_uses=max_uses,
-        server_url=current_app.config["PUBLIC_URL"], pin=current_app.config["SPKI_PIN"],
-        setup_name=setup.name if setup else None,
+        server_url=current_app.config["PUBLIC_URL"], server_urls=repo.server_urls(),
+        pin=current_app.config["SPKI_PIN"], setup_name=setup.name if setup else None,
     )
+
+
+def _prefilled_setup_response(token: str, site: dict, proxy: str):
+    """Setup-Datei mit eingebauter Vorbelegung (alle Server-Adressen, Pin, Token, Proxy) als Download."""
+    from flask import Response
+
+    from . import setupfile
+
+    setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
+    if setup is None:
+        abort(404, "Kein Setup auf dem Server hinterlegt.")
+    if proxy and not proxy.startswith(("http://", "https://")):
+        abort(400, "Proxy bitte mit Schema angeben, z. B. http://proxy.kunde.local:3128")
+    try:
+        block = setupfile.config_block(repo.server_urls(), current_app.config["SPKI_PIN"], token, site["name"], proxy)
+    except ValueError as exc:
+        abort(400, str(exc))
+    stream, length = setupfile.prefilled(setup, block)
+    repo.audit(current_user()["username"], "token.setup", f"site:{site['id']}", setup.name)
+    safe = "".join(c if c.isalnum() or c in "-_" else "-" for c in setupfile.ascii_text(site["name"]))[:40] or "Probe"
+    return Response(stream, mimetype="application/vnd.microsoft.portable-executable", headers={
+        "Content-Disposition": f'attachment; filename="WachtlSetup-{safe}.exe"',
+        "Content-Length": str(length),
+        "Cache-Control": "no-store",
+    })
+
+
+@bp.post("/admin/tokens/setup")
+@login_required("admin")
+def token_setup():
+    """Vorbelegtes Setup für einen eben erzeugten Token (Seite „Enrollment-Token“)."""
+    token = request.form.get("token", "").strip()
+    row = q1("SELECT t.*, s.name AS site_name FROM enrollment_tokens t JOIN sites s ON s.id = t.site_id "
+             "WHERE t.token_hash = ?", (hash_token(token),)) if token else None
+    if row is None or row["revoked"] or row["expires_at"] < repo.now():
+        abort(400, "Token unbekannt, widerrufen oder abgelaufen.")
+    return _prefilled_setup_response(token, {"id": row["site_id"], "name": row["site_name"]},
+                                     request.form.get("proxy", "").strip())
 
 
 @bp.post("/admin/tokens/package")
@@ -752,7 +793,7 @@ def token_package():
     setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
     if setup is None:
         abort(404, "Kein Probe-Setup auf dem Server hinterlegt.")
-    ini = repo.probe_ini(current_app.config["PUBLIC_URL"], current_app.config["SPKI_PIN"], token,
+    ini = repo.probe_ini(",".join(repo.server_urls()), current_app.config["SPKI_PIN"], token,
                          request.form.get("proxy", "").strip())
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
