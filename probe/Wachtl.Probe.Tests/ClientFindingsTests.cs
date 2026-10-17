@@ -671,4 +671,40 @@ public sealed class ClientFindingsTransportTests : IDisposable
         Assert.True(off.ClientFindings.Enabled);
         Assert.False(off.ClientFindings.Notify);
     }
+
+    [Fact]
+    public void BalloonShortTextsFitAndContainSolution()
+    {
+        var name = new string('N', 40);
+        var a = new AdapterState
+        {
+            Id = "x", Name = name, Description = new string('D', 80), WmiPhysical = true,
+            Ipv4 = new[] { "169.254.10.20" },
+        };
+        var texts = new List<FindingText>
+        {
+            FindingTexts.CableUnplugged(a, null), FindingTexts.WifiDisconnected(a, null),
+            FindingTexts.SpeedChanged(a, 1_000_000_000, 100_000_000), FindingTexts.SpeedLow(a, 10_000_000),
+            FindingTexts.Flapping(a, 12), FindingTexts.NicReset(name, 9), FindingTexts.Apipa(a),
+            FindingTexts.NoGateway(a), FindingTexts.NicErrors(a, 123456, 12.5),
+        };
+        texts.AddRange(new[] { 1, 3, 10, 12, 14, 18, 19, 28, 31, 39, 43, 48, 52, 99 }.Select(code => FindingTexts.DriverError(a, code)));
+        foreach (var t in texts)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(t.Balloon), t.Title);
+            Assert.True(t.Balloon.Length <= ClientFinding.MaxBalloon, $"{t.Title}: {t.Balloon.Length} Zeichen");
+            Assert.Contains("\nLösung: ", t.Balloon);
+            Assert.DoesNotContain("…", t.Balloon);
+        }
+    }
+
+    [Fact]
+    public void BalloonReachesTrayButNotServer()
+    {
+        var f = new ClientFinding { FindingId = "1", Kind = FindingKinds.CableUnplugged, Title = "T", Balloon = "Kurz\nLösung: X" };
+        Assert.DoesNotContain("balloon", JsonSerializer.Serialize(new FindingsUpload { Findings = { f } }, ApiClient.JsonOptions));
+        var feed = new FindingFeed();
+        feed.Publish(f);
+        Assert.Equal("Kurz\nLösung: X", feed.Since(0).Findings.Single().Balloon);
+    }
 }

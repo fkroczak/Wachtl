@@ -38,7 +38,7 @@ für dieselbe Karte erscheint frühestens nach 30 min erneut, außer er wird sch
 ## Sprechblase auf dem PC
 
 - Rot für kritisch, Gelb für Warnung, Blau für die Entwarnung.
-- Text: was passiert ist und der Lösungsvorschlag. Ein Klick zeigt alles vollständig.
+- Text: eine Kurzfassung mit Problem und Lösungsvorschlag (passt in die 255 Zeichen, die Windows erlaubt). Ein Klick zeigt die ausführliche Fassung.
 - Im Menü des Symbols zeigt **Netzwerk-Hinweise …** alle aktiven Hinweise.
 - Höchstens eine Sprechblase alle 15 s; mehrere gleichzeitig werden zusammengefasst.
 - Auch ohne Verbindung zum Server: Die Sprechblase kommt vom Dienst auf dem PC selbst. Die Meldung an den Server

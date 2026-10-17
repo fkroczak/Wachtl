@@ -19,6 +19,7 @@ namespace Wachtl.Tray.Core
         [DataMember(Name = "title")] public string? Title { get; set; }
         [DataMember(Name = "message")] public string? Message { get; set; }
         [DataMember(Name = "solution")] public string? Solution { get; set; }
+        [DataMember(Name = "balloon")] public string? Balloon { get; set; }
         [DataMember(Name = "adapter")] public string? Adapter { get; set; }
         [DataMember(Name = "detected_at")] public long DetectedAt { get; set; }
         [DataMember(Name = "resolved_at")] public long? ResolvedAt { get; set; }
@@ -279,6 +280,11 @@ namespace Wachtl.Tray.Core
         /// <summary>Text der Sprechblase: Meldung und Lösung, höchstens 255 Zeichen (Grenze von Windows).</summary>
         public static string BalloonText(TrayFinding f)
         {
+            if (f.IsActive && !string.IsNullOrWhiteSpace(f.Balloon))
+            {
+                return Truncate(f.Balloon!.Trim(), MaxBalloonText); // Kurzfassung der Probe (ab 0.8.1)
+            }
+
             var text = NonEmpty(f.Message, NonEmpty(f.Title, "Netzwerk-Hinweis"));
             if (f.IsActive && !string.IsNullOrWhiteSpace(f.Solution))
             {
