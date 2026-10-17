@@ -3,6 +3,11 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8
+
+- **Ausfälle ab 5 s**: Ziel und WAN gelten ab 5 s ohne Antwort als ausgefallen (vorher 3 Pings bzw. 30 s). Die Regel prüft jede Sekunde, kurze Ausfälle zwischen zwei Auswertungen gehen nicht mehr verloren. Beginn und Dauer in der Ausfallübersicht sind sekundengenau.
+- **Client-Hinweise**: Die Probe erkennt am PC getrenntes Kabel, gesunkene oder niedrige Link-Geschwindigkeit, instabile Verbindung, Treiberfehler, Rücksetzen der Netzwerkkarte, fehlende DHCP-Adresse, fehlendes Gateway und Paketfehler. Der Benutzer sieht eine Sprechblase mit Lösungsvorschlag, der Server zeigt die Hinweise auf Übersicht, Standort und Probe. Details: `docs/CLIENT-HINWEISE.md`.
+
 ## Neu in 0.7
 
 - **Probes geführt einrichten**: Verwaltung › „Probes einrichten (geführt)“ fragt in vier Schritten alles Wichtige ab – Standort, Messungen (Standardpaket, bereits angehakt), Alarmierung per E-Mail oder Teams und die Anzahl der PCs – und bietet danach direkt das fertige Setup an. Alle Werte sind mit Standards vorbelegt; bei einem Fehler wird nichts halb angelegt.

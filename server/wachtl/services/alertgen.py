@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import tempfile
 from collections import defaultdict
@@ -45,8 +46,28 @@ RECORDING_RULES = [
 ]
 
 
+# vmalert wertet alle 15 s aus; so weit (plus Reserve) schaut die Ausfallerkennung sekundenweise zurück.
+LOOKBACK_S = 20
+
+
 def _fmt_s(seconds: float) -> str:
     return f"{int(seconds)}s"
+
+
+def outage_window(threshold_s: float, interval_s: int) -> tuple[int, str]:
+    """Pings in Folge und Zeitfenster für „mindestens threshold_s Sekunden ohne Antwort“.
+
+    Mindestens 2 Pings, damit ein einzelnes verlorenes Paket bei langen Intervallen kein Ausfall ist.
+    Das Fenster enthält n (bis n + 1) Pings: n × Intervall + ein halbes Intervall Reserve.
+    """
+    interval_s = max(int(interval_s), 1)
+    n = max(2, math.ceil(max(threshold_s, 1) / interval_s))
+    return n, f"{int((n * interval_s + interval_s / 2) * 1000)}ms"
+
+
+def _recent(inner: str) -> str:
+    """Wahr, solange ``inner`` in den letzten LOOKBACK_S Sekunden zu irgendeiner Sekunde wahr war."""
+    return f"count_over_time(({inner})[{LOOKBACK_S}s:1s]) > 0"
 
 
 def build_rules() -> dict:
@@ -78,31 +99,40 @@ def build_rules() -> dict:
             "Probe {{ $labels.probe_name }} ({{ $labels.site_name }}) sendet seit {{ $value | humanizeDuration }} nichts mehr",
         )
 
-    # "N aufeinanderfolgende Fehler" hängt vom Intervall ab: eine Regel je Intervall.
+    # Ausfall = mindestens "threshold" Sekunden keine Antwort. Wie viele Pings in Folge das sind, hängt vom
+    # Intervall ab: eine Regel je Intervall. vmalert wertet nur alle 15 s aus – die Unterabfrage prüft deshalb
+    # jede Sekunde der letzten LOOKBACK_S, damit auch ein 5-s-Ausfall zwischen zwei Auswertungen auffällt.
     if "target_down" in rules:
-        n = max(int(rules["target_down"]["threshold"]), 1)
+        thr = float(rules["target_down"]["threshold"])
         by_interval: dict[int, list[str]] = defaultdict(list)
         for c in q("SELECT id, interval_s FROM checks WHERE enabled = TRUE AND type = 'ping'"):
             by_interval[int(c["interval_s"])].append(str(c["id"]))
         for interval, ids in sorted(by_interval.items()):
-            window = f"{int((interval * n + interval / 2) * 1000)}ms"
+            n, window = outage_window(thr, interval)
             sel = f'check_id=~"{"|".join(sorted(ids, key=int))}"'
+            inner = (f"(max by ({BY_TARGET}) (max_over_time(wachtl_ping_up{{{sel}}}[{window}])) == 0)"
+                     f" and (sum by ({BY_TARGET}) (count_over_time(wachtl_ping_up{{{sel}}}[{window}])) >= {n})")
             add(
                 "WachtlTargetDown",
                 "target_down",
-                f"(max by ({BY_TARGET}) (max_over_time(wachtl_ping_up{{{sel}}}[{window}])) == 0)"
-                f" and (sum by ({BY_TARGET}) (count_over_time(wachtl_ping_up{{{sel}}}[{window}])) >= {n})",
+                _recent(inner),
                 f"{{{{ $labels.target }}}} von {{{{ $labels.probe_name }}}} ({{{{ $labels.site_name }}}}) "
-                f"nicht erreichbar ({n} Pings in Folge fehlgeschlagen)",
+                f"nicht erreichbar (mindestens {thr:g} s keine Antwort)",
                 {"interval": str(interval)},
             )
 
     if "wan_down" in rules:
-        r = rules["wan_down"]
+        thr = float(rules["wan_down"]["threshold"])
+        intervals = [int(c["interval_s"]) for c in q(
+            "SELECT interval_s FROM checks WHERE enabled = TRUE AND type = 'ping' AND role = 'reference'")]
+        n, window = outage_window(thr, max(intervals or [1]))
+        sel = 'role="reference"'
+        inner = (f"(max by ({BY_PROBE}) (max_over_time(wachtl_ping_up{{{sel}}}[{window}])) == 0)"
+                 f" and (min by ({BY_PROBE}) (count_over_time(wachtl_ping_up{{{sel}}}[{window}])) >= {n})")
         add(
             "WachtlWanDown",
             "wan_down",
-            f'max by ({BY_PROBE}) (max_over_time(wachtl_ping_up{{role="reference"}}[{_fmt_s(r["threshold"])}])) == 0',
+            _recent(inner),
             "Alle Internet-Referenzen von {{ $labels.probe_name }} ({{ $labels.site_name }}) gestört – vermutlich WAN-Problem",
             {"cause": "wan"},
         )

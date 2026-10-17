@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>wachtl-probe</AssemblyName>
     <RootNamespace>Wachtl.Probe</RootNamespace>
-    <Version>0.7.0</Version>
+    <Version>0.8.0</Version>
     <Product>Wachtl Probe</Product>
     <Company>Wachtl</Company>
     <OutputType>Exe</OutputType>
@@ -23,6 +23,8 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <!-- Client-Hinweise: Geräte-Manager-Fehlercodes der Netzwerkkarten (Win32_NetworkAdapter) -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

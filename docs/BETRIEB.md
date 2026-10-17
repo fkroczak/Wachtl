@@ -84,11 +84,16 @@ Firewall-, Proxy- und NAT-Szenarien: Probes bauen jede Verbindung selbst auf, NA
 | Alarm | Bedingung (Standard) | Stufe | Unterdrückt |
 | --- | --- | --- | --- |
 | WachtlProbeOffline | 120 s kein Heartbeat | kritisch | alle anderen Alarme dieser Probe |
-| WachtlTargetDown | 3 Pings in Folge ohne Antwort | kritisch | bei Rolle Gateway: Internet- und Zielalarme dieser Probe |
-| WachtlWanDown | alle Internet-Referenzen 30 s gestört | kritisch | Einzelalarme der Referenzen |
+| WachtlTargetDown | 5 s ohne Antwort (bei 1-s-Ping 5 Pings in Folge, bei längerem Intervall mindestens 2) | kritisch | bei Rolle Gateway: Internet- und Zielalarme dieser Probe |
+| WachtlWanDown | alle Internet-Referenzen zugleich 5 s ohne Antwort | kritisch | Einzelalarme der Referenzen |
 | WachtlPacketLoss | > 2 % über 5 min, 1 min anhaltend | Warnung | – |
 | WachtlPacketLossCritical | > 10 % über 5 min, 1 min anhaltend | kritisch | die Warnung |
 | WachtlLatencyHigh | Durchschnitt > 100 ms über 5 min, 1 min anhaltend | Warnung | – |
+
+Ausfälle werden ab der eingestellten Dauer zuverlässig erkannt, auch wenn sie kürzer sind als der
+15-s-Auswertetakt von vmalert: Die Regel prüft jede Sekunde der letzten 20 s. In der Ausfallübersicht stehen
+Beginn und Dauer sekundengenau, nachgerechnet aus den 1-s-Messwerten. Der Alarm selbst kommt bis zu 45 s nach dem
+Ausfall (Auswertetakt plus 30 s Wartezeit auf spät hochgeladene Messwerte).
 
 Schwellwerte, Dauer und Stufe sind unter **Verwaltung › Alarmregeln** änderbar. Empfehlungen:
 

@@ -2,6 +2,7 @@
 {% block title %}{{ site.name }}{% endblock %}
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links with context %}
+{% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
@@ -80,6 +81,12 @@
 </div>
 <p class="muted small"><a href="{{ url_for('web.alerts') }}">Alle Alarme und Verlauf</a></p>
 {% else %}<p class="muted">Keine aktiven Alarme an diesem Standort.</p>{% endif %}
+
+<h2 id="hinweise">Hinweise von PCs</h2>
+{% if client_findings %}
+<p class="muted">Was die Probes an diesem Standort auf ihrem PC erkannt haben – aktive und die der letzten 7 Tage.</p>
+{{ findings_table(client_findings) }}
+{% else %}<p class="muted">Keine Hinweise von PCs an diesem Standort in den letzten 7 Tagen.</p>{% endif %}
 
 <h2 id="meldungen">Störungsmeldungen</h2>
 {% if reports %}

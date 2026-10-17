@@ -4,6 +4,7 @@ using Wachtl.Probe.Bandwidth;
 using Wachtl.Probe.Buffer;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
+using Wachtl.Probe.Diagnostics;
 using Wachtl.Probe.Transport;
 using Wachtl.Probe.Tray;
 
@@ -23,6 +24,7 @@ public sealed class ProbeWorker : BackgroundService
     private readonly ILoggerFactory _loggerFactory;
     private readonly GatewayResolver _gateway;
     private readonly ProbeStatus _status;
+    private readonly ClientDiagnostics _diagnostics;
     private readonly Dictionary<string, IAsyncDisposable> _runners = new();
     private IperfServerHost? _iperfServer;
     private readonly SemaphoreSlim _configChanged = new(0, 1);
@@ -34,12 +36,14 @@ public sealed class ProbeWorker : BackgroundService
     private ApiClient? _api;
     private SampleBuffer? _buffer;
 
-    public ProbeWorker(ILogger<ProbeWorker> logger, ILoggerFactory loggerFactory, GatewayResolver gateway, ProbeStatus status)
+    public ProbeWorker(ILogger<ProbeWorker> logger, ILoggerFactory loggerFactory, GatewayResolver gateway, ProbeStatus status,
+        ClientDiagnostics diagnostics)
     {
         _logger = logger;
         _loggerFactory = loggerFactory;
         _gateway = gateway;
         _status = status;
+        _diagnostics = diagnostics;
     }
 
     protected override async Task ExecuteAsync(CancellationToken ct)
@@ -99,7 +103,8 @@ public sealed class ProbeWorker : BackgroundService
                 _buffer.RunWriterAsync(ct),
                 ConfigLoopAsync(ct),
                 UploadLoopAsync(ct),
-                HeartbeatLoopAsync(ct)).ConfigureAwait(false);
+                HeartbeatLoopAsync(ct),
+                _diagnostics.RunAsync(ct)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -258,6 +263,8 @@ public sealed class ProbeWorker : BackgroundService
 
             _config = config;
         }
+
+        _diagnostics.Configure(config.ClientFindings);
 
         _logger.LogInformation("Konfiguration {Etag} aktiv: {Count} Checks ({Types}), iperf3-Gegenstelle {Iperf}", config.Etag,
             wanted.Count, string.Join(", ", wanted.Values.GroupBy(c => c.Type).Select(g => $"{g.Count()} {g.Key}")),
@@ -421,6 +428,7 @@ public sealed class ProbeWorker : BackgroundService
                     Addresses = GatewayResolver.LocalAddresses(),
                 }, ct).ConfigureAwait(false);
                 _status.MarkContact();
+                _diagnostics.RequestFlush();
 
                 if (response.Commands.Count > 0)
                 {

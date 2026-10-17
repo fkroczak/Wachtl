@@ -6,6 +6,7 @@ import json
 from flask import Blueprint, jsonify, request
 
 from . import repo
+from . import findings as finding_service
 from . import reports as report_service
 from .db import q, q1
 from .security import check_csrf, current_user, login_required
@@ -159,6 +160,19 @@ def check_status():
          "name": st.check["name"], "type": st.kind, "state": st.state, "detail": st.detail, "ts": st.ts}
         for p in probes for st in states[p["id"]]
     ])
+
+
+@bp.get("/client-findings")
+@login_required(api=True)
+def client_findings():
+    """Client-Hinweise der Probes: aktive immer, behobene der letzten ``days`` Tage (Standard 7)."""
+    try:
+        days = min(max(int(request.args.get("days", 7)), 1), 400)
+        probe_id = int(request.args["probe"]) if request.args.get("probe") else None
+    except ValueError:
+        return jsonify(error="days bzw. probe muss eine Zahl sein"), 400
+    items = finding_service.search(probe_id=probe_id, since=repo.now() - days * 86400, limit=500)
+    return jsonify([finding_service.api_item(r) for r in items])
 
 
 @bp.get("/alerts")

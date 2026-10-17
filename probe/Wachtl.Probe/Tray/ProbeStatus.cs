@@ -1,5 +1,6 @@
 using System.Net;
 using Wachtl.Probe.Config;
+using Wachtl.Probe.Diagnostics;
 using Wachtl.Probe.Transport;
 
 namespace Wachtl.Probe.Tray;
@@ -64,6 +65,31 @@ public sealed class ProbeStatus
         catch (Exception ex)
         {
             // Netzfehler, Zeitüberschreitung, 401/403/404/5xx, ApiClient schon freigegeben: puffern statt verlieren.
+            return new ReportSendResult(ReportSendOutcome.Retry, ex.Message);
+        }
+    }
+
+    /// <summary>POST api/probe/v1/findings: 200 zugestellt, 400 abgelehnt (verwerfen), sonst später erneut.</summary>
+    public async Task<ReportSendResult> SendFindingsAsync(IReadOnlyList<ClientFinding> findings, CancellationToken ct)
+    {
+        var api = _api;
+        if (api is null)
+        {
+            return new ReportSendResult(ReportSendOutcome.Retry, "Dienst noch nicht mit dem Server verbunden");
+        }
+
+        try
+        {
+            await api.PostResultAsync("findings", new FindingsUpload { Findings = findings.ToList() }, ct).ConfigureAwait(false);
+            MarkContact();
+            return new ReportSendResult(ReportSendOutcome.Delivered);
+        }
+        catch (ApiException ex) when (ex.Status == HttpStatusCode.BadRequest)
+        {
+            return new ReportSendResult(ReportSendOutcome.Rejected, ex.Detail);
+        }
+        catch (Exception ex)
+        {
             return new ReportSendResult(ReportSendOutcome.Retry, ex.Message);
         }
     }

@@ -9,19 +9,26 @@ using Wachtl.Tray.Core;
 
 namespace Wachtl.Tray
 {
-    /// <summary>Symbol neben der Uhr mit Menü und Statusabfrage alle 30 s.</summary>
+    /// <summary>Symbol neben der Uhr mit Menü, Statusabfrage alle 30 s und Netzwerk-Hinweisen (Abfrage alle 10 s).</summary>
     internal sealed class TrayContext : ApplicationContext
     {
         private readonly TrayClient _client;
         private readonly NotifyIcon _icon;
         private readonly ContextMenuStrip _menu;
         private readonly ToolStripMenuItem _dashboardItem;
+        private readonly ToolStripMenuItem _findingsItem;
         private readonly System.Windows.Forms.Timer _pollTimer;
+        private readonly System.Windows.Forms.Timer _findingsTimer;
+        private readonly System.Windows.Forms.Timer _balloonTimer;
+        private readonly FindingNotifier _notifier = new FindingNotifier();
         private readonly System.Windows.Forms.Timer _clickTimer;
         private readonly SynchronizationContext _ui;
         private readonly Icon _trayIcon;
         private TrayStatus? _status;
         private bool _polling;
+        private bool _findingsPolling;
+        private bool _findingsUnsupported;
+        private Balloon? _lastBalloon;
         private ReportForm? _reportForm;
         private AboutForm? _aboutForm;
 
@@ -33,10 +40,11 @@ namespace Wachtl.Tray
 
             var reportItem = new ToolStripMenuItem("Problem melden …", null, (s, e) => OpenReport());
             reportItem.Font = new Font(_menu.Font, FontStyle.Bold);
+            _findingsItem = new ToolStripMenuItem("Netzwerk-Hinweise …", null, (s, e) => ShowFindings());
             var aboutItem = new ToolStripMenuItem("Über Wachtl", null, (s, e) => OpenAbout());
             _dashboardItem = new ToolStripMenuItem("Dashboard öffnen", null, (s, e) => OpenDashboard()) { Visible = false };
             var exitItem = new ToolStripMenuItem("Beenden", null, (s, e) => ExitThread());
-            _menu.Items.AddRange(new ToolStripItem[] { reportItem, aboutItem, _dashboardItem, new ToolStripSeparator(), exitItem });
+            _menu.Items.AddRange(new ToolStripItem[] { reportItem, _findingsItem, aboutItem, _dashboardItem, new ToolStripSeparator(), exitItem });
 
             _trayIcon = AppIcons.Load(SystemInformation.SmallIconSize);
             _icon = new NotifyIcon
@@ -70,10 +78,21 @@ namespace Wachtl.Tray
                 }
             };
 
+            _icon.BalloonTipClicked += (s, e) => ShowBalloonDetails();
+
             _pollTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
             _pollTimer.Tick += (s, e) => RefreshStatus();
             _pollTimer.Start();
             RefreshStatus();
+
+            // Netzwerk-Hinweise getrennt vom Status: öfter abfragen, damit „Kabel getrennt“ schnell erscheint
+            _findingsTimer = new System.Windows.Forms.Timer { Interval = 10_000 };
+            _findingsTimer.Tick += (s, e) => RefreshFindings();
+            _findingsTimer.Start();
+            _balloonTimer = new System.Windows.Forms.Timer { Interval = 2_000 };
+            _balloonTimer.Tick += (s, e) => ShowNextBalloon();
+            _balloonTimer.Start();
+            RefreshFindings();
 
             if (openReport)
             {
@@ -119,6 +138,87 @@ namespace Wachtl.Tray
             {
                 _polling = false;
             }
+        }
+
+        public async void RefreshFindings()
+        {
+            if (_findingsPolling || _findingsUnsupported)
+            {
+                return;
+            }
+
+            _findingsPolling = true;
+            try
+            {
+                var since = _notifier.Cursor;
+                var poll = await Task.Run(() => _client.GetFindings(since));
+                switch (poll.Status)
+                {
+                    case FindingsPollStatus.Ok:
+                        _notifier.Accept(poll.Response!, DateTime.UtcNow);
+                        ShowNextBalloon();
+                        break;
+                    case FindingsPollStatus.NotSupported:
+                        // Server-Probe oder ältere Probe: kein Endpunkt – bis zum Neustart des Tray nicht mehr fragen
+                        _findingsUnsupported = true;
+                        _findingsTimer.Stop();
+                        _balloonTimer.Stop();
+                        _findingsItem.Visible = false;
+                        break;
+                }
+            }
+            catch (Exception)
+            {
+                // Dienst nicht erreichbar oder Antwort unbrauchbar: still beim nächsten Mal erneut
+            }
+            finally
+            {
+                _findingsPolling = false;
+            }
+        }
+
+        private void ShowNextBalloon()
+        {
+            if (!_notifier.HasQueued)
+            {
+                return;
+            }
+
+            var balloon = _notifier.Next(DateTime.UtcNow);
+            if (balloon == null)
+            {
+                return;
+            }
+
+            _lastBalloon = balloon;
+            var icon = balloon.Icon == BalloonIcon.Error ? ToolTipIcon.Error
+                : balloon.Icon == BalloonIcon.Warning ? ToolTipIcon.Warning
+                : ToolTipIcon.Info;
+            _icon.ShowBalloonTip(15_000, balloon.Title, balloon.Text, icon);
+        }
+
+        private void ShowBalloonDetails()
+        {
+            var balloon = _lastBalloon;
+            if (balloon == null)
+            {
+                return;
+            }
+
+            var icon = balloon.Icon == BalloonIcon.Error ? MessageBoxIcon.Error
+                : balloon.Icon == BalloonIcon.Warning ? MessageBoxIcon.Warning
+                : MessageBoxIcon.Information;
+            MessageBox.Show(FindingNotifier.DetailText(balloon.Items), FindingNotifier.Caption, MessageBoxButtons.OK, icon);
+        }
+
+        private void ShowFindings()
+        {
+            var active = _notifier.Active;
+            var icon = active.Count == 0 ? MessageBoxIcon.Information
+                : active[0].Rank >= 2 ? MessageBoxIcon.Error
+                : active[0].Rank >= 1 ? MessageBoxIcon.Warning
+                : MessageBoxIcon.Information;
+            MessageBox.Show(_notifier.ActiveSummary(), FindingNotifier.Caption, MessageBoxButtons.OK, icon);
         }
 
         private void OpenReport()
@@ -197,6 +297,8 @@ namespace Wachtl.Tray
             if (disposing)
             {
                 _pollTimer.Dispose();
+                _findingsTimer.Dispose();
+                _balloonTimer.Dispose();
                 _clickTimer.Dispose();
                 _icon.Visible = false;
                 _icon.Dispose();

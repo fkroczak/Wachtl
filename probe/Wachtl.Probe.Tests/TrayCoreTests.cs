@@ -79,7 +79,7 @@ public class TrayCoreTests
     {
         var status = Json.Read<TrayStatus>(
             "{\"role\":\"server\",\"name\":\"SRV\",\"site\":\"Zentrale\",\"server_url\":\"https://w\",\"dashboard_url\":\"https://w\"," +
-            "\"version\":\"0.7.0\",\"enrolled\":true,\"connected\":false,\"last_contact\":1792230000,\"pending_reports\":2,\"neu\":1}")!;
+            "\"version\":\"0.8.0\",\"enrolled\":true,\"connected\":false,\"last_contact\":1792230000,\"pending_reports\":2,\"neu\":1}")!;
         Assert.True(status.IsServer);
         Assert.Equal("https://w", status.DashboardUrl);
         Assert.Equal(1792230000, status.LastContact);
@@ -97,5 +97,174 @@ public class TrayCoreTests
             Assert.StartsWith("Wachtl – Netzwerk-Monitoring", text);
             Assert.True(text.Length <= 63, text);
         }
+    }
+
+    // -- Netzwerk-Hinweise --------------------------------------------------
+
+    private static readonly long NowS = new DateTimeOffset(UtcNow).ToUnixTimeSeconds();
+
+    private static TrayFinding F(long seq, string id, string severity = "critical", string state = "active", long? detected = null,
+        string title = "Netzwerkkabel getrennt") => new()
+    {
+        Seq = seq, FindingId = id, Kind = "cable_unplugged", Severity = severity, State = state, Title = title,
+        Message = "Die Netzwerkkarte „Ethernet“ hat keine Verbindung mehr.", Solution = "Kabel prüfen.",
+        Adapter = "Ethernet", DetectedAt = detected ?? NowS - 5, ResolvedAt = state == "resolved" ? NowS : null,
+    };
+
+    private static TrayFindingsResponse R(long latest, params TrayFinding[] findings) =>
+        new() { Notify = true, LatestSeq = latest, Findings = findings.ToList() };
+
+    [Fact]
+    public void ParsesFindingsResponse()
+    {
+        var json = "{\"notify\":true,\"latest_seq\":12,\"findings\":[{\"seq\":12,\"finding_id\":\"a\",\"kind\":\"apipa\",\"severity\":\"critical\"," +
+                   "\"state\":\"active\",\"title\":\"Keine IP-Adresse\",\"message\":\"m\",\"solution\":\"s\",\"adapter\":\"Ethernet\"," +
+                   "\"detected_at\":1792230000,\"resolved_at\":null,\"neu\":1}]}";
+        var poll = FindingsPoll.Interpret(200, json);
+        Assert.Equal(FindingsPollStatus.Ok, poll.Status);
+        var f = Assert.Single(poll.Response!.Findings!);
+        Assert.Equal(12, f.Seq);
+        Assert.Null(f.ResolvedAt);
+        Assert.True(f.IsActive);
+        Assert.Equal(2, f.Rank);
+        Assert.Equal(FindingsPollStatus.NotSupported, FindingsPoll.Interpret(404, "{\"error\":\"Not Found\"}").Status);
+        Assert.Equal(FindingsPollStatus.Failed, FindingsPoll.Interpret(200, "<html>").Status);
+        Assert.Equal(FindingsPollStatus.Failed, FindingsPoll.Interpret(403, "{}").Status);
+    }
+
+    [Fact]
+    public void FirstPollSetsCursorAndShowsOnlyRecentActiveWarnings()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(20,
+            F(10, "old", detected: NowS - 3600),
+            F(11, "info", severity: "info"),
+            F(12, "done", state: "resolved"),
+            F(13, "fresh", severity: "warning", detected: NowS - 300)), UtcNow);
+        Assert.Equal(20, n.Cursor);
+        var b = n.Next(UtcNow)!;
+        Assert.Equal("fresh", Assert.Single(b.Items).FindingId);
+        Assert.Equal(BalloonIcon.Warning, b.Icon);
+        Assert.False(n.HasQueued);
+        Assert.Equal(3, n.Active.Count); // old, info, fresh – fürs Menü
+    }
+
+    [Fact]
+    public void ShowsNewFindingAndResolutionOfShownOnly()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(5), UtcNow);
+        n.Accept(R(7, F(6, "a"), F(7, "b", severity: "info")), UtcNow);
+        var b = n.Next(UtcNow)!;
+        Assert.Equal(BalloonIcon.Error, b.Icon);
+        Assert.Equal("Netzwerkkabel getrennt", b.Title);
+        Assert.Equal("Die Netzwerkkarte „Ethernet“ hat keine Verbindung mehr.\nLösung: Kabel prüfen.", b.Text);
+        Assert.Null(n.Next(UtcNow.AddSeconds(30))); // info: keine Sprechblase
+
+        n.Accept(R(9, F(8, "a", state: "resolved", title: "Netzwerkkabel wieder verbunden"), F(9, "b", state: "resolved")), UtcNow);
+        var resolved = n.Next(UtcNow.AddSeconds(30))!;
+        Assert.Equal(BalloonIcon.Info, resolved.Icon);
+        Assert.Equal("Netzwerkkabel wieder verbunden", resolved.Title);
+        Assert.DoesNotContain("Lösung", resolved.Text);
+        Assert.False(n.HasQueued); // b war nie gezeigt
+        Assert.Empty(n.Active);
+    }
+
+    [Fact]
+    public void ResolvedBeforeShownIsNotShown()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        n.Accept(R(2, F(2, "a")), UtcNow);
+        n.Accept(R(3, F(3, "a", state: "resolved")), UtcNow);
+        Assert.False(n.HasQueued);
+    }
+
+    [Fact]
+    public void AtMostOneBalloonPer15SecondsAndCombinesMoreThanThree()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        n.Accept(R(3, F(2, "a"), F(3, "b")), UtcNow);
+        Assert.NotNull(n.Next(UtcNow));
+        Assert.Null(n.Next(UtcNow.AddSeconds(10)));
+        Assert.NotNull(n.Next(UtcNow.AddSeconds(15)));
+
+        n.Accept(R(7, F(4, "c", severity: "warning"), F(5, "d"), F(6, "e", severity: "warning"), F(7, "f", severity: "warning")), UtcNow);
+        var combined = n.Next(UtcNow.AddSeconds(30))!;
+        Assert.Equal(4, combined.Items.Count);
+        Assert.Equal("4 Netzwerk-Hinweise – Klicken für Details", combined.Title);
+        Assert.Equal(BalloonIcon.Error, combined.Icon);
+        Assert.False(n.HasQueued);
+        Assert.Contains("seit", FindingNotifier.DetailText(combined.Items));
+    }
+
+    [Fact]
+    public void HigherSeverityIsShownAgain()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        n.Accept(R(2, F(2, "a", severity: "warning")), UtcNow);
+        Assert.NotNull(n.Next(UtcNow));
+        n.Accept(R(3, F(3, "a", severity: "warning")), UtcNow);
+        Assert.False(n.HasQueued);
+        n.Accept(R(4, F(4, "a", severity: "critical")), UtcNow);
+        Assert.Equal(BalloonIcon.Error, n.Next(UtcNow.AddMinutes(1))!.Icon);
+    }
+
+    [Fact]
+    public void NotifyOffShowsNothingButKeepsList()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        var r = R(2, F(2, "a"));
+        r.Notify = false;
+        n.Accept(r, UtcNow);
+        Assert.False(n.HasQueued);
+        Assert.Single(n.Active);
+        Assert.Contains("Netzwerkkabel getrennt", n.ActiveSummary());
+    }
+
+    [Fact]
+    public void ServiceRestartResetsCursor()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(100), UtcNow);
+        n.Accept(R(5), UtcNow);
+        Assert.Equal(0, n.Cursor);
+        n.Accept(R(6, F(6, "neu", detected: NowS - 60)), UtcNow);
+        Assert.Equal(6, n.Cursor);
+        Assert.True(n.HasQueued); // wie ein erster Abruf: frische aktive Hinweise zeigen
+    }
+
+    [Fact]
+    public void ServiceRestartDropsStaleActiveFindings()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1_000), UtcNow);
+        n.Accept(R(1_001, F(1_001, "alt", detected: NowS - 3600)), UtcNow);
+        Assert.Single(n.Active);
+        // neuer Dienst: Zählung beginnt über dem Stand des Tray, kennt „alt“ nicht mehr
+        var restarted = R(5_000);
+        restarted.StartSeq = 5_000;
+        n.Accept(restarted, UtcNow);
+        Assert.Empty(n.Active);
+        Assert.Equal(5_000, n.Cursor);
+    }
+
+    [Fact]
+    public void BalloonTextsFitWindowsLimits()
+    {
+        var f = F(1, "a", title: new string('T', 100));
+        f.Message = new string('m', 400);
+        f.Solution = new string('s', 400);
+        var n = new FindingNotifier();
+        n.Accept(R(0), UtcNow);
+        n.Accept(R(1, f), UtcNow);
+        var b = n.Next(UtcNow)!;
+        Assert.True(b.Title.Length <= 63);
+        Assert.True(b.Text.Length <= 255);
+        Assert.EndsWith("…", b.Text);
+        Assert.Equal(FindingNotifier.NoFindings, new FindingNotifier().ActiveSummary());
     }
 }

@@ -3,6 +3,7 @@
 {% from "_forms.html" import field %}
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links, check_target with context %}
+{% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
@@ -158,6 +159,12 @@
   <button class="primary">Speichern</button>
 </form>
 {% endif %}
+
+<h2 id="hinweise">Hinweise dieses PCs</h2>
+{% if client_findings %}
+<p class="muted">Was die Probe auf diesem PC erkannt hat – der Benutzer sieht dasselbe als Sprechblase. Aktive und die der letzten 30 Tage.</p>
+{{ findings_table(client_findings, show_probe=False) }}
+{% else %}<p class="muted">Die Probe hat an Netzwerkkarte, Kabel und Treiber dieses PCs nichts Auffälliges erkannt.</p>{% endif %}
 
 <h2 id="meldungen">Störungsmeldungen</h2>
 {% if reports %}

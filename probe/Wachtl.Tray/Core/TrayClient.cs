@@ -147,6 +147,15 @@ namespace Wachtl.Tray.Core
             return response != null && response.Status == 200 ? Json.Read<TrayStatus>(response.Body) : null;
         }
 
+        /// <summary>Client-Hinweise mit Nummer größer <paramref name="since"/> (GET /tray/v1/findings).</summary>
+        public FindingsPoll GetFindings(long since)
+        {
+            var response = Send("GET", "/tray/v1/findings?since=" + Math.Max(0, since).ToString(CultureInfo.InvariantCulture), null, StatusTimeoutMs);
+            return response == null
+                ? new FindingsPoll(FindingsPollStatus.ServiceDown)
+                : FindingsPoll.Interpret(response.Status, response.Body);
+        }
+
         public ReportResult SendReport(string json)
         {
             var response = Send("POST", "/tray/v1/report", json, ReportTimeoutMs);

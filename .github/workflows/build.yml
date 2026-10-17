@@ -10,7 +10,7 @@ on:
     types: [published]
 
 env:
-  WACHTL_VERSION: "0.7.0"
+  WACHTL_VERSION: "0.8.0"
 
 jobs:
   server:

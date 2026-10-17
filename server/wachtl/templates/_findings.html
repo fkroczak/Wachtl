@@ -1,0 +1,18 @@
+{#- Client-Hinweise der Probes (Kabel, Link-Geschwindigkeit, Treiber …). Vertrag: docs/CLIENT-HINWEISE.md -#}
+{% macro findings_table(items, show_probe=True) %}
+<table class="findings">
+  <thead><tr><th>Stufe</th>{% if show_probe %}<th>PC / Probe</th>{% endif %}<th>Hinweis</th><th>Lösungsvorschlag</th><th>Erkannt</th><th>Zustand</th></tr></thead>
+  <tbody>{% for f in items %}
+    <tr>
+      <td><span class="badge {{ f.severity if f.state == 'active' else 'info' }}">{{ f.severity_label }}</span></td>
+      {% if show_probe %}<td><a href="{{ url_for('web.probe', probe_id=f.probe_id) }}">{{ f.probe_name }}</a>{% if f.site_name %}<br><span class="muted">{{ f.site_name }}</span>{% endif %}</td>{% endif %}
+      <td><strong>{{ f.title }}</strong>{% if f.adapter %} <span class="muted">({{ f.adapter }}{% if f.adapter_description %}, {{ f.adapter_description }}{% endif %})</span>{% endif %}
+        {% if f.message %}<br>{{ f.message }}{% endif %}
+        {% if f.state != 'active' and f.details.resolution %}<br><span class="muted">{{ f.details.resolution }}</span>{% endif %}</td>
+      <td class="report-text">{{ f.solution or '–' }}</td>
+      <td class="nowrap">{{ f.detected_at|dt }}</td>
+      <td class="nowrap">{% if f.state == 'active' %}aktiv seit {{ f.duration_s|duration }}{% else %}behoben nach {{ f.duration_s|duration }}{% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% endmacro %}

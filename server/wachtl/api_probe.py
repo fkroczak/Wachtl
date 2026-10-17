@@ -14,6 +14,7 @@ import zlib
 from flask import Blueprint, abort, current_app, g, jsonify, request
 
 from . import repo
+from . import findings as finding_service
 from . import reports as report_service
 from .db import ex, ins, q1
 from .security import hash_token, new_secret, probe_auth
@@ -133,6 +134,10 @@ def heartbeat():
     data = request.get_json(silent=True) or {}
     ts = repo.now()
     buffer_items = int(data.get("buffer_items") or 0)
+    uptime = int(data.get("uptime_s") or 0)
+    if g.probe.get("uptime_s") and 0 <= uptime < int(g.probe["uptime_s"]):
+        # Dienst neu gestartet: ältere aktive Hinweise kann die Probe nicht mehr auflösen
+        finding_service.close_stale(g.probe["id"], ts - uptime, "Nicht mehr bestätigt – Wachtl-Dienst neu gestartet")
     ex(
         "UPDATE probes SET last_seen = ?, last_ip = ?, version = ?, os = ?, buffer_items = ?, uptime_s = ?, "
         "addresses = ? WHERE id = ?",
@@ -142,7 +147,7 @@ def heartbeat():
             str(data.get("version", g.probe["version"] or ""))[:50],
             str(data.get("os", g.probe["os"] or ""))[:200],
             buffer_items,
-            int(data.get("uptime_s") or 0),
+            uptime,
             json.dumps(_addresses(data.get("addresses"))),
             g.probe["id"],
         ),
@@ -191,6 +196,28 @@ def report():
         log.info("Probe %s: Störungsmeldung %s (%s) von %s", g.probe["hostname"], rid, values["category"],
                  values["user"] or "unbekannt")
     return jsonify(id=rid), 201 if created else 200
+
+
+@bp.post("/findings")
+@probe_auth
+def findings():
+    """Client-Hinweise der Probe (Kabel getrennt, Link-Geschwindigkeit, Treiber …), siehe docs/CLIENT-HINWEISE.md.
+
+    Upsert je finding_id; ungültige Einträge werden übersprungen und in ``errors`` genannt.
+    """
+    try:
+        items, errors = finding_service.validate_batch(request.get_json(silent=True))
+    except finding_service.FindingError as exc:
+        return jsonify(error=str(exc)), 400
+    new = 0
+    for values in items:
+        if finding_service.store(g.probe, values):
+            new += 1
+            log.info("Probe %s: Hinweis %s (%s) – %s", g.probe["hostname"], values["kind"], values["severity"],
+                     values["title"])
+    for e in errors:
+        log.warning("Probe %s: Hinweis abgelehnt – %s", g.probe["hostname"], e)
+    return jsonify(stored=len(items), new=new, rejected=len(errors), errors=errors[:10])
 
 
 def _addresses(raw) -> list[str]:

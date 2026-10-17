@@ -181,7 +181,7 @@ class PrefilledSetupTest(AppTestCase):
         os.makedirs(self.probe_dir)
         with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
             f.write(b"MZ-alt")
-        with open(os.path.join(self.probe_dir, "WachtlSetup-0.7.0.exe"), "wb") as f:
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.8.0.exe"), "wb") as f:
             f.write(b"MZ" + b"x" * 5000)
         self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
                                SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])

@@ -18,7 +18,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
                                               Alertmanager ─▶ E-Mail / Teams, Historie zurück an Flask
 ```
 
-## Stand: 0.7
+## Stand: 0.8
 
 | Bereich | Enthalten |
 | --- | --- |
@@ -38,12 +38,15 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Deinstallation (0.4) | Probe meldet sich am Server ab, alle Firewall-Regeln und das Token werden entfernt; Server Windows/Linux (`deploy/uninstall.sh`) mit Prüfung auf offene Ports |
 | Tray-Symbol (0.6) | Symbol neben der Uhr auf Clients und Windows-Server: Problem melden, Über, Beenden ([docs/STOERUNGSMELDUNGEN.md](docs/STOERUNGSMELDUNGEN.md)) |
 | Geführte Einrichtung (0.7) | Verwaltung › Probes einrichten: Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten, mit Standards vorbelegt |
+| Kurzausfälle (0.8) | Ziel und WAN gelten ab 5 s ohne Antwort als gestört, sekundengenaue Dauer in der Ausfallübersicht |
+| Client-Hinweise (0.8) | Probe erkennt Kabel getrennt, Link-Geschwindigkeit, Treiberfehler, DHCP/Gateway, Paketfehler – Sprechblase mit Lösung auf dem PC, Anzeige im Web-UI ([docs/CLIENT-HINWEISE.md](docs/CLIENT-HINWEISE.md)) |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
 
 Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heatmaps, mTLS und automatische Probe-Updates.
+Konzept für die automatische Fehlerdiagnose mit Lösungsvorschlägen: [docs/DIAGNOSE-KONZEPT.md](docs/DIAGNOSE-KONZEPT.md).
 
 ## Download
 
@@ -69,7 +72,7 @@ und `SHA256SUMS.txt`. Bis 0.4 waren es zwei Setups. Auf GitHub die Datei öffnen
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.7.0.exe` starten, Rolle „Wachtl-Server“
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.8.0.exe` starten, Rolle „Wachtl-Server“
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
 3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md) – kompakt für den Rollout beim Kunden: [docs/ROLLOUT.md](docs/ROLLOUT.md)

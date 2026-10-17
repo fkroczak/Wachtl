@@ -6,10 +6,16 @@ Probe/Standort offline > Gateway/LAN > WAN/Internet > einzelnes Ziel.
 from __future__ import annotations
 
 import json
+import logging
+import statistics
 from dataclasses import dataclass
 
-from ..db import q
+from .. import repo
+from ..db import ex, q
 from ..repo import now
+from . import vm
+
+log = logging.getLogger(__name__)
 
 CAUSES = {
     "probe": ("Probe / Standort offline", "Probe meldet sich nicht – Standort ohne Strom oder Netz, PC aus oder Dienst gestoppt."),
@@ -21,6 +27,12 @@ CAUSES = {
 }
 PRIORITY = {"probe": 5, "gateway": 4, "wan": 3, "loss": 2, "reference": 1, "target": 1}
 OUTAGE_ALERTS = ("WachtlProbeOffline", "WachtlTargetDown", "WachtlWanDown", "WachtlPacketLossCritical")
+
+# Alarme starten und enden versetzt: Auswertung alle 15 s, 30 s Verzögerung für spät hochgeladene Werte und
+# 20 s Rückblick der Regel. Der echte Ausfall liegt daher bis zu SEARCH_BEFORE_S vor dem Alarmbeginn.
+SEARCH_BEFORE_S = 90
+REFINE_MAX_SPAN_S = 6 * 3600   # längere Ausfälle nicht sekundengenau nachrechnen (Abfrageaufwand)
+REFINE_PER_LOAD = 20
 
 
 @dataclass
@@ -59,7 +71,91 @@ def classify(alertname: str, labels: dict) -> str | None:
     return None
 
 
+def down_intervals(samples: list[tuple[int, float]]) -> list[tuple[int, int]]:
+    """Zeiträume ohne Antwort: vom ersten fehlgeschlagenen Ping bis zum nächsten erfolgreichen."""
+    if not samples:
+        return []
+    gaps = [b[0] - a[0] for a, b in zip(samples, samples[1:]) if b[0] > a[0]]
+    step = max(int(statistics.median(gaps)), 1) if gaps else 1
+    out: list[tuple[int, int]] = []
+    begin = None
+    for ts, value in samples:
+        if value <= 0 and begin is None:
+            begin = ts
+        elif value > 0 and begin is not None:
+            out.append((begin, ts))
+            begin = None
+    if begin is not None:
+        out.append((begin, samples[-1][0] + step))
+    return out
+
+
+def intersect(a: list[tuple[int, int]], b: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    out = []
+    for s1, e1 in a:
+        for s2, e2 in b:
+            s, e = max(s1, s2), min(e1, e2)
+            if s < e:
+                out.append((s, e))
+    return sorted(out)
+
+
+def exact_span(series: dict[str, list[tuple[int, float]]], start: int, end: int,
+               min_s: float) -> tuple[int, int] | None:
+    """Sekundengenauer Ausfall im Suchbereich: alle Reihen zugleich ohne Antwort (WAN = alle Referenzen)."""
+    intervals: list[tuple[int, int]] | None = None
+    for samples in series.values():
+        own = down_intervals(samples)
+        intervals = own if intervals is None else intersect(intervals, own)
+    hits = [(s, e) for s, e in intervals or []
+            if e >= start - SEARCH_BEFORE_S and s <= end and e - s >= min_s]
+    if not hits:
+        return None
+    return min(s for s, _ in hits), max(e for _, e in hits)
+
+
+def refine_pending(limit: int = REFINE_PER_LOAD) -> int:
+    """Beendete Ausfälle (Ziel, Gateway, WAN) aus den 1-s-Rohdaten sekundengenau nachrechnen.
+
+    Der Alarm selbst ist bis zu 15 s spät und endet bis zu 20 s zu spät. Gibt die Zahl der bearbeiteten zurück.
+    """
+    rows = q(
+        "SELECT * FROM alert_events WHERE alertname IN ('WachtlTargetDown', 'WachtlWanDown') "
+        "AND status = 'resolved' AND refined_at IS NULL AND ends_at IS NOT NULL AND ends_at < ? "
+        "ORDER BY starts_at DESC LIMIT ?",
+        (now() - 60, limit),
+    )
+    if not rows:
+        return 0
+    rules = repo.alert_rules()
+    done = 0
+    for r in rows:
+        labels = json.loads(r["labels"])
+        start, end = int(r["starts_at"]), int(r["ends_at"])
+        exact = None
+        if end - start <= REFINE_MAX_SPAN_S and labels.get("probe"):
+            if r["alertname"] == "WachtlWanDown":
+                sel, kind = {"probe": labels["probe"], "role": "reference"}, "wan_down"
+            else:
+                sel, kind = {"probe": labels["probe"], "check_id": labels.get("check_id", "")}, "target_down"
+            thr = float((rules.get(kind) or {}).get("threshold") or 5)
+            try:
+                series = vm.up_samples(sel, start - SEARCH_BEFORE_S - 30, end + 30)
+            except vm.VMError as exc:
+                log.warning("Ausfalldauer nicht nachrechenbar: %s", exc)
+                break  # VictoriaMetrics gestört: später erneut, nicht jede Zeile warten lassen
+            except ValueError:
+                series = {}
+            # Toleranz: der erste und letzte Ping können je knapp eine Sekunde fehlen
+            exact = exact_span(series, start, end, max(thr - 2, 1))
+        ex("UPDATE alert_events SET exact_start = ?, exact_end = ?, refined_at = ? WHERE id = ?",
+           (exact[0] if exact else None, exact[1] if exact else None, now(), r["id"]))
+        done += 1
+    return done
+
+
 def load(since: int, site_id: str | None = None, min_duration: int = 0, include_consequences: bool = False) -> list[Outage]:
+    refine_pending()
     placeholders = ", ".join("?" for _ in OUTAGE_ALERTS)
     rows = q(
         f"SELECT * FROM alert_events WHERE alertname IN ({placeholders}) AND (ends_at IS NULL OR ends_at >= ?) "
@@ -76,10 +172,13 @@ def load(since: int, site_id: str | None = None, min_duration: int = 0, include_
             end = None
         else:
             end = r["ends_at"] or r["updated_at"]
+        start = r["starts_at"]
+        if r.get("exact_start") and r.get("exact_end") and end is not None:
+            start, end = r["exact_start"], r["exact_end"]
         items.append(Outage(
             id=r["id"], cause=cause, probe=labels.get("probe", ""), probe_name=labels.get("probe_name", "?"),
             site=labels.get("site", ""), site_name=labels.get("site_name", "?"), target=labels.get("target", ""),
-            check_id=labels.get("check_id", ""), start=r["starts_at"], end=end, summary=r["summary"] or r["alertname"],
+            check_id=labels.get("check_id", ""), start=start, end=end, summary=r["summary"] or r["alertname"],
         ))
     mark_consequences(items)
     out = [o for o in items

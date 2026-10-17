@@ -214,6 +214,26 @@ def hop_table(probe_id: int, check_id: int, window: str = "5m") -> dict[int, dic
     return hops
 
 
+def up_samples(labels: dict[str, str], start: int, end: int) -> dict[str, list[tuple[int, float]]]:
+    """Rohwerte von ``wachtl_ping_up`` (1 = Antwort, 0 = keine) je Check zwischen start und end.
+
+    Nur feste Label-Namen; Werte werden geprüft, damit kein fremdes PromQL entsteht.
+    """
+    parts = []
+    for key, value in labels.items():
+        if key not in ("probe", "check_id", "role") or not str(value).replace("_", "").isalnum():
+            raise ValueError(f"unzulässiges Label {key}={value!r}")
+        parts.append(f'{key}="{value}"')
+    span = max(int(end) - int(start), 1)
+    result = _get(_cfg("VM_RAW_URL"), "/api/v1/query",
+                  {"query": f"wachtl_ping_up{{{','.join(parts)}}}[{span}s]", "time": int(end)})
+    out: dict[str, list[tuple[int, float]]] = {}
+    for item in result:
+        values = [(int(float(ts)), float(v)) for ts, v in item.get("values", [])]
+        out.setdefault(item["metric"].get("check_id", ""), []).extend(values)
+    return {k: sorted(v) for k, v in out.items()}
+
+
 def max_window(w: str) -> str:
     """Jitter kommt nur minütlich – kürzere Fenster auf 2 min aufweiten."""
     return "2m" if w == "1m" else w

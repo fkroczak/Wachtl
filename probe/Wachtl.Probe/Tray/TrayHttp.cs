@@ -12,11 +12,30 @@ public sealed class TrayHttpRequest
     /// <summary>Pfad ohne Query-String.</summary>
     public string Path { get; init; } = string.Empty;
 
+    /// <summary>Query-String ohne „?“ (leer, wenn keiner).</summary>
+    public string Query { get; init; } = string.Empty;
+
     public Dictionary<string, string> Headers { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 
     public string Body { get; init; } = string.Empty;
 
     public string? Header(string name) => Headers.TryGetValue(name, out var value) ? value : null;
+
+    /// <summary>Wert eines Query-Parameters (ohne URL-Dekodierung – die Tray-API nutzt nur Zahlen) oder null.</summary>
+    public string? QueryValue(string name)
+    {
+        foreach (var pair in Query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = pair.IndexOf('=');
+            var key = eq < 0 ? pair : pair[..eq];
+            if (string.Equals(key, name, StringComparison.Ordinal))
+            {
+                return eq < 0 ? string.Empty : pair[(eq + 1)..];
+            }
+        }
+
+        return null;
+    }
 }
 
 public sealed class TrayHttpResponse
@@ -81,7 +100,7 @@ public static class TrayHttp
         }
 
         var head = Encoding.ASCII.GetString(buffer, 0, headerEnd);
-        var (method, path, headers) = ParseHead(head);
+        var (method, path, query, headers) = ParseHead(head);
         var length = ContentLength(headers);
 
         var bodyStart = headerEnd + HeaderEnd.Length;
@@ -114,11 +133,11 @@ public static class TrayHttp
             throw new TrayHttpException(400, "Körper ist kein gültiges UTF-8.");
         }
 
-        return new TrayHttpRequest { Method = method, Path = path, Headers = headers, Body = text };
+        return new TrayHttpRequest { Method = method, Path = path, Query = query, Headers = headers, Body = text };
     }
 
     /// <summary>Zerlegt Anfragezeile und Kopfzeilen (ohne die abschließende Leerzeile).</summary>
-    public static (string Method, string Path, Dictionary<string, string> Headers) ParseHead(string head)
+    public static (string Method, string Path, string Query, Dictionary<string, string> Headers) ParseHead(string head)
     {
         var lines = head.Split("\r\n");
         var parts = lines[0].Split(' ');
@@ -128,10 +147,12 @@ public static class TrayHttp
         }
 
         var path = parts[1];
-        var query = path.IndexOf('?');
-        if (query >= 0)
+        var query = string.Empty;
+        var mark = path.IndexOf('?');
+        if (mark >= 0)
         {
-            path = path[..query];
+            query = path[(mark + 1)..];
+            path = path[..mark];
         }
 
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -154,7 +175,7 @@ public static class TrayHttp
             headers[name] = value;
         }
 
-        return (parts[0], path, headers);
+        return (parts[0], path, query, headers);
     }
 
     private static int ContentLength(Dictionary<string, string> headers)

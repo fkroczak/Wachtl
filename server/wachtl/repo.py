@@ -17,8 +17,8 @@ PROBE_HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")
 # Standard-Alarme: kind -> (Name, Schwellwert, Fenster s, for s, Stufe)
 DEFAULT_ALERT_RULES = {
     "probe_offline": ("Probe offline (Sekunden ohne Heartbeat)", 120, 86400, 0, "critical"),
-    "target_down": ("Ziel nicht erreichbar (aufeinanderfolgende Fehler)", 3, 0, 0, "critical"),
-    "wan_down": ("Alle Internet-Referenzen gestört (Sekunden)", 30, 0, 0, "critical"),
+    "target_down": ("Ziel nicht erreichbar ab (Sekunden ohne Antwort)", 5, 0, 0, "critical"),
+    "wan_down": ("Alle Internet-Referenzen gestört ab (Sekunden)", 5, 0, 0, "critical"),
     "packet_loss_warning": ("Paketverlust Warnung (%)", 2, 300, 60, "warning"),
     "packet_loss_critical": ("Paketverlust kritisch (%)", 10, 300, 60, "critical"),
     "latency_high": ("Latenz Durchschnitt (ms)", 100, 300, 60, "warning"),
@@ -165,6 +165,10 @@ def probe_config(probe: dict) -> tuple[dict, str]:
         "upload_interval_s": settings["upload_interval_s"],
         "heartbeat_interval_s": settings["heartbeat_interval_s"],
         "config_poll_s": settings["config_poll_s"],
+        "client_findings": {
+            "enabled": bool(settings["client_findings_enabled"]),
+            "notify": bool(settings["client_findings_enabled"] and settings["client_findings_notify"]),
+        },
     }
     etag = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
     payload["etag"] = etag

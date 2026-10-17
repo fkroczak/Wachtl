@@ -23,6 +23,13 @@ FIELDS: tuple[Field, ...] = (
           help="Bestimmt auch, wie schnell „Jetzt messen“ ankommt."),
     Field("config_poll_s", "Konfiguration spätestens abrufen alle", "int", 300, 30, 3600, unit="s", group="Probes"),
     Field("probe_iperf_port", "Standard-Port der iperf3-Gegenstelle auf Probes", "int", 5201, 1, 65535, group="Probes"),
+    Field("client_findings_enabled", "Netzwerkkarte und Kabel auf den PCs überwachen", "bool", True,
+          group="Client-Hinweise",
+          help="Die Probe erkennt z. B. getrenntes Kabel, gesunkene Link-Geschwindigkeit, Treiberfehler und "
+               "fehlende DHCP-Adresse und meldet es an den Server."),
+    Field("client_findings_notify", "Hinweis als Sprechblase auf dem PC anzeigen", "bool", True,
+          group="Client-Hinweise",
+          help="Der Benutzer sieht neben der Uhr, was erkannt wurde, mit Lösungsvorschlag. Braucht das Wachtl-Symbol."),
     Field("history_days", "Pfad- und Bandbreitenverlauf aufbewahren", "int", 400, 7, 3650, unit="Tage",
           group="Aufbewahrung"),
     Field("outage_min_s", "Ausfälle anzeigen ab", "int", 0, 0, 3600, unit="s", group="Aufbewahrung",
@@ -80,6 +87,9 @@ def save(values: dict) -> list[str]:
         else:
             ex("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)", (PREFIX + key, text, ts))
         changed.append(key)
+    if "client_findings_enabled" in changed and not values["client_findings_enabled"]:
+        from .. import findings  # Probes melden nichts mehr, also auch kein „behoben“
+        findings.close_stale(None, ts + 1, "Überwachung der PCs abgeschaltet")
     return changed
 
 
