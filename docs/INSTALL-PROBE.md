@@ -1,6 +1,6 @@
 # Installation: Windows-Probe
 
-Die Probe ist eine einzelne Datei `wachtl-probe.exe` (self-contained, kein .NET auf dem Ziel-PC nötig).
+Die Probe ist eine einzelne Datei `wachtl-probe.exe`, installiert vom gemeinsamen Setup `WachtlSetup` (self-contained, kein .NET auf dem Ziel-PC nötig).
 Sie läuft als Dienst **Wachtl** unter dem virtuellen Konto `NT SERVICE\Wachtl`, startet nach jedem Neustart
 automatisch (verzögert) und braucht keinen angemeldeten Benutzer.
 
@@ -13,72 +13,52 @@ automatisch (verzögert) und braucht keinen angemeldeten Benutzer.
 | Netz | ausgehend TCP 443 zum Wachtl-Server; ICMP zu den Zielen |
 | Ressourcen | typisch unter 100 MB RAM und kaum CPU; bis ca. 200 MB Platte für den Puffer bei längerem Serverausfall |
 
-## 1. Setup-Assistent (empfohlen)
+## Installation: vorbelegtes Setup (empfohlen)
 
-Im Web-UI unter **Verwaltung › Probes registrieren** einen Token erzeugen und **Paket herunterladen** wählen.
-Das ZIP enthält `WachtlProbeSetup-0.4.0.exe` und eine `wachtl-probe.ini` mit Server, Pin und Token.
-Auf dem PC entpacken und das Setup als Administrator starten:
+Im Web-UI unter **Verwaltung › Probes registrieren** Standort wählen und **Setup herunterladen**.
+Die Datei `WachtlSetup-<Standort>.exe` enthält alle Adressen des Servers (Namen und IP-Adressen), den SPKI-Pin
+und einen Token für die eingestellte Zahl PCs. Auf dem PC als Administrator starten, **Installieren** klicken – fertig.
 
-| Seite | Inhalt |
-| --- | --- |
-| Wachtl-Server | Server-Adresse und SPKI-Pin (aus dem Paket vorbelegt). Ohne Pin fragt der Assistent den Server und zeigt den Pin zur Kontrolle an |
-| Verbindung | Proxy (optional). Beim Weiter prüft der Assistent Erreichbarkeit und Pin – ohne den Token zu verbrauchen |
-| Registrierung | Enrollment-Token und Name der Probe (Standard: Computername). Die Registrierung läuft sofort; ein abgelaufener Token lässt sich direkt korrigieren |
-| Fertig | Dienst „Wachtl Netzwerk-Probe“ läuft, die Probe erscheint nach etwa 30 Sekunden im Dashboard |
+- Die Probe erscheint nach etwa 30 Sekunden im Dashboard, Name ist der Computername.
+- Ist ein Servername am Standort nicht auflösbar, nimmt die Probe die nächste Adresse (z. B. die IP) – bei der
+  Installation und später im Betrieb. Neue Adressen des Servers übernimmt sie automatisch.
+- Ist der Server bei der Installation gar nicht erreichbar (Standort offline, VPN aus), wird die Probe trotzdem
+  installiert und meldet sich selbst an, sobald der Server erreichbar ist.
+- Welche Ziele gemessen werden, legt immer der Server fest (Verwaltung › Checks).
 
-Ist die Probe schon installiert, fragt der Assistent zuerst: **Nur aktualisieren**, **Proxy ändern** oder **Neu registrieren**.
-Dasselbe erreicht man später über Startmenü › *Wachtl Probe – Einstellungen ändern*. Welche Ziele gemessen werden,
-legt immer der Server fest (Verwaltung › Checks) – am PC selbst gibt es dafür nichts einzustellen.
+Dasselbe Setup ohne Vorbelegung (`WachtlSetup-<Version>.exe`, Link ebenfalls unter „Probes registrieren“) fragt nach
+der Rolle (Probe ist Standard) und dann auf einer Seite nach Server, Pin, Token und optional Proxy.
+Mehrere Server-Adressen mit Komma trennen. Ist die Probe schon installiert, fragt es: **Nur aktualisieren**,
+**Proxy ändern** oder **Neu registrieren**.
 
 ### Unbeaufsichtigt (Softwareverteilung, GPO, Intune)
 
 ```powershell
-WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
+WachtlSetup-Standort.exe /VERYSILENT /SUPPRESSMSGBOXES
+# ohne Vorbelegung:
+WachtlSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
-Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup mit einem Code ≠ 0 ab
-(Grund im `/LOG`); 10 = installiert, aber der Dienst startet nicht. `/SUPPRESSMSGBOXES` ist unbeaufsichtigt Pflicht.
-Ohne `/Pin` wird unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen). Auf einem bereits registrierten PC
-aktualisiert ein unbeaufsichtigter Lauf nur das Programm. Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
-`WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
+Exit-Code 0 = Probe läuft (angemeldet oder Anmeldung folgt automatisch), 10 = nicht betriebsbereit (Grund im `/LOG`,
+z. B. Token abgelaufen). `/SUPPRESSMSGBOXES` ist unbeaufsichtigt Pflicht. Parameter überschreiben die Vorbelegung.
+Auf einem bereits registrierten PC aktualisiert ein unbeaufsichtigter Lauf nur das Programm.
 
-Deinstallation: Apps › Wachtl Probe, oder `"C:\Program Files\Wachtl\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES`.
+## Deinstallation
+
+Apps › Wachtl Probe, oder `"C:\Program Files\Wachtl\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES`.
 Der Deinstaller lässt nichts zurück, was von außen erreichbar wäre:
 
-1. Er meldet die Probe **am Server ab** – ihr Token ist dort sofort ungültig, im Dashboard steht sie als „deinstalliert“
-   (dort löschen, wenn der Verlauf nicht mehr gebraucht wird). Ist der Server nicht erreichbar, wird das Token trotzdem
-   gelöscht und der Deinstaller weist darauf hin.
+1. Er meldet die Probe **am Server ab** – ihr Token ist dort sofort ungültig. Ist der Server nicht erreichbar,
+   wird das Token trotzdem gelöscht und der Deinstaller weist darauf hin.
 2. Er stoppt den Dienst „Wachtl“ und eine noch laufende iperf3-Gegenstelle der Probe.
-3. Er entfernt die Firewall-Regel „Wachtl Probe iperf3“ und **alle weiteren Regeln für `wachtl-probe.exe` und
-   `iperf3.exe` der Probe** – auch solche, die Windows selbst nach der Nachfrage „Zugriff zulassen“ angelegt hat.
-4. Er löscht das verschlüsselte Token (`state.json`) und die zwischengespeicherte Konfiguration immer; Puffer und Logs
-   auf Nachfrage, unbeaufsichtigt immer.
-5. Er prüft am Ende, dass Dienst und Firewall-Regel weg sind, und meldet sonst, was übrig ist (im `/LOG`).
+3. Er entfernt die Firewall-Regel „Wachtl Probe iperf3“ und alle weiteren Regeln für `wachtl-probe.exe` und `iperf3.exe`
+   der Probe – auch solche, die Windows selbst angelegt hat.
+4. Er löscht Token, Konfiguration und eine noch nicht nachgeholte Registrierung immer; Puffer und Logs auf Nachfrage,
+   unbeaufsichtigt immer.
 
-## 2. Alternative: PowerShell-Skript
+## Status und Logs
 
-Der Ordner aus `build.ps1` enthält zusätzlich `wachtl-probe.exe` und `Install-Wachtl.ps1`:
-
-```powershell
-.\Install-Wachtl.ps1 -Action Install `
-    -ServerUrl "https://wachtl.kunde.local" `
-    -EnrollToken "wachtl-…" `
-    -SpkiPin "kpbQsJ0j+ClD+hdvTU0UJJrhH2d+ZtprZ/w/Ahf9g8A="
-```
-
-Mit Proxy zusätzlich `-Proxy "http://proxy.kunde.local:3128"`. Falls die Ausführungsrichtlinie blockiert:
-`powershell -ExecutionPolicy Bypass -File .\Install-Wachtl.ps1 …`
-
-## 3. Status, Logs, Update, Entfernen
-
-```powershell
-.\Install-Wachtl.ps1 -Action Status       # Dienst, Speicher, Server, Checks, Puffer, letzte Logzeilen
-.\Install-Wachtl.ps1 -Action Logs         # Log live verfolgen
-.\Install-Wachtl.ps1 -Action Restart
-.\Install-Wachtl.ps1 -Action Update -SourceExe \\fileserver\it$\wachtl\wachtl-probe.exe
-.\Install-Wachtl.ps1 -Action Uninstall [-RemoveData]   # wie der Deinstaller: Abmeldung, Firewall, Token; -RemoveData auch Puffer/Logs
-```
-
+Startmenü › *Wachtl Probe › Wachtl Status* oder `"C:\Program Files\Wachtl\wachtl-probe.exe" status` (als Administrator).
 Logs: `C:\ProgramData\Wachtl\logs\probe-JJJJMMTT.log` (14 Tage).
 
 ## Fehlersuche
@@ -86,7 +66,8 @@ Logs: `C:\ProgramData\Wachtl\logs\probe-JJJJMMTT.log` (14 Tage).
 | Meldung | Ursache und Lösung |
 | --- | --- |
 | „Das Server-Zertifikat passt nicht zum angegebenen Pin“ | Falscher Pin oder TLS-Inspection eines Proxys. Pin vom Server prüfen: `wachtl-probe.exe show-pin --server https://…`; Proxy-Ausnahme für den Server |
-| „Server lehnt die Registrierung ab“ | Token abgelaufen, widerrufen oder Nutzungen aufgebraucht – neuen Token erzeugen |
+| „Server lehnt die Registrierung ab“ | Token abgelaufen, widerrufen oder Nutzungen aufgebraucht – im Web-UI ein neues Setup herunterladen |
+| Log: „Server noch nicht erreichbar, Registrierung wird weiter versucht“ | Registrierung wartet auf den Server (Firewall, VPN, Proxy prüfen); sie läuft von selbst durch |
 | Probe im Dashboard „offline“, Puffer steigt | Server nicht erreichbar; Werte bleiben bis 7 Tage im Puffer und werden nachgesendet |
 | „Token ungültig oder Probe deaktiviert“ | Probe im UI wieder aktivieren oder mit neuem Token neu installieren |
 | Gateway „kein Default-Gateway gefunden“ | PC ohne IPv4-Gateway (z. B. nur VPN). Check für diese Probe pausieren |

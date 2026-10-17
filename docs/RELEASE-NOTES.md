@@ -1,8 +1,15 @@
 ## Downloads
 
-- **WachtlServerSetup-…exe**: Wachtl-Server für Windows Server 2019/2022/2025. Als Administrator starten, der Assistent richtet alles ein.
-- **WachtlProbeSetup-…exe**: Probe für Windows-PCs. Das passende Paket mit Server, Pin und Token gibt es im Web-UI unter Verwaltung › Probes registrieren.
+- **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
+
+## Neu in 0.5
+
+- **Ein Setup für alles**: `WachtlSetup` installiert eine Probe (Standard) oder den Server. Vorhandene Probes und Server (bis 0.4 zwei getrennte Setups) werden an Ort und Stelle aktualisiert.
+- **Vorbelegtes Setup aus dem Web-UI**: „Setup herunterladen“ unter Verwaltung › Probes registrieren erzeugt `WachtlSetup-<Standort>.exe` mit allen Server-Adressen, Pin und Token. Auf dem PC nur noch „Installieren“, per Softwareverteilung ohne Parameter.
+- **Robuste Verbindung**: Der Server kennt seine IP-Adressen und gibt sie den Probes mit. Ist der Name am Standort nicht auflösbar, weicht die Probe auf die nächste Adresse aus – bei der Installation und im Betrieb.
+- **Installation ohne Server**: Ist der Server beim Installieren nicht erreichbar, läuft die Probe trotzdem an und meldet sich selbst an, sobald er erreichbar ist.
+- Entfallen: das ZIP-Paket und `Install-Wachtl.ps1`.
 
 ## Neu in 0.4
 

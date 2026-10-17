@@ -27,7 +27,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Dashboard | Übersicht, Standort-Matrix (alle Probes im Vergleich), Probe-Detail, Ziel-Detail mit Graph (1 h – 30 Tage) und Statistik (1 min – 24 h) |
 | Alarme | Probe offline, Ziel nicht erreichbar (3 Fehler in Folge), WAN gestört, Paketverlust, Latenz; Bestätigen = Stummschalten; Historie |
 | Betrieb | Linux: `setup.sh`, `backup.sh`/`restore.sh` · Windows: Setup-Assistent, `wachtl-server.cmd` |
-| Probe-Installation | Setup-Assistent mit Verbindungs- und Pin-Prüfung, fertiges Paket aus dem Web-UI (Server, Pin, Token vorbelegt), unbeaufsichtigt per Parameter; alternativ `Install-Wachtl.ps1` |
+| Installation | Ein Setup `WachtlSetup` für Probe (Standard) und Server. Im Web-UI „Setup herunterladen“: alle Server-Adressen (Name und IP), Pin und Token eingebaut – auf dem PC nur „Installieren“. Ausweichen auf die IP, wenn ein Name nicht auflösbar ist; Anmeldung wird nachgeholt, wenn der Server bei der Installation nicht erreichbar ist |
 | Marke | Flaches Logo mit Wachtel-Umriss, Farben Wachtelbraun/Ocker/Weizen; Quelle `brand/render.py` |
 | Benachrichtigungen | E-Mail und Teams im Web-UI einstellbar, mit Testnachricht |
 | Pfade (0.3) | Traceroute + Dauerpings auf jeden Hop, MTR-Tabelle mit Bewertung (echter Verlust vs. ICMP-Drosselung, Latenzsprung), Pfadverlauf, Alarm bei Pfadwechsel |
@@ -45,8 +45,8 @@ Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heat
 ## Download
 
 Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unter
-[`releases/`](releases/) – je Version ein Ordner mit `WachtlServerSetup-<Version>.exe`,
-`WachtlProbeSetup-<Version>.exe` und `SHA256SUMS.txt`. Auf GitHub die Datei öffnen und **Download raw file** wählen.
+[`releases/`](releases/) – je Version ein Ordner mit `WachtlSetup-<Version>.exe` (Probe und Server)
+und `SHA256SUMS.txt`. Bis 0.4 waren es zwei Setups. Auf GitHub die Datei öffnen und **Download raw file** wählen.
 
 ## Ordner
 
@@ -54,11 +54,9 @@ Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unte
 | --- | --- |
 | `server/` | Flask-Collector und Dashboard (Python 3.12), Tests unter `server/tests` |
 | `probe/` | Windows-Probe (C# / .NET 8) und xUnit-Tests, `build.ps1` |
-| `installer/` | `Install-Wachtl.ps1` – Installation, Update, Status, Deinstallation der Probe |
 | `server/wachtl/serverprobe/` | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, HTTP-Speedtest) |
 | `deploy/` | Linux: Docker-Compose-Stack, `setup.sh`, `uninstall.sh`, Backup und Restore |
-| `windows/` | Windows-Server: Setup-Assistent (`WachtlServer.iss`), `build-server.ps1`, `wachtl-server.cmd`, `assets/` (Symbole, Assistenten-Bilder) |
-| `probe/setup/` | Client-Setup-Assistent (`WachtlProbe.iss`) |
+| `windows/` | Setup für Probe und Server (`WachtlSetup.iss`), `build-server.ps1`, `wachtl-server.cmd`, `assets/` (Symbole, Assistenten-Bilder) |
 | `brand/` | Logo-Quelle und Generator für SVG, PNG, ICO und Assistenten-Bilder |
 | `server/wachtl/win/` | Windows-Laufzeit: Dienst-Supervisor, HTTPS-Server, Einrichtung, Backup |
 | `docs/` | Installationsanleitungen, Betrieb, Sicherheit, API, UI-Qualitäts-Guardrails |
@@ -67,7 +65,7 @@ Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unte
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.4.0.exe` starten
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.5.0.exe` starten, Rolle „Wachtl-Server“
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
 3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md) – kompakt für den Rollout beim Kunden: [docs/ROLLOUT.md](docs/ROLLOUT.md)
@@ -97,5 +95,5 @@ Web-UI: Barrierefreiheit, Tastatur, Performance-Budgets und Formular-Konventione
 ```powershell
 cd probe
 dotnet test Wachtl.Probe.Tests
-.\build.ps1        # erzeugt ..\dist\wachtl-probe.exe + Install-Wachtl.ps1
+.\build.ps1        # erzeugt ..\dist\probe\wachtl-probe.exe + iperf3 (das Setup baut windows\build-server.ps1)
 ```
