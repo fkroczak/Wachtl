@@ -72,7 +72,9 @@ public sealed class ClientDiagnostics
     /// <summary>Gepufferte Hinweise jetzt senden (z. B. nach erfolgreichem Heartbeat).</summary>
     public void RequestFlush() => Signal(_flushSignal);
 
-    public Task RunAsync(CancellationToken ct) => Task.WhenAll(PollLoopAsync(ct), FlushLoopAsync(ct));
+    /// <remarks>Abfrage-Schleife über Task.Run: die erste Abfrage (WMI, Ereignisprotokoll) liefe sonst synchron im Start des
+    /// Dienstes und hielte den Start der anderen Dienste (Tray-Endpunkt) und die Rückmeldung an Windows auf.</remarks>
+    public Task RunAsync(CancellationToken ct) => Task.WhenAll(Task.Run(() => PollLoopAsync(ct), CancellationToken.None), FlushLoopAsync(ct));
 
     private static void Signal(SemaphoreSlim semaphore)
     {

@@ -238,6 +238,21 @@ public class TrayCoreTests
     }
 
     [Fact]
+    public void ServiceRestartDropsStaleActiveFindings()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1_000), UtcNow);
+        n.Accept(R(1_001, F(1_001, "alt", detected: NowS - 3600)), UtcNow);
+        Assert.Single(n.Active);
+        // neuer Dienst: Zählung beginnt über dem Stand des Tray, kennt „alt“ nicht mehr
+        var restarted = R(5_000);
+        restarted.StartSeq = 5_000;
+        n.Accept(restarted, UtcNow);
+        Assert.Empty(n.Active);
+        Assert.Equal(5_000, n.Cursor);
+    }
+
+    [Fact]
     public void BalloonTextsFitWindowsLimits()
     {
         var f = F(1, "a", title: new string('T', 100));

@@ -70,8 +70,14 @@ public class FindingEvaluatorTests
     public void CableUnpluggedFiresImmediatelyAndResolvesAfterStableLink()
     {
         Poll(Eth());
-        var fired = Assert.Single(Poll(Eth(LinkStatus.Down)));
-        Assert.Equal(FindingKinds.CableUnplugged, fired.Kind);
+        // sofort an den Server, aber erst „info“ (keine Sprechblase): Standby, Abdocken, Deaktivieren
+        var first = Assert.Single(Poll(Eth(LinkStatus.Down)));
+        Assert.Equal(FindingKinds.CableUnplugged, first.Kind);
+        Assert.Equal("info", first.Severity);
+        Assert.Empty(Poll(Eth(LinkStatus.Down)));
+        Assert.Empty(Poll(Eth(LinkStatus.Down)));
+        var fired = Assert.Single(Poll(Eth(LinkStatus.Down))); // nach 15 s ohne Link kritisch
+        Assert.Equal(first.FindingId, fired.FindingId);
         Assert.Equal("critical", fired.Severity);
         Assert.Equal("active", fired.State);
         Assert.Equal("Ethernet", fired.Adapter);
@@ -112,7 +118,7 @@ public class FindingEvaluatorTests
         Assert.Contains("„WLAN“", fired.Message);
 
         // jetzt fällt auch das WLAN weg: wird kritisch (gleiche ID)
-        var changes = PollFor(TimeSpan.FromSeconds(15), Eth(LinkStatus.Down), Wifi(LinkStatus.Down));
+        var changes = PollFor(TimeSpan.FromSeconds(25), Eth(LinkStatus.Down), Wifi(LinkStatus.Down));
         var escalated = Assert.Single(changes, c => c.Kind == FindingKinds.CableUnplugged);
         Assert.Equal(fired.FindingId, escalated.FindingId);
         Assert.Equal("critical", escalated.Severity);
@@ -125,7 +131,7 @@ public class FindingEvaluatorTests
         Poll(Wifi());
         Assert.Empty(Poll(Wifi(LinkStatus.Down)));
         Assert.Empty(Poll(Wifi())); // kurzer Aussetzer beim Roaming
-        Assert.Empty(Poll(Wifi(LinkStatus.Down)));
+        Assert.Empty(PollFor(TimeSpan.FromSeconds(15), Wifi(LinkStatus.Down))); // Aufwachen aus dem Standby dauert
         var fired = Assert.Single(Poll(Wifi(LinkStatus.Down)));
         Assert.Equal(FindingKinds.WifiDisconnected, fired.Kind);
         Assert.Equal("warning", fired.Severity);
@@ -151,7 +157,8 @@ public class FindingEvaluatorTests
         Poll(Eth(), Wifi());
         Assert.Equal("info", Assert.Single(Poll(Eth(LinkStatus.Down), Wifi())).Severity);
         PollFor(TimeSpan.FromSeconds(10), Eth(), Wifi());
-        // jetzt ohne WLAN: kritisch, also trotz Sperrfrist
+        // jetzt ohne WLAN: nach 15 s kritisch, also trotz Sperrfrist
+        Assert.DoesNotContain(PollFor(TimeSpan.FromSeconds(15), Eth(LinkStatus.Down)), f => f.Kind == FindingKinds.CableUnplugged);
         var fired = Assert.Single(Poll(Eth(LinkStatus.Down)), f => f.Kind == FindingKinds.CableUnplugged);
         Assert.Equal("critical", fired.Severity);
     }
@@ -218,7 +225,7 @@ public class FindingEvaluatorTests
         Assert.Empty(PollFor(TimeSpan.FromSeconds(30), Eth(speed: 100_000_000)));
         var low = Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(speed: 100_000_000)));
         Assert.Equal(FindingKinds.LinkSpeedLow, low.Kind);
-        Assert.Equal("warning", low.Severity);
+        Assert.Equal("info", low.Severity); // 100 Mbit/s: nur für den Server, keine Sprechblase
         Assert.Equal("100", low.Details["speed_mbps"]);
 
         // Kabel kurz gezogen, wieder 100 Mbit/s: nicht noch einmal „langsam“
@@ -226,6 +233,76 @@ public class FindingEvaluatorTests
         Poll(Eth(LinkStatus.Down, speed: 100_000_000));
         var again = PollFor(TimeSpan.FromMinutes(2), Eth(speed: 100_000_000));
         Assert.DoesNotContain(again, f => f.Kind == FindingKinds.LinkSpeedLow && f.IsActive);
+    }
+
+    [Fact]
+    public void ResumeFromSleepIsNoFlappingAndNoSpeedFinding()
+    {
+        PollFor(TimeSpan.FromSeconds(30), Eth());
+        var all = new List<ClientFinding>();
+        for (var i = 0; i < 3; i++)
+        {
+            // Einschlafen: Link weg, dann 20 min keine Abfrage
+            all.AddRange(Poll(Eth(LinkStatus.Down)));
+            _now = _now.AddMinutes(20);
+            // Aufwachen: kurz ohne Link, dann 10 Mbit/s (Wake-on-LAN), dann wieder 1 Gbit/s
+            all.AddRange(Poll(Eth(LinkStatus.Down)));
+            all.AddRange(PollFor(TimeSpan.FromSeconds(20), Eth(speed: 10_000_000)));
+            all.AddRange(PollFor(TimeSpan.FromMinutes(2), Eth()));
+        }
+
+        Assert.DoesNotContain(all, f => f.Kind is FindingKinds.LinkFlapping or FindingKinds.LinkSpeedChanged or FindingKinds.LinkSpeedLow);
+        Assert.DoesNotContain(all, f => f.IsActive && f.Severity != "info");
+    }
+
+    [Fact]
+    public void SpeedAfterResumeIsJudgedWithNewBaseline()
+    {
+        PollFor(TimeSpan.FromSeconds(30), Eth());
+        _now = _now.AddMinutes(20);
+        // nach dem Aufwachen dauerhaft 10 Mbit/s: kein „gefallen“, aber nach der Schonfrist „langsam“
+        var changes = PollFor(TimeSpan.FromMinutes(3), Eth(speed: 10_000_000));
+        Assert.DoesNotContain(changes, f => f.Kind == FindingKinds.LinkSpeedChanged);
+        var low = Assert.Single(changes, f => f.Kind == FindingKinds.LinkSpeedLow);
+        Assert.Equal("critical", low.Severity);
+        Assert.True(low.DetectedAt >= (T0 + TimeSpan.FromSeconds(30) + TimeSpan.FromMinutes(20) + TimeSpan.FromSeconds(60)).ToUnixTimeSeconds());
+    }
+
+    [Fact]
+    public void ReportedSpeedDropResolvesAfterResume()
+    {
+        PollFor(TimeSpan.FromSeconds(15), Eth());
+        var drop = Assert.Single(PollFor(TimeSpan.FromSeconds(15), Eth(speed: 100_000_000)));
+        Assert.Equal(FindingKinds.LinkSpeedChanged, drop.Kind);
+        Assert.Equal("warning", drop.Severity);
+        _now = _now.AddMinutes(20);
+        var resolved = Assert.Single(PollFor(TimeSpan.FromMinutes(2), Eth()), f => f.Kind == FindingKinds.LinkSpeedChanged);
+        Assert.Equal("resolved", resolved.State);
+    }
+
+    [Fact]
+    public void NdisResetsAroundSleepDoNotCount()
+    {
+        PollWith(Array.Empty<NicResetEvent>(), Eth());
+        var suspend = _now;
+        _now = _now.AddMinutes(5);
+        var resume = _now;
+        var events = new[]
+        {
+            new NicResetEvent(suspend.AddSeconds(2), "Intel(R) Ethernet Connection I219-V"),
+            new NicResetEvent(resume.AddSeconds(10), "Intel(R) Ethernet Connection I219-V"),
+        };
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(2), Eth()).Where(f => f.Kind == FindingKinds.NicReset));
+        var list = new List<ClientFinding>();
+        while (_now < resume.AddMinutes(2))
+        {
+            list.AddRange(PollWith(events, Eth()));
+        }
+
+        Assert.DoesNotContain(list, f => f.Kind == FindingKinds.NicReset);
+        // danach zwei weitere Zurücksetzen im Betrieb: gemeldet
+        var more = events.Concat(new[] { new NicResetEvent(_now, null), new NicResetEvent(_now.AddSeconds(1), null) }).ToArray();
+        Assert.Equal(FindingKinds.NicReset, Assert.Single(PollWith(more, Eth())).Kind);
     }
 
     [Fact]
@@ -256,6 +333,22 @@ public class FindingEvaluatorTests
         var resolved = Assert.Single(Poll(Eth()));
         Assert.Equal("resolved", resolved.State);
         Assert.Contains("192.168.1.20", resolved.Message);
+    }
+
+    [Fact]
+    public void ApipaOnSecondaryNicIsOnlyInfoWhileOtherConnectionWorks()
+    {
+        var second = Eth(ip: "169.254.10.20", gateway: false, id: "eth1", name: "Ethernet 2");
+        var apipa = Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(), second));
+        Assert.Equal(FindingKinds.Apipa, apipa.Kind);
+        Assert.Equal("info", apipa.Severity);
+    }
+
+    [Fact]
+    public void DeviceBeingRemovedIsNoDriverError()
+    {
+        var removing = new AdapterState { Id = "nic1", Name = "Ethernet 3", WmiPhysical = true, Status = LinkStatus.NotPresent, PnpErrorCode = 21 };
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(1), removing));
     }
 
     [Fact]
@@ -482,6 +575,14 @@ public sealed class ClientFindingsTransportTests : IDisposable
         Assert.Equal(new[] { "id-2", "id-1" }, reloaded.Select(f => f.FindingId));
         Assert.Equal("resolved", reloaded[1].State);
         Assert.Contains("\"finding_id\"", File.ReadAllText(PendingPath));
+    }
+
+    [Fact]
+    public void PendingIgnoresNullEntriesInDamagedFile()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(PendingPath, "[null, {\"finding_id\": \"id-1\", \"kind\": \"apipa\"}]");
+        Assert.Equal("id-1", Assert.Single(new PendingFindings(PendingPath).Snapshot()).FindingId);
     }
 
     [Fact]

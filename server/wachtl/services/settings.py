@@ -87,6 +87,9 @@ def save(values: dict) -> list[str]:
         else:
             ex("INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)", (PREFIX + key, text, ts))
         changed.append(key)
+    if "client_findings_enabled" in changed and not values["client_findings_enabled"]:
+        from .. import findings  # Probes melden nichts mehr, also auch kein „behoben“
+        findings.close_stale(None, ts + 1, "Überwachung der PCs abgeschaltet")
     return changed
 
 

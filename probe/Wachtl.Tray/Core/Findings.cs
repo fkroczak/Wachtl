@@ -37,6 +37,7 @@ namespace Wachtl.Tray.Core
     {
         [DataMember(Name = "notify")] public bool Notify { get; set; }
         [DataMember(Name = "latest_seq")] public long LatestSeq { get; set; }
+        [DataMember(Name = "start_seq")] public long StartSeq { get; set; }
         [DataMember(Name = "findings")] public List<TrayFinding>? Findings { get; set; }
     }
 
@@ -148,7 +149,9 @@ namespace Wachtl.Tray.Core
                 return;
             }
 
-            var first = !_cursor.HasValue;
+            // Dienst neu gestartet (neue Zählung beginnt über unserem Stand): bisher aktive Hinweise sind hinfällig,
+            // der neue Dienst kennt sie nicht und meldet sie nie als erledigt
+            var first = !_cursor.HasValue || response.StartSeq > _cursor.Value;
             if (first)
             {
                 _active.Clear();

@@ -137,7 +137,9 @@ public sealed partial class AdapterReader
         try
         {
             var st = nic.GetIPStatistics();
-            errors = st.IncomingPacketsWithErrors + st.IncomingPacketsDiscarded + st.OutgoingPacketsWithErrors;
+            // ohne IncomingPacketsDiscarded: Windows zählt dort auch gefilterte Rahmen (fremde VLANs, Multicast,
+            // Hyper-V-Switch) – auf gesunden Karten oft Tausende je Minute
+            errors = st.IncomingPacketsWithErrors + st.OutgoingPacketsWithErrors;
             packets = st.UnicastPacketsReceived + st.NonUnicastPacketsReceived + st.UnicastPacketsSent + st.NonUnicastPacketsSent;
         }
         catch (Exception ex) when (ex is NetworkInformationException or PlatformNotSupportedException)

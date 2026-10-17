@@ -43,7 +43,7 @@ public sealed record AdapterState
 
     public bool HasGateway { get; init; }
 
-    /// <summary>Summe aus empfangenen fehlerhaften, empfangenen verworfenen und gesendeten fehlerhaften Paketen (kumulativ).</summary>
+    /// <summary>Summe aus empfangenen und gesendeten fehlerhaften Paketen (kumulativ, ohne verworfene).</summary>
     public long? ErrorPackets { get; init; }
 
     /// <summary>Summe aller gesendeten und empfangenen Pakete (kumulativ).</summary>

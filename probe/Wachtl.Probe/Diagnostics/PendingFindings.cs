@@ -143,7 +143,7 @@ public sealed class PendingFindings
             if (File.Exists(_path))
             {
                 var list = JsonSerializer.Deserialize<List<ClientFinding>>(File.ReadAllText(_path), ApiClient.JsonOptions) ?? new();
-                return list.Where(f => !string.IsNullOrEmpty(f.FindingId)).TakeLast(MaxEntries).ToList();
+                return list.Where(f => f is not null && !string.IsNullOrEmpty(f.FindingId)).TakeLast(MaxEntries).ToList();
             }
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)

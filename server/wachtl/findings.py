@@ -148,6 +148,25 @@ def store(probe: dict, values: dict) -> bool:
     return True
 
 
+def close_stale(probe_id: int | None, before: int, reason: str) -> int:
+    """Aktive Hinweise schließen, die die Probe nicht mehr bestätigen kann (Neustart des Dienstes, Überwachung aus).
+
+    Besteht das Problem weiter, meldet die Probe es nach dem Neustart mit neuer finding_id erneut.
+    """
+    ts = repo.now()
+    sql = "SELECT id, details FROM client_findings WHERE state = 'active' AND detected_at < ?"
+    params: list = [before]
+    if probe_id is not None:
+        sql += " AND probe_id = ?"
+        params.append(probe_id)
+    rows = q(sql, params)
+    for r in rows:
+        details = {**json.loads(r["details"] or "{}"), "resolution": reason}
+        ex("UPDATE client_findings SET state = 'resolved', resolved_at = ?, details = ?, updated_at = ? WHERE id = ?",
+           (ts, json.dumps(details, ensure_ascii=False, sort_keys=True), ts, r["id"]))
+    return len(rows)
+
+
 # -- Abfragen ----------------------------------------------------------------
 _SELECT = (
     "SELECT f.*, p.hostname AS probe_name, s.name AS site_name "

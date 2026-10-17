@@ -24,6 +24,9 @@ public sealed class TrayFindingsResponse
     /// <summary>Höchste vergebene Nummer – ist sie kleiner als der Stand des Tray, wurde der Dienst neu gestartet.</summary>
     public long LatestSeq { get; init; }
 
+    /// <summary>Startwert der Zählung dieses Dienstes – größer als der Stand des Tray: Dienst neu gestartet, alte Hinweise sind hinfällig.</summary>
+    public long StartSeq { get; init; }
+
     public List<TrayFindingItem> Findings { get; init; } = new();
 }
 
@@ -38,11 +41,12 @@ public sealed class FindingFeed
 
     private readonly object _lock = new();
     private readonly Dictionary<string, (long Seq, ClientFinding Finding)> _entries = new(StringComparer.Ordinal);
+    private readonly long _start;
     private long _seq;
 
     public FindingFeed(long? startSeq = null)
     {
-        _seq = startSeq ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        _seq = _start = startSeq ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
     /// <summary>Sprechblasen im Tray erlaubt (client_findings.enabled und .notify).</summary>
@@ -94,6 +98,7 @@ public sealed class FindingFeed
             {
                 Notify = Notify,
                 LatestSeq = _seq,
+                StartSeq = _start,
                 Findings = _entries.Values
                     .Where(e => e.Seq > since)
                     .OrderBy(e => e.Seq)

@@ -134,6 +134,10 @@ def heartbeat():
     data = request.get_json(silent=True) or {}
     ts = repo.now()
     buffer_items = int(data.get("buffer_items") or 0)
+    uptime = int(data.get("uptime_s") or 0)
+    if g.probe.get("uptime_s") and 0 <= uptime < int(g.probe["uptime_s"]):
+        # Dienst neu gestartet: ältere aktive Hinweise kann die Probe nicht mehr auflösen
+        finding_service.close_stale(g.probe["id"], ts - uptime, "Nicht mehr bestätigt – Wachtl-Dienst neu gestartet")
     ex(
         "UPDATE probes SET last_seen = ?, last_ip = ?, version = ?, os = ?, buffer_items = ?, uptime_s = ?, "
         "addresses = ? WHERE id = ?",
@@ -143,7 +147,7 @@ def heartbeat():
             str(data.get("version", g.probe["version"] or ""))[:50],
             str(data.get("os", g.probe["os"] or ""))[:200],
             buffer_items,
-            int(data.get("uptime_s") or 0),
+            uptime,
             json.dumps(_addresses(data.get("addresses"))),
             g.probe["id"],
         ),

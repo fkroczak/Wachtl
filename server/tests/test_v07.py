@@ -72,6 +72,22 @@ class ClientFindingApiTest(AppTestCase):
         self.login()
         self.assertIn("Wieder verbunden (Unterbrechung 3 Min.)", self.client.get(f"/probes/{self.pid}").get_data(as_text=True))
 
+    def test_restart_and_switch_off_close_active(self):
+        self.post(self.item(detected_at=repo.now() - 600))
+        hb = lambda up: self.client.post("/api/probe/v1/heartbeat", headers=self.auth, json={"uptime_s": up})
+        hb(3600)
+        hb(3630)
+        self.assertEqual(findings.count_active(), 1)
+        hb(20)  # Dienst neu gestartet
+        row = q1("SELECT * FROM client_findings")
+        self.assertEqual(row["state"], "resolved")
+        self.assertIn("neu gestartet", json.loads(row["details"])["resolution"])
+        self.post(self.item())  # nach dem Neustart erneut erkannt: bleibt aktiv
+        hb(50)
+        self.assertEqual(findings.count_active(), 1)
+        settings_service.save({"client_findings_enabled": False})
+        self.assertEqual(findings.count_active(), 0)
+
     def test_invalid_items_are_skipped(self):
         good = self.item(kind="future_kind_from_newer_probe", title="")
         r = self.post(good, self.item(severity="egal"), self.item(detected_at="gestern"), "kein Objekt")
