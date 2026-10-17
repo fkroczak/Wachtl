@@ -59,9 +59,12 @@ try {
     $summary.Add("Server-Probe Ping 127.0.0.1: up=$($up.up), RTT $($up.rtt) ms")
 
     # Pfad-Check aus test-v03 (127.0.0.1) ermittelt auch die Server-Probe (TTL-Traceroute)
+    # ab 0.8.3 gibt es ab Werk auch „Traceroute Internet“ (1.1.1.1, im Runner nicht erreichbar) – gezielt 127.0.0.1 prüfen
+    $loopPath = ((Get-Json '/api/v1/checks') | Where-Object { $_.type -eq 'path' -and $_.target -eq '127.0.0.1' } | Select-Object -First 1).id
+    if (-not $loopPath) { throw 'Pfad-Check zu 127.0.0.1 aus test-v03 fehlt' }
     $path = $null
     foreach ($i in 1..12) {
-        $path = (Get-Json "/api/v1/probes/$($server.id)/paths") | Select-Object -First 1
+        $path = (Get-Json "/api/v1/probes/$($server.id)/paths") | Where-Object check_id -eq $loopPath | Select-Object -First 1
         if ($path) { break }
         Start-Sleep 5
     }
