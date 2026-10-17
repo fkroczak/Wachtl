@@ -20,7 +20,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from wachtl import checktypes, create_app, repo, reports  # noqa: E402
+from wachtl import checktypes, create_app, findings, repo, reports  # noqa: E402
 from wachtl.db import ins  # noqa: E402
 from wachtl.security import hash_token  # noqa: E402
 from wachtl.services import alerts  # noqa: E402
@@ -94,6 +94,21 @@ def main(base: str) -> dict:
                 "duration": duration, "description": text, "user": user, "hostname": probes[probe_id]["hostname"]}))
             if category == "no_connection":
                 reports.set_status({"id": rid}, "done", "admin", "Störung beim Provider, behoben")
+        # Client-Hinweise wie von der Probe (Kabel, Link-Geschwindigkeit)
+        demo_findings = [
+            ("cable_unplugged", "critical", "resolved", "Netzwerkkabel getrennt",
+             "Die Netzwerkkarte „Ethernet“ hatte 2 Minuten keine Verbindung.",
+             "Kabel am PC und an der Netzwerkdose prüfen; bei Wiederholung Kabel oder Switch-Port tauschen.", 5400, 120),
+            ("link_speed_changed", "warning", "active", "Link-Geschwindigkeit von 1 Gbit/s auf 100 Mbit/s gesunken",
+             "Die Netzwerkkarte „Ethernet“ arbeitet nur noch mit 100 Mbit/s.",
+             "Kabel (mindestens Cat 5e) und Switch-Port prüfen, an beiden Seiten „Automatisch“ einstellen.", 1800, 0),
+        ]
+        for i, (kind, sev, state, title, msg, sol, ago, dur) in enumerate(demo_findings):
+            findings.store(probes[1], findings.validate({
+                "finding_id": f"00000000-0000-4000-9000-{i:012d}", "kind": kind, "severity": sev, "state": state,
+                "adapter": "Ethernet", "adapter_description": "Intel(R) Ethernet Connection I219-V", "title": title,
+                "message": msg, "solution": sol, "detected_at": now - ago,
+                "resolved_at": now - ago + dur if state == "resolved" else None}))
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
     return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan}
 

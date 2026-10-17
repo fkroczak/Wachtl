@@ -16,6 +16,7 @@ from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
 from . import checktypes, standardpaket
+from . import findings as finding_service
 from . import reports as report_service
 from .services import alertgen
 from .services import alerts as alert_service
@@ -226,8 +227,10 @@ def overview():
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
     since = repo.now() - 7 * 86400
     recent_reports = report_service.search("open", since=since, limit=5)
+    client_findings = finding_service.search(since=repo.now() - 86400, limit=20)
     return render_template(
         "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
+        client_findings=client_findings,
         alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth,
         KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
         recent_reports_total=report_service.count("open", since=since) if recent_reports else 0,
@@ -257,6 +260,7 @@ def site(site_id: int):
         checks=sorted(all_checks.values(), key=lambda c: (order.get(c["type"], 9), c["id"])),
         matrix=matrix, live_ok=live_ok, KIND_LABELS=checkstatus.KIND_LABELS,
         reports=report_service.search(site_id=site_id, limit=10),
+        client_findings=finding_service.search(site_id=site_id, since=repo.now() - 7 * 86400, limit=20),
     )
 
 
@@ -307,6 +311,7 @@ def probe(probe_id: int):
         default_iperf_port=measure["probe_iperf_port"],
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
         reports=report_service.search(probe_id=probe_id, limit=10),
+        client_findings=finding_service.search(probe_id=probe_id, since=repo.now() - 30 * 86400, limit=20),
     )
 
 

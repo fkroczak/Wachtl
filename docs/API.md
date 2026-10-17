@@ -13,6 +13,7 @@ Authentifizierung: `Authorization: Bearer <probe_id>.<secret>` (außer `enroll`)
 | POST | `/ingest` | Prometheus-Text, optional `Content-Encoding: gzip`, Header `X-Batch-Id` | 204 gespeichert oder bereits bekannt · 422 alle Zeilen verworfen · 503 Speicher nicht erreichbar (Probe wiederholt) |
 | POST | `/heartbeat` | `{"version", "os", "hostname", "buffer_items", "uptime_s"}` | 200 `{"config_etag", "server_time"}` |
 | POST | `/deregister` | `{}` | 204 – Probe abgemeldet (Deinstallation): deaktiviert, Token ab sofort ungültig, offene Aufträge verworfen |
+| POST | `/findings` | `{"findings": [{"finding_id", "kind", "severity", "state", "adapter", "adapter_description", "title", "message", "solution", "details", "detected_at", "resolved_at"}]}` (höchstens 50) | 200 `{"stored", "new", "rejected", "errors"}` – ungültige Einträge werden einzeln übersprungen · 400 `{"error"}` Körper unbrauchbar – Client-Hinweise der Probe, Details in CLIENT-HINWEISE.md |
 | POST | `/report` | `{"report_id", "occurred_at", "category", "duration", "description", "user", "hostname"}` | 201 `{"id"}` neu · 200 `{"id"}` dieselbe `report_id` gab es schon · 400 `{"error"}` (deutsch) – Störungsmeldung vom Tray-Symbol, Details in STOERUNGSMELDUNGEN.md |
 
 Fehler bei Authentifizierung: 401 (Token fehlt/falsch), 403 (Probe deaktiviert).
@@ -43,6 +44,7 @@ Authentifizierung über die Web-Sitzung; ändernde Aufrufe brauchen den Header `
 | GET | `/status` | Nur lesen | `[{"probe", "check_id", "up", "rtt", "loss"}]` – letzter Zustand aller Ziele |
 | GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d[&at=<unix>]` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "start", "end", "series": {"avg", "min", "max", "loss": [[ts_ms, wert], …]}}` – `at` legt das Fenster mittig um diesen Zeitpunkt (z. B. eine Störungsmeldung), ohne `at` endet es jetzt |
 | GET | `/probes/{id}/checks/{id}/stats` | Nur lesen | `{"1m"\|"5m"\|"15m"\|"1h"\|"24h": {"min", "median", "avg", "max", "jitter", "loss"}}` |
+| GET | `/client-findings?days=7[&probe=<id>]` | Nur lesen | Client-Hinweise der Probes: aktive immer, behobene der letzten `days` Tage (1–400), aktive und schwere zuerst |
 | GET | `/alerts?status=firing\|resolved` | Nur lesen | Alarme |
 | POST | `/alerts/{id}/ack` | Operator | `{"hours": 4, "comment": "…"}` → `{"silence_id"}` |
 

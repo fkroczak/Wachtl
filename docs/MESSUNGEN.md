@@ -127,6 +127,10 @@ Dieselbe Liste liefert `GET /api/v1/check-status`.
 | Starker Paketverlust | kritische Paketverlust-Schwelle überschritten |
 | Ziel / einzelne Referenz | nur dieses Ziel gestört |
 
+Eine Störung zählt ab **5 s ohne Antwort** (Verwaltung › Alarmregeln). Beginn und Dauer rechnet Wachtl nach dem Ende
+aus den 1-s-Messwerten sekundengenau nach; beim WAN zählt nur die Zeit, in der alle Referenzen zugleich weg waren.
+Kurze Ausfälle erkennt nur ein Ping-Intervall von 1 s sicher – bei 5 s Intervall braucht es 2 verlorene Pings (≈ 10 s).
+
 Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispiel „Internet weg“ während „Gateway weg“. Mit „Folgestörungen zeigen“ werden sie eingeblendet. Unter **Verwaltung › Messung** lässt sich eine Mindestdauer einstellen, ab der eine Störung erscheint.
 
 ## Allgemeine Einstellungen (Verwaltung › Messung)
@@ -140,6 +144,8 @@ Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispi
 | Standard-Port der iperf3-Gegenstelle auf Probes | 5201 |
 | Pfad- und Bandbreitenverlauf aufbewahren | 400 Tage |
 | Ausfälle anzeigen ab | 0 s |
+| Netzwerkkarte und Kabel auf den PCs überwachen (Client-Hinweise, [CLIENT-HINWEISE.md](CLIENT-HINWEISE.md)) | an |
+| Hinweis als Sprechblase auf dem PC anzeigen | an |
 
 ## Firewall
 

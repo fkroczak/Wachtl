@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
 {% from "_reports.html" import report_table with context %}
+{% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <h1>Übersicht</h1>
@@ -41,6 +42,12 @@
   </tbody>
 </table>
 {% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
+
+<h2 id="hinweise">Hinweise von PCs</h2>
+{% if client_findings %}
+<p class="muted">Was die Probes auf ihrem PC selbst erkannt haben (Netzwerkkarte, Kabel, Treiber, DHCP) – aktive und die der letzten 24 Stunden.</p>
+{{ findings_table(client_findings) }}
+{% else %}<p class="muted">Keine Hinweise von PCs in den letzten 24 Stunden.</p>{% endif %}
 
 <h2 id="meldungen">Störungsmeldungen</h2>
 {% if recent_reports %}
