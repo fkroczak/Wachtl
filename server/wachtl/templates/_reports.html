@@ -6,7 +6,7 @@
     <tr>
       <td class="nowrap" title="Eingang {{ r.received_at|dt }}">{{ r.occurred_at|dt }}</td>
       {% if show_probe %}<td>{% if r.probe_id %}<a href="{{ url_for('web.probe', probe_id=r.probe_id) }}">{{ r.probe_label }}</a>{% else %}{{ r.probe_label }}{% endif %}</td>{% endif %}
-      {% if show_site %}<td>{{ r.site_name or '–' }}</td>{% endif %}
+      {% if show_site %}<td>{% if r.site_id and r.site_name %}<a href="{{ url_for('web.site', site_id=r.site_id) }}">{{ r.site_name }}</a>{% else %}–{% endif %}</td>{% endif %}
       <td>{{ r.reported_user or '–' }}</td>
       <td>{{ r.category_label }}</td>
       <td>{{ r.duration_label }}</td>

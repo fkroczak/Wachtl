@@ -40,6 +40,7 @@ def inject():
         "probe_online": repo.probe_online,
         "check_url": check_url,
         "report_graph_url": report_graph_url,
+        "alert_refs": alert_refs,
     }
 
 
@@ -50,6 +51,24 @@ def check_url(probe: dict, check: dict) -> str:
     if check["type"] in checktypes.SCHEDULED_TYPES:
         return url_for("web.bandwidth_view", probe_id=probe["id"], check_id=check["id"])
     return url_for("web.target", probe_id=probe["id"], check_id=check["id"])
+
+
+def alert_refs(a: dict, with_probe: bool = True) -> list[tuple[str, str, str, str]]:
+    """Probe, Standort und Ziel eines Alarms aus seinen Labels: (Art, Name, URL, aria-label) für Links."""
+    lb = json.loads(a["labels"] or "{}")
+    probe, site, check = (str(lb.get(k, "")) for k in ("probe", "site", "check_id"))
+    probe_name = lb.get("probe_name") or probe
+    refs = []
+    if with_probe and probe.isdigit():
+        refs.append(("Probe", probe_name, url_for("web.probe", probe_id=int(probe)), ""))
+    if site.isdigit():
+        refs.append(("Standort", lb.get("site_name") or site, url_for("web.site", site_id=int(site)), ""))
+    if probe.isdigit() and check.isdigit():
+        ctype = {"route_change": "path", "bandwidth_low": "iperf"}.get(lb.get("kind"), "ping")
+        name = lb.get("target") or check
+        refs.append(("Ziel", name, check_url({"id": int(probe)}, {"id": int(check), "type": ctype}),
+                     f"{name} von {probe_name}"))
+    return refs
 
 
 @bp.app_template_filter("dt")
@@ -234,6 +253,28 @@ def overview():
     )
 
 
+def _sparkline(data: dict | None, target: str) -> dict | None:
+    """Mini-Graph (SVG-Pfad, 120 × 30) aus Latenz-Median und Verlust je Minute der letzten Stunde."""
+    rtt = [(t, v) for t, v in (data or {}).get("rtt", []) if v is not None]
+    if not rtt:
+        return None
+    end = int(time.time())
+    top = max(v for _, v in rtt) * 1.15 or 1
+
+    def x(t: int) -> float:
+        return round(max(0, 120 - (end - t) / 30), 1)
+
+    d, prev = [], None
+    for t, v in rtt:  # Lücke (keine Antwort) unterbricht die Linie
+        d.append(f"{'L' if prev is not None and t - prev <= 90 else 'M'}{x(t)} {round(28 - v / top * 26, 1)}")
+        prev = t
+    loss = [(x(t), round(max(3, v * 0.3), 1)) for t, v in data.get("loss", []) if v]
+    lo, hi = min(v for _, v in rtt), max(v for _, v in rtt)
+    label = (f"Latenz-Median der letzten Stunde zu {target}: {fmt_ms(lo)} bis {fmt_ms(hi)}, "
+             f"Paketverlust in {len(loss)} von 60 Minuten")
+    return {"d": " ".join(d), "loss": loss, "label": label}
+
+
 @bp.get("/sites/<int:site_id>")
 @login_required()
 def site(site_id: int):
@@ -245,6 +286,58 @@ def site(site_id: int):
     )
     live, live_ok = _live()
     states = checkstatus.overview(probes, live)
+    try:
+        sparks = vm.site_sparklines(site_id)
+    except vm.VMError as exc:
+        log.warning("Mini-Graphen nicht verfügbar: %s", exc)
+        sparks = {}
+    ids = {str(p["id"]) for p in probes}
+    alerts = []
+    for a in q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 500"):
+        labels = json.loads(a["labels"] or "{}")
+        if labels.get("site") == str(site_id) or labels.get("probe") in ids:
+            alerts.append({**a, "probe": labels.get("probe")})
+
+    # je Probe ein Widget; Probes mit Problemen zuerst
+    widgets, internet, bandwidth, problems = [], [], [], 0
+    for p in probes:
+        sts = states[p["id"]]
+        active = p["status"] == "active"
+        online = active and repo.probe_online(p)
+        pings = [st for st in sts if st.kind == "ping"]
+        ref = next((st for st in pings if st.check["role"] == "reference"), pings[0] if pings else None)
+        p_alerts = [a for a in alerts if a["probe"] == str(p["id"])]
+        issues = []
+        if active and not online:
+            issues.append(f"Probe offline – letzter Kontakt {fmt_ago(p['last_seen'])}")
+            problems += 1
+        elif active:
+            issues += [f"{st.check['name']}: {st.detail or st.label}" for st in sts if st.problem]
+            problems += sum(st.problem for st in sts)
+            internet += [st for st in pings if st.check["role"] == "reference"]
+        issues += [f"Alarm: {a['summary'] or a['alertname']}" for a in p_alerts]
+        if active:
+            bandwidth += [(p, st) for st in sts if st.kind in checktypes.SCHEDULED_TYPES and st.ts]
+        bad = (active and not online) or any(st.state == "down" for st in sts) or \
+            any(a["severity"] == "critical" for a in p_alerts)
+        level = "inactive" if not active else "bad" if bad else "warn" if issues else "ok"
+        spark = sparks.get((str(p["id"]), str(ref.check["id"]))) if ref else None
+        widgets.append({
+            "probe": p, "online": online, "level": level, "issues": issues, "counts": checkstatus.counts(sts),
+            "ref": ref, "jitter": (spark or {}).get("jitter"),
+            "gateway": next((st for st in pings if st.check["role"] == "gateway"), None),
+            "spark": _sparkline(spark, ref.check["name"]) if ref and active else None,
+        })
+    widgets.sort(key=lambda w: (("bad", "warn", "ok", "inactive").index(w["level"]), w["probe"]["hostname"]))
+    if not internet:
+        net = None
+    elif all(st.state == "ok" for st in internet):
+        net = "ok"
+    else:
+        net = "auffällig" if any(st.state in ("ok", "warn") for st in internet) else "gestört"
+    # neueste Bandbreitenmessung, WAN-Speedtest vor iperf3
+    bw = max(bandwidth, key=lambda i: (i[1].kind == "speedtest", i[1].ts), default=None)
+
     all_checks: dict[int, dict] = {}
     matrix = {}
     for p in probes:
@@ -252,8 +345,11 @@ def site(site_id: int):
             all_checks.setdefault(st.check["id"], st.check)
             matrix[(st.check["id"], p["id"])] = st
     order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3}
+    active = [p for p in probes if p["status"] == "active"]
     return render_template(
-        "site.html", site=s, probes=probes,
+        "site.html", site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
+        kpi={"active": len(active), "online": sum(repo.probe_online(p) for p in active), "problems": problems,
+             "reports": report_service.count("open", site_id=site_id)},
         checks=sorted(all_checks.values(), key=lambda c: (order.get(c["type"], 9), c["id"])),
         matrix=matrix, live_ok=live_ok, KIND_LABELS=checkstatus.KIND_LABELS,
         reports=report_service.search(site_id=site_id, limit=10),
@@ -575,7 +671,8 @@ def target(probe_id: int, check_id: int):
 
 
 def _chart_reports(probe_id: int) -> dict:
-    """Zeitpunkt aus ?at= (Graph um eine Störungsmeldung herum) und die Meldungen der Probe der letzten 30 Tage."""
+    """Zeitpunkt aus ?at= (Graph um eine Störungsmeldung herum), die Meldungen der Probe der letzten 30 Tage
+    und die Alarmschwellen für die Legende."""
     now = repo.now()
     try:
         at = int(request.args.get("at", ""))
@@ -584,7 +681,8 @@ def _chart_reports(probe_id: int) -> dict:
     if at is not None and not now - 400 * 86400 <= at <= now + 300:
         at = None
     return {"at": at, "chart_reports": report_service.search(probe_id=probe_id, since=now - vm.RANGES["30d"],
-                                                              limit=10)}
+                                                              limit=10),
+            "thr": repo.graph_thresholds()}
 
 
 # -- Alarme ---------------------------------------------------------------
@@ -621,7 +719,10 @@ def admin():
     checks = q("SELECT * FROM checks ORDER BY id")
     assignments = defaultdict(list)
     for a in q("SELECT * FROM check_assignments"):
-        assignments[a["check_id"]].append(repo.scope_label(a["scope"], a["scope_id"], site_map, probe_map))
+        url = (url_for("web.site", site_id=a["scope_id"]) if a["scope"] == "site" and a["scope_id"] in site_map
+               else url_for("web.probe", probe_id=a["scope_id"]) if a["scope"] == "probe" and a["scope_id"] in probe_map
+               else None)
+        assignments[a["check_id"]].append((repo.scope_label(a["scope"], a["scope_id"], site_map, probe_map), url))
     tokens = q(
         "SELECT t.*, s.name AS site_name FROM enrollment_tokens t JOIN sites s ON s.id = t.site_id "
         "WHERE t.revoked = FALSE AND t.expires_at > ? AND t.uses < t.max_uses AND t.probe_kind = 'probe' "
@@ -1125,7 +1226,26 @@ def user_delete(user_id: int):
 @bp.get("/admin/audit")
 @login_required("admin")
 def audit():
-    return render_template("audit.html", rows=q("SELECT * FROM audit_log ORDER BY ts DESC LIMIT 500"))
+    rows = q("SELECT * FROM audit_log ORDER BY ts DESC LIMIT 500")
+    # Objekte wie "probe:5" auf ihre Seite verlinken, solange es sie noch gibt
+    exists = {kind: {r["id"] for r in q(f"SELECT id FROM {table}")}
+              for kind, table in (("site", "sites"), ("probe", "probes"), ("check", "checks"))}
+    report_probe = {r["id"]: r["probe_id"] for r in q("SELECT id, probe_id FROM incident_reports")}
+    links = {}
+    for r in rows:
+        kind, _, ident = (r["object"] or "").partition(":")
+        if not ident.isdigit():
+            continue
+        i = int(ident)
+        if kind == "site" and i in exists["site"]:
+            links[r["object"]] = url_for("web.site", site_id=i)
+        elif kind == "probe" and i in exists["probe"]:
+            links[r["object"]] = url_for("web.probe", probe_id=i)
+        elif kind == "check" and i in exists["check"]:
+            links[r["object"]] = url_for("web.check_edit", check_id=i)
+        elif kind == "report" and i in report_probe:
+            links[r["object"]] = url_for("web.reports_view", status="all", probe=report_probe[i])
+    return render_template("audit.html", rows=rows, links=links)
 
 
 @bp.post("/admin/notify")

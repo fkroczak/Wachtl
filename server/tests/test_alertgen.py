@@ -18,6 +18,7 @@ class AlertGenTest(AppTestCase):
         names = [r["record"] for r in self.rules()["wachtl-recording"]]
         self.assertIn("wachtl:ping_rtt_ms:avg_1m", names)
         self.assertIn("wachtl:ping_loss_ratio_1m", names)
+        self.assertIn("wachtl:hop_rtt_ms:quantiles_1m", names)
 
     def test_target_down_one_rule_per_interval(self):
         repo.create_check("Server", "10.0.0.5", "target", 5, 1000, "all", None)

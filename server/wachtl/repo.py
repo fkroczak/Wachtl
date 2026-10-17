@@ -257,6 +257,18 @@ def alert_rules() -> dict[str, dict]:
     return {r["kind"]: r for r in q("SELECT * FROM alert_rules ORDER BY id")}
 
 
+def graph_thresholds() -> dict[str, float | None]:
+    """Schwellen der aktiven Alarmregeln für den Latenzgraphen (Linien, Hinterlegung, Farbe nach Verlust)."""
+    rules = alert_rules()
+
+    def thr(kind: str) -> float | None:
+        r = rules.get(kind)
+        return r["threshold"] if r and r["enabled"] else None
+
+    return {"lat_warn_ms": thr("latency_high"), "loss_warn_pct": thr("packet_loss_warning"),
+            "loss_bad_pct": thr("packet_loss_critical")}
+
+
 # -- Status -----------------------------------------------------------------
 ONLINE_SECONDS = 90
 

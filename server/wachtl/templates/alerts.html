@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Alarme{% endblock %}
+{% from "_links.html" import alert_links with context %}
 {% block content %}
 <h1>Alarme</h1>
 
@@ -11,7 +12,7 @@
   {% for a in firing %}
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
-      <td>{{ a.summary or a.alertname }}<br><span class="muted small">{{ a.alertname }}{% set l = a.labels|fromjson %}{% if l.cause %} · Ursache: {{ l.cause }}{% endif %}</span></td>
+      <td>{{ a.summary or a.alertname }}<br><span class="muted small">{{ a.alertname }}{% set l = a.labels|fromjson %}{% if l.cause %} · Ursache: {{ l.cause }}{% endif %}{% set refs = alert_links(a) %}{% if refs|trim %} · {{ refs }}{% endif %}</span></td>
       <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
       <td>{% if a.acked_by %}{{ a.acked_by }}<br><span class="muted small">{{ a.acked_at|dt }}</span>{% else %}–{% endif %}</td>
       {% if has_role(user,'operator') %}
@@ -43,7 +44,7 @@
   {% for a in history %}
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
-      <td>{{ a.summary or a.alertname }}</td>
+      <td>{{ a.summary or a.alertname }}{% set refs = alert_links(a) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
       <td>{{ a.starts_at|dt }}</td>
       <td>{{ a.ends_at|dt }}</td>
       <td>{{ a.acked_by or '–' }}</td>

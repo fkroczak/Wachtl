@@ -422,3 +422,12 @@
     window.addEventListener("resize", draw);
   }
 })();
+
+// Standort-Dashboard: aufgeklappte Detailbereiche über das automatische Neuladen hinweg offen halten
+for (const d of document.querySelectorAll("details[id]")) {
+  const key = "open:" + location.pathname + "#" + d.id;
+  try { if (sessionStorage.getItem(key)) d.open = true; } catch (e) { /* Speicher gesperrt: bleibt zu */ }
+  d.addEventListener("toggle", () => {
+    try { d.open ? sessionStorage.setItem(key, "1") : sessionStorage.removeItem(key); } catch (e) { /* egal */ }
+  });
+}

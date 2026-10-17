@@ -3,7 +3,7 @@
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Pfad</nav>
-<h1>{{ check.name }} <span class="muted">· {{ probe.hostname }} → {{ check.target }}</span></h1>
+<h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> → {{ check.target }}</span></h1>
 <p class="muted">Jeder Hop wird alle {{ check.interval_s }} s angepingt, der Pfad alle {{ params.trace_interval_min }} min neu ermittelt{{ ' und sofort bei Verlust am Ziel' if params.retrace_on_loss }}.</p>
 
 <div class="actions">

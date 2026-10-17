@@ -11,6 +11,7 @@ Verantwortlich: wer das UI ändert. Ausnahmen trägt der PR-Autor unten ein und 
 | Prüfung | Werkzeug | Wo | Blockiert den Merge |
 | --- | --- | --- | --- |
 | Semantik aller Seitentypen: `lang`, genau eine `h1`, keine Überschriftensprünge, beschriftete Felder (Platzhalter zählt nicht), gültige `aria-describedby`-Verweise, Namen von Links/Buttons, `alt`, keine leeren `<th>`, `fieldset` mit `legend` | `server/tests/test_ui_quality.py` (pytest, ohne Browser) | Job „Server-Tests“ | ja |
+| Verweise sind Links: Standort- und Probe-Namen als eigener Wert (Zelle, Karte, Navigationspfad, Untertitel) stehen in einem `<a>` | `test_ui_quality.py::PageSemanticsTest::test_references_are_links` | „Server-Tests“ | ja |
 | Formular-Fehlerzustand: Fehlerübersicht mit `role="alert"`, `aria-invalid` + verknüpfte Meldung, Reihenfolge wie im Formular | `test_ui_quality.py` | „Server-Tests“ | ja |
 | Farbkontraste aller Design-Tokens in hell und dunkel (Text 4,5:1, Feldränder/Fokus/Grafik 3:1) | `test_ui_quality.py` | „Server-Tests“ | ja |
 | axe-core, WCAG 2.2 A/AA + Best Practices, 15 Seiten + Anmeldung + Formular im Fehlerzustand, hell und dunkel | `server/e2e/tests/a11y.spec.js` | „UI-Qualität“ | ja, 0 Verstöße |
@@ -104,6 +105,13 @@ enthält („Bestätigen: Ziel nicht erreichbar“).
 
 - **Farben** nur über die Tokens in `app.css`. Neue Kombinationen in `PAIRS` in `test_ui_quality.py` ergänzen.
   Status nie nur über Farbe: Punkte und Zellen bekommen Text („gestört“, „keine Daten“).
+- **Verweise sind Links**: Wo ein Standort, eine Probe, ein Check/Ziel, eine Meldung oder ein Audit-Objekt genannt wird,
+  führt der Name zur Detailseite – Standort → `web.site`, Probe → `web.probe`, Check einer Probe → `check_url(probe, check)`,
+  Check ohne Probe → Bearbeiten-Formular, Meldung → gefilterte Meldungsliste. Alarme nutzen `alert_links()`,
+  iperf3-Gegenstellen `check_target()` aus `templates/_links.html`. Linktext ist der Name, nie „hier“. Wiederholte Links
+  mit verschiedenem Ziel bei gleichem Text bekommen ein `aria-label`, das den Text enthält („8.8.8.8 von PC-EMPFANG“).
+  Ausnahmen: `<option>`, `<title>`, Bestätigungsdialoge, die h1 der eigenen Seite und Namen mitten in einem Satz.
+  Test: `test_references_are_links`.
 - **Links im Fließtext** sind unterstrichen; Navigation, Tabellen und Buttons dürfen ohne.
 - **Fokus**: `:focus-visible` mit 3 px Ring in `--focus`. Nicht mit `outline: none` überschreiben.
 - **Navigation**: mehrere `<nav>` brauchen ein `aria-label`; aktuelle Seite mit `aria-current="page"`.
@@ -142,7 +150,8 @@ Steht auch im PR-Template (`.github/pull_request_template.md`). Diese Punkte kan
 4. **Scannbarkeit** – Lässt sich die Seite über Überschriften und erste Wörter erfassen? Stehen Zahlen in Tabellen,
    rechtsbündig mit Einheit?
 5. **Mobil** – Mit dem Handy (320–400 px) bedienbar? Tabellen scrollen in ihrem Container?
-6. **Screenreader** – Einmal mit NVDA (Windows) oder VoiceOver durch den geänderten Ablauf: Werden Fehler angesagt?
+6. **Verweise** – Ist jeder neu angezeigte Standort, jede Probe, jeder Check und jede Meldung ein Link auf die passende Seite?
+7. **Screenreader** – Einmal mit NVDA (Windows) oder VoiceOver durch den geänderten Ablauf: Werden Fehler angesagt?
    Sind wiederholte Buttons unterscheidbar?
 
 ## Baseline und Abbauplan

@@ -307,3 +307,25 @@ form.report-action input { width: 9rem; }
 .chart-tip .tip-report { color: var(--report); font-weight: 600; margin-top: 0.3rem; }
 .chart-tip { max-width: 300px; }
 .chart-tip div { overflow-wrap: anywhere; }
+/* Standort-Dashboard: Probe-Widgets, ganze Karte über den Namen anklickbar, Probleme farbig umrandet + Text */
+.card.stat .num.word { font-size: 1.1rem; line-height: 1.35; padding: 0.2rem 0; }
+.widgets { list-style: none; padding: 0; margin: 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.pw { position: relative; display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+.pw > * { margin: 0; }
+.pw h3 { font-size: 1rem; overflow-wrap: anywhere; }
+.pw h3 a::after { content: ""; position: absolute; inset: 0; }
+.pw:hover { border-color: var(--accent); }
+.pw.bad { border: 2px solid var(--bad); border-left-width: 6px; }
+.pw.warn { border: 2px solid var(--warn); border-left-width: 6px; }
+.pw.inactive { color: var(--text-muted); }
+.pw-issues { padding-left: 1.1rem; font-size: 0.9rem; overflow-wrap: anywhere; }
+.pw-kv { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.7rem; font-size: 0.9rem; }
+.pw-kv dt { color: var(--text-muted); }
+.pw-kv dd { margin: 0; }
+.spark { display: block; width: 100%; height: 32px; margin-top: auto; }
+svg.spark { border-bottom: 1px solid var(--border); }
+.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.spark rect { fill: var(--bad); }
+p.spark { display: flex; align-items: center; }
+details > summary h2 { display: inline; }
+details > summary { cursor: pointer; margin: 1.6rem 0 0.6rem; }

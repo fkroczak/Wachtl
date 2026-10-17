@@ -6,7 +6,7 @@
   {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
 {% if hop %}
 <h1>Hop {{ hop }} <span class="muted">· {{ hop_ip or 'keine Antwort' }}</span></h1>
-<p class="muted">Auf dem Pfad zu {{ check.target }} ({{ check.name }}) · Ping alle {{ check.interval_s }} s. Verlust nur an diesem Hop, aber nicht an späteren, ist meist ICMP-Drosselung des Routers.</p>
+<p class="muted">Auf dem Pfad zu {{ check.target }} (<a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">{{ check.name }}</a>) · Ping alle {{ check.interval_s }} s. Verlust nur an diesem Hop, aber nicht an späteren, ist meist ICMP-Drosselung des Routers.</p>
 {% set q = {'hop': hop} %}
 {% else %}
 <h1>{{ check.name }} <span class="muted">· {{ check.target }}</span></h1>

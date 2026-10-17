@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Verwaltung{% endblock %}
 {% from "_forms.html" import field %}
+{% from "_links.html" import check_target with context %}
 {% block content %}
 <h1>Verwaltung</h1>
 <p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
@@ -44,7 +45,7 @@
   <table>
     <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for t in tokens %}
-      <tr><td>{{ t.site_name }}</td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
+      <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
         <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger">Widerrufen</button></form></td></tr>
     {% endfor %}</tbody>
@@ -125,9 +126,9 @@
       <tr class="{{ '' if c.enabled else 'disabled' }}">
         <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
         <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
-        <td>{{ c.target }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
+        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
         <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
-        <td>{{ assignments[c.id]|join(', ') }}</td>
+        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
         <td>{{ 'aktiv' if c.enabled else 'pausiert' }}</td>
         <td class="nowrap">
           <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}">Bearbeiten</a>

@@ -1,7 +1,7 @@
 import json
 from unittest import mock
 
-from wachtl.db import q, q1
+from wachtl.db import ex, q, q1
 
 from .helpers import AppTestCase
 
@@ -113,16 +113,30 @@ class WebTest(AppTestCase):
         self.login()
         r = self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=99y")
         self.assertEqual(r.status_code, 400)
-        fake = {"status": "success", "data": {"result": [{"values": [[1700000000, "1.5"], [1700000001, "NaN"]]}]}}
-        resp = mock.Mock()
-        resp.json.return_value = fake
-        resp.raise_for_status.return_value = None
-        with mock.patch("wachtl.services.vm._session.get", return_value=resp) as get:
+        values = [[1700000000, "1.5"], [1700000001, "NaN"]]
+
+        def fake(url, params, timeout):
+            query = params["query"]
+            result = ([{"metric": {"phi": phi}, "values": values} for phi in ("0.1", "0.25", "0.75", "0.9")]
+                      if "phi" in query else [{"metric": {}, "values": values}])
+            resp = mock.Mock()
+            resp.json.return_value = {"status": "success", "data": {"result": result}}
+            return resp
+
+        ex("UPDATE alert_rules SET enabled = FALSE WHERE kind = 'packet_loss_critical'")
+        with mock.patch("wachtl.services.vm._session.get", side_effect=fake) as get:
             r = self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=7d")
         body = r.get_json()
         self.assertEqual(body["source"], "agg")
-        self.assertEqual(body["series"]["avg"], [[1700000000000, 1.5], [1700000001000, None]])
-        self.assertIn("wachtl:ping_rtt_ms:avg_1m", get.call_args_list[0].kwargs["params"]["query"])
+        self.assertEqual(sorted(body["series"]), ["loss", "p10", "p25", "p50", "p75", "p90"])
+        self.assertEqual(body["series"]["p25"], [[1700000000000, 1.5], [1700000001000, None]])
+        self.assertEqual(body["series"]["p50"], body["series"]["p25"])
+        self.assertIn("wachtl:ping_rtt_ms:quantiles_1m", get.call_args_list[0].kwargs["params"]["query"])
+        self.assertEqual(body["thr"], {"lat_warn_ms": 100, "loss_warn_pct": 2, "loss_bad_pct": None})
+        with mock.patch("wachtl.services.vm._session.get", side_effect=fake) as get:
+            self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=1h")
+        self.assertIn('quantiles_over_time("phi", 0.1, 0.25, 0.5, 0.75, 0.9, wachtl_ping_rtt_ms{',
+                      get.call_args_list[0].kwargs["params"]["query"])
 
 
 class ProbePackageTest(AppTestCase):
