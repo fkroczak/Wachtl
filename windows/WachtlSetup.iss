@@ -12,6 +12,8 @@
 ; Unbeaufsichtigt:
 ;   Probe:  WachtlSetup-Standort.exe /VERYSILENT /SUPPRESSMSGBOXES            (vorbelegt)
 ;           WachtlSetup-x.y.z.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=… /Pin=… /Token=…
+;   Tray-Symbol (Problem melden, Über, Beenden) startet bei jeder Anmeldung; /NoTray lässt es weg (wird gemerkt),
+;   /Tray schaltet es wieder ein.
 ;   Server: WachtlSetup-x.y.z.exe /VERYSILENT /SUPPRESSMSGBOXES /Role=Server /Hostnames="wachtl.kunde.local"
 ;           /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/IperfPort=5201] [/DataDir="D:\Wachtl"]
 ;           [/RawDays=30] [/AggMonths=13] [/EmailTo=… /EmailFrom=… /SmtpHost=mail:587 /SmtpUser=… /SmtpPassword=…] [/TeamsUrl=…]
@@ -19,7 +21,7 @@
 ; 10 = installiert, aber nicht betriebsbereit (Grund im /LOG). /SUPPRESSMSGBOXES ist unbeaufsichtigt Pflicht.
 
 #ifndef AppVersion
-  #define AppVersion "0.5.0"
+  #define AppVersion "0.6.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build\server"
@@ -75,6 +77,8 @@ Type: files; Name: "{app}\WachtlProbeSetup.exe"; Check: IsClient
 [Files]
 Source: "assets\wachtl.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\THIRD-PARTY.txt"; DestDir: "{app}"; Flags: ignoreversion
+; Tray-Symbol neben der Uhr, beide Rollen (.NET Framework 4.6.2 aus Windows, ~100 KB)
+Source: "{#ProbeDir}\wachtl-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; ---- Probe ----
 Source: "{#ProbeDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsClient
 Source: "{#ProbeDir}\iperf3\*"; DestDir: "{app}\iperf3"; Flags: ignoreversion recursesubdirs; Check: IsClient
@@ -96,6 +100,7 @@ Filename: "{group}\Wachtl Dashboard.url"; Section: "InternetShortcut"; Key: "URL
 [Icons]
 Name: "{group}\Wachtl Status"; Filename: "{app}\wachtl-status.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\wachtl.ico"
 Name: "{group}\Logdateien"; Filename: "{code:LogDir}"
+Name: "{group}\Wachtl – Problem melden"; Filename: "{app}\wachtl-tray.exe"; Parameters: "--report"
 Name: "{group}\Zugangsdaten (setup-info.txt)"; Filename: "{code:GetDataDir}\setup-info.txt"; Check: IsServer
 Name: "{group}\Setups für die Probes"; Filename: "{app}\probe"; Check: IsServer
 
@@ -103,16 +108,26 @@ Name: "{group}\Setups für die Probes"; Filename: "{app}\probe"; Check: IsServer
 Root: HKLM; Subkey: "Software\Wachtl Server"; ValueType: string; ValueName: "DataDir"; ValueData: "{code:GetDataDir}"; Flags: uninsdeletekey; Check: IsServer
 Root: HKLM; Subkey: "Software\Wachtl Server"; ValueType: string; ValueName: "Version"; ValueData: "{#AppVersion}"; Check: IsServer
 
+; Tray-Symbol bei jeder Anmeldung (alle Benutzer); je Rolle ein eigener Eintrag, damit eine Deinstallation den anderen nicht löscht
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Wachtl Tray"; ValueData: """{app}\wachtl-tray.exe"""; Flags: uninsdeletevalue; Check: IsClient and TrayWanted
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Wachtl Server Tray"; ValueData: """{app}\wachtl-tray.exe"""; Flags: uninsdeletevalue; Check: IsServer and TrayWanted
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Wachtl Tray"; Flags: deletevalue; Check: IsClient and not TrayWanted
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Wachtl Server Tray"; Flags: deletevalue; Check: IsServer and not TrayWanted
+Root: HKLM; Subkey: "{code:TrayRegKey}"; ValueType: dword; ValueName: "NoTray"; ValueData: 1; Flags: uninsdeletekey; Check: not TrayWanted
+Root: HKLM; Subkey: "{code:TrayRegKey}"; ValueName: "NoTray"; Flags: deletevalue; Check: TrayWanted
+
 [Run]
 Filename: "{code:GetUrl}"; Description: "Wachtl im Browser öffnen"; Flags: postinstall shellexec nowait skipifsilent; Check: ServerSucceeded
 Filename: "notepad.exe"; Parameters: """{code:GetDataDir}\setup-info.txt"""; Description: "Zugangsdaten und SPKI-Pin anzeigen"; Flags: postinstall nowait skipifsilent unchecked; Check: ServerSucceeded
 
 [UninstallRun]
+; Tray-Symbole aller angemeldeten Benutzer schließen
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM wachtl-tray.exe"; Flags: runhidden waituntilterminated; RunOnceId: "StopTray"
 ; ---- Probe: zuerst am Server abmelden (Token wird dort ungültig), dann Dienst, Prozesse und Firewall-Regeln ----
 Filename: "{app}\wachtl-probe.exe"; Parameters: "deregister --out ""{commonappdata}\Wachtl\deregister.ini"""; Flags: runhidden waituntilterminated; RunOnceId: "Deregister"; Check: IsClient
 Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "StopWachtl"; Check: IsClient
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"; Check: IsClient
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"; Check: IsClient
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe,wachtl-tray -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"; Check: IsClient
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule ""name=Wachtl Probe iperf3"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"; Check: IsClient
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\iperf3\iperf3.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallIperf"; Check: IsClient
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\wachtl-probe.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallProbe"; Check: IsClient
@@ -120,6 +135,7 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{app}\python\python.exe"; Parameters: "-m wachtl.win.installer uninstall --result ""{commonappdata}\Wachtl Server Deinstallation.ini"""; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "WachtlUninstall"; Check: IsServer
 
 [UninstallDelete]
+Type: files; Name: "{app}\wachtl-tray.old"
 Type: files; Name: "{commonappdata}\Wachtl\state.json"; Check: IsClient
 Type: files; Name: "{commonappdata}\Wachtl\state.json.tmp"; Check: IsClient
 Type: files; Name: "{commonappdata}\Wachtl\config.json"; Check: IsClient
@@ -204,6 +220,35 @@ begin
     Result := '{B7E2C1A4-3D5F-4C8E-9A61-2F7D0E9B4C13}'
   else
     Result := '{4D6A9E31-7C2B-4F58-B1E0-93A5C7D2F861}';
+end;
+
+var
+  TrayDecided, TrayOn: Boolean;
+
+function TrayRegKey(Param: String): String;
+begin
+  if IsServer() then
+    Result := 'Software\Wachtl Server'
+  else
+    Result := 'Software\Wachtl Probe';
+end;
+
+{ Symbol ja/nein: /NoTray schaltet ab, /Tray wieder an; ohne Parameter bleibt die Wahl der letzten Installation }
+function TrayWanted(): Boolean;
+var
+  I: Integer;
+begin
+  if not TrayDecided then
+  begin
+    TrayOn := not RegValueExists(HKLM, TrayRegKey(''), 'NoTray');
+    for I := 1 to ParamCount do
+      if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
+        TrayOn := False
+      else if CompareText(ParamStr(I), '/Tray') = 0 then
+        TrayOn := True;
+    TrayDecided := True;
+  end;
+  Result := TrayOn;
 end;
 
 function GetDefaultDir(Param: String): String;
@@ -1005,6 +1050,9 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
+  // Tray-Symbole laufen weiter: laufende wachtl-tray.exe umbenennen statt beenden, die neue kommt daneben
+  DeleteFile(ExpandConstant('{app}\wachtl-tray.old'));
+  RenameFile(ExpandConstant('{app}\wachtl-tray.exe'), ExpandConstant('{app}\wachtl-tray.old'));
   // laufenden Dienst vor dem Kopieren stoppen, sonst sind Dateien gesperrt
   if IsClient() then
     RunHidden(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName)
@@ -1221,6 +1269,8 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Code: Integer;
 begin
   if CurStep = ssPostInstall then
   begin
@@ -1228,6 +1278,10 @@ begin
       SetupClient()
     else
       SetupServer();
+    { Tray-Symbol gleich für den angemeldeten Benutzer zeigen. Unbeaufsichtigt läuft das Setup meist als SYSTEM
+      (Softwareverteilung) – dann erscheint es ab der nächsten Anmeldung über den Autostart. }
+    if TrayWanted() and not WizardSilent() and ((IsClient() and ClientOk) or (IsServer() and ServerOk)) then
+      ExecAsOriginalUser(ExpandConstant('{app}\wachtl-tray.exe'), '', '', SW_SHOWNORMAL, ewNoWait, Code);
   end;
 end;
 

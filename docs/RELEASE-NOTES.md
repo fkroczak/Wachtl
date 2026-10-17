@@ -3,6 +3,16 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.6
+
+- **Wachtl-Symbol neben der Uhr** auf jedem Client mit Probe und auf dem Windows-Server: **Problem melden …**, **Über Wachtl** (was Wachtl ist und macht, Verbindung, Standort, Version) und **Beenden** (schließt nur das Symbol, der Messdienst läuft weiter). Auf dem Server zusätzlich **Dashboard öffnen**. Das Programm nutzt das in Windows enthaltene .NET Framework und ist rund 100 KB groß.
+- **Störungsmeldungen**: Benutzer erfassen erlebte Netzprobleme – Zeitpunkt **Jetzt** (vorausgewählt) oder eine einstellbare Uhrzeit der letzten 7 Tage, Art der Störung, ungefähre Dauer und optional eine Beschreibung. Die Meldung geht über den Wachtl-Dienst mit Zertifikats-Pinning an den Server; ohne Verbindung wird sie gespeichert und nachgeliefert.
+- **Meldungen im Web-UI**: neue Seite „Meldungen“ (mit Zahl der offenen in der Navigation), Abschnitt in der Übersicht, auf Probe- und Standortseite. Operatoren markieren Meldungen als erledigt (Audit-Log).
+- **Meldungen in den Graphen**: senkrechte Markierung genau zum gemeldeten Zeitpunkt in Latenz-, Verlust- und Bandbreitengraphen der Probe – mit Details im Tooltip. So sieht man sofort, ob die Messwerte zur Störung passen.
+- Setup-Parameter `/NoTray` lässt das Symbol weg. Details: `docs/STOERUNGSMELDUNGEN.md`.
+
+Bei einem Update einfach das neue `WachtlSetup` über die alte Installation laufen lassen. Das Symbol erscheint sofort für den angemeldeten Benutzer, auf allen anderen PCs ab der nächsten Anmeldung.
+
 ## Neu in 0.5
 
 - **Ein Setup für alles**: `WachtlSetup` installiert eine Probe (Standard) oder den Server. Vorhandene Probes und Server (bis 0.4 zwei getrennte Setups) werden an Ort und Stelle aktualisiert.

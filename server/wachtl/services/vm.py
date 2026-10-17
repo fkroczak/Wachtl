@@ -84,10 +84,16 @@ def _hop_sel(probe_id: int, check_id: int, hop: int | None) -> str:
     return sel if hop is None else sel + f',hop="{int(hop):02d}"'
 
 
-def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = None) -> dict:
-    """Latenz (avg/min/max), Jitter und Paketverlust für den Graphen der Ziel- bzw. Hop-Detailseite."""
+def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = None,
+                at: int | None = None) -> dict:
+    """Latenz (avg/min/max), Jitter und Paketverlust für den Graphen der Ziel- bzw. Hop-Detailseite.
+
+    ``at`` (Unix-Sekunden) legt das Fenster mittig um diesen Zeitpunkt, z. B. eine Störungsmeldung;
+    ohne ``at`` endet es jetzt.
+    """
     span = RANGES.get(range_key, 3600)
-    end = int(time.time())
+    now = int(time.time())
+    end = now if at is None else max(min(int(at) + span // 2, now), now - 400 * 86400)
     start = end - span
     use_agg = span > current_app.config["RAW_QUERY_MAX_S"]
     step = max(span // 600, 60 if use_agg else 1)
@@ -120,7 +126,8 @@ def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = 
         result = _get(base, "/api/v1/query_range", {"query": query, "start": start, "end": end, "step": step})
         values = result[0]["values"] if result else []
         series[key] = [[int(ts) * 1000, _num(v)] for ts, v in values]
-    return {"range": range_key, "step_s": step, "source": "agg" if use_agg else "raw", "series": series}
+    return {"range": range_key, "step_s": step, "source": "agg" if use_agg else "raw", "series": series,
+            "start": start, "end": end}
 
 
 def ping_stats(probe_id: int, check_id: int, hop: int | None = None) -> dict[str, dict]:

@@ -19,6 +19,7 @@
   --off: #857868;
   --field-border: #8c7f70;  /* Rand von Eingabefeldern: ≥ 3:1 (WCAG 1.4.11) */
   --focus: #1d4ed8;         /* Fokusring, auf hellen und braunen Flächen sichtbar */
+  --report: #7b3fa8;        /* Störungsmeldungen: Markierung im Graph, Badge – unterscheidbar von Status und Jitter */
   --radius: 8px;
   font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
   font-size: 15px;
@@ -44,6 +45,7 @@
     --off: #7c7064;
     --field-border: #7c7064;
     --focus: #93c5fd;
+    --report: #c9a2f5;
   }
 }
 * { box-sizing: border-box; }
@@ -282,3 +284,19 @@ tr.firing td { background: color-mix(in srgb, var(--bad) 6%, transparent); }
 .cause-loss { border-color: var(--ochre); }
 .cause-reference, .cause-target { border-color: var(--accent); }
 .notes { margin: 0.5rem 0; padding-left: 1.2rem; }
+
+/* 0.5: Störungsmeldungen */
+.nav-count { display: inline-block; min-width: 1.4em; margin-left: 0.3rem; padding: 0 0.35rem; border-radius: 999px;
+  background: var(--bar-text); color: var(--bar-bg); font-size: 0.75rem; font-weight: 700; text-align: center; line-height: 1.4; }
+.badge.report-open { background: color-mix(in srgb, var(--report) 12%, var(--surface)); color: var(--report); }
+.report-text { white-space: normal; min-width: 12rem; max-width: 28rem; overflow-wrap: anywhere; }
+form.report-action { margin-top: 0.3rem; }
+form.report-action input { width: 9rem; }
+.pager { display: flex; gap: 0.6rem; margin: 0.8rem 0; }
+.c-report { stroke: var(--report); stroke-width: 2; stroke-dasharray: 5 3; }
+.c-report-mark { fill: var(--report); }
+.c-report-hit { stroke: transparent; stroke-width: 12; }
+.lg-report { border-left: 2px dashed var(--report); width: 0 !important; height: 12px !important; margin-right: 0.3rem; }
+.chart-tip .tip-report { color: var(--report); font-weight: 600; margin-top: 0.3rem; }
+.chart-tip { max-width: 300px; }
+.chart-tip div { overflow-wrap: anywhere; }

@@ -8,14 +8,14 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 | Punkt | Wert |
 | --- | --- |
 | Betriebssystem | Windows Server 2016, 2019, 2022 oder 2025 (x64), auch Windows 10/11 für Tests |
-| Hardware | 2 vCPU, 4 GB RAM, 10 GB frei im Datenordner (25 Probes × 10 Ziele) |
+| Hardware | bis 25 Probes: 2 vCPU, 4 GB RAM, 10 GB frei · bis 100 Probes: 4 vCPU, 8 GB RAM, 40 GB frei (Richtwerte bei je 10 Zielen, 30 Tage Rohdaten; Details: [BETRIEB.md](BETRIEB.md#größe-und-speicherplatz)) |
 | Rechte | lokaler Administrator für die Installation |
 | Ports | eingehend 443 (HTTPS) und optional 80 (Umleitung) – frei wählbar, falls IIS sie belegt |
 | Sonstiges | nichts – Python, Datenbank und alle Dienste bringt das Setup mit, kein Docker, kein IIS |
 
 ## Installation mit dem Assistenten
 
-`WachtlSetup-0.5.0.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
+`WachtlSetup-0.6.0.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
 
 1. **Rolle** – „Wachtl-Server“ wählen (Standard ist Probe). Programmordner: `C:\Program Files\Wachtl Server`.
 2. **Server-Adresse** – DNS-Namen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). Die IP-Adressen des Servers ergänzt das Setup selbst – Probes weichen darauf aus, wenn ein Name am Standort nicht auflösbar ist. HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
@@ -43,7 +43,7 @@ daraus mit einem Klick ein vorbelegtes Setup für die PCs (alle Adressen, Pin un
 ## Unbeaufsichtigte Installation
 
 ```powershell
-.\WachtlSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
+.\WachtlSetup-0.6.0.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
     /Hostnames="wachtl.kunde.local" /AdminPassword="…" `
     /HttpsPort=443 /HttpPort=80 /DataDir="D:\Wachtl" /RawDays=30 /AggMonths=13 `
     /EmailTo=it@kunde.de /EmailFrom=wachtl@kunde.de /SmtpHost=mail.kunde.de:587 /TeamsUrl=https://…
@@ -82,6 +82,13 @@ Konfiguration (Ports, Aufbewahrung) steht in `<Daten>\config\wachtl.env`. Nach �
 Neue Servernamen: Setup erneut ausführen ist der einfachste Weg; alternativ `WACHTL_HOSTNAMES` anpassen – das Zertifikat
 wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin bleibt gleich.
 
+### Tray-Symbol
+
+Neben der Uhr erscheint für jeden angemeldeten Benutzer das Wachtl-Symbol mit **Problem melden …**, **Über Wachtl**,
+**Dashboard öffnen** und **Beenden**. Meldungen vom Server laufen über die Server-Probe (lokal auf `127.0.0.1:47251`) und
+erscheinen wie die der Clients unter „Meldungen“. Ohne Symbol installieren: Setup-Parameter `/NoTray`.
+Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
+
 ## Ordner und Logs
 
 | Pfad | Inhalt |
@@ -99,7 +106,7 @@ wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin blei
 
 | | Linux (Docker) | Windows |
 | --- | --- | --- |
-| Datenbank | PostgreSQL | SQLite (für bis zu 25 Probes mehr als ausreichend) |
+| Datenbank | PostgreSQL | SQLite (bis etwa 100 Probes; darüber die Linux-Variante mit PostgreSQL) |
 | TLS | Traefik | im Collector (cheroot), TLS ≥ 1.2, HSTS |
 | Prozesse | ein Container je Dienst | ein Windows-Dienst, der alle Teilprozesse überwacht und neu startet |
 | Einrichtung | `setup.sh` | Setup-Assistent |

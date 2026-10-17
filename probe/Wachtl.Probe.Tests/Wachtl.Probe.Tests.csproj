@@ -18,6 +18,11 @@
     <ProjectReference Include="..\Wachtl.Probe\Wachtl.Probe.csproj" />
   </ItemGroup>
 
+  <!-- WinForms-freie Logik von wachtl-tray.exe (net462) mittesten, auch gegen den echten Tray-Endpunkt -->
+  <ItemGroup>
+    <Compile Include="..\Wachtl.Tray\Core\*.cs" Link="TrayCore\%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>

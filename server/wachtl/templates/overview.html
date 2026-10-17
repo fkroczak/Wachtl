@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
+{% from "_reports.html" import report_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <h1>Übersicht</h1>
@@ -40,6 +41,13 @@
   </tbody>
 </table>
 {% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
+
+<h2 id="meldungen">Störungsmeldungen</h2>
+{% if recent_reports %}
+<p class="muted">Offene Meldungen von Benutzern aus den letzten 7 Tagen{% if recent_reports_total > recent_reports|length %} – die neuesten {{ recent_reports|length }} von {{ recent_reports_total }}{% endif %}.
+  <a href="{{ url_for('web.reports_view') }}">Alle Meldungen ansehen</a></p>
+{{ report_table(recent_reports, show_site=True, show_status=False) }}
+{% else %}<p class="muted">Keine offenen Meldungen in den letzten 7 Tagen. <a href="{{ url_for('web.reports_view', status='all') }}">Alle Meldungen ansehen</a></p>{% endif %}
 
 <h2>Aktive Alarme</h2>
 {% if alerts %}

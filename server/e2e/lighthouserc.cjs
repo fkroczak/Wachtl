@@ -11,7 +11,7 @@ module.exports = {
     collect: {
       url: [
         "/login", "/", `/sites/${ids.site}`, `/probes/${ids.probe}`, `/probes/${ids.probe}/checks/${ids.ping_check}`,
-        "/alerts", "/admin", "/admin/checks/new/iperf",
+        "/alerts", "/meldungen?status=all", "/admin", "/admin/checks/new/iperf",
       ].map((p) => BASE + p),
       numberOfRuns: 3,
       ...(process.env.CHROME_PATH ? { chromePath: process.env.CHROME_PATH } : {}),

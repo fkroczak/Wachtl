@@ -36,6 +36,9 @@ if ($Part -eq 'Probe') {
     if (Test-Path C:\ProgramData\Wachtl\state.json) { $problems.Add('Token C:\ProgramData\Wachtl\state.json') }
     if (Test-Path C:\ProgramData\Wachtl) { $problems.Add('Datenordner C:\ProgramData\Wachtl (unbeaufsichtigt wird er gelöscht)') }
     if (Get-Process iperf3 -ErrorAction SilentlyContinue | Where-Object Path -like "${env:ProgramFiles}\Wachtl\*") { $problems.Add('iperf3.exe der Probe läuft noch') }
+    if (Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Wachtl Tray' -ErrorAction SilentlyContinue) { $problems.Add('Autostart-Eintrag Wachtl Tray') }
+    if (Get-Process wachtl-tray -ErrorAction SilentlyContinue | Where-Object Path -like "${env:ProgramFiles}\Wachtl\*") { $problems.Add('wachtl-tray.exe der Probe läuft noch') }
+    if (Get-NetTCPConnection -LocalPort 47252 -State Listen -ErrorAction SilentlyContinue) { $problems.Add('Tray-Endpunkt 127.0.0.1:47252 lauscht noch') }
 
     # Server: CI-PROBE ist abgemeldet, ihr Token ungültig
     $login = Invoke-WebRequest "$base/login" -SkipCertificateCheck -SessionVariable s
@@ -54,13 +57,14 @@ else {
     $byProgram = Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue | Where-Object Program -like "${env:ProgramFiles}\Wachtl Server\*"
     if ($byProgram) { $problems.Add("Firewall-Regeln für $(($byProgram.Program | Sort-Object -Unique) -join ', ')") }
     if (Get-ScheduledTask -TaskName 'Wachtl Server Backup' -ErrorAction SilentlyContinue) { $problems.Add('Geplante Aufgabe Wachtl Server Backup') }
-    foreach ($port in 8443, 8080, 5201) {
+    foreach ($port in 8443, 8080, 5201, 47251) {
         if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) { $problems.Add("Port $port lauscht noch") }
     }
-    if (Get-Process python, iperf3, victoria-metrics, vmalert, alertmanager -ErrorAction SilentlyContinue |
+    if (Get-Process python, iperf3, victoria-metrics, vmalert, alertmanager, wachtl-tray -ErrorAction SilentlyContinue |
             Where-Object Path -like "${env:ProgramFiles}\Wachtl Server\*") { $problems.Add('Prozesse aus dem Programmordner laufen noch') }
     if (Test-Path C:\WachtlData) { $problems.Add('Datenordner C:\WachtlData trotz /REMOVEDATA') }
     if (Test-Path 'HKLM:\Software\Wachtl Server') { $problems.Add('Registry-Schlüssel HKLM\Software\Wachtl Server') }
+    if (Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Wachtl Server Tray' -ErrorAction SilentlyContinue) { $problems.Add('Autostart-Eintrag Wachtl Server Tray') }
 }
 
 if ($problems.Count) {

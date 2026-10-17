@@ -6,7 +6,7 @@ WACHTL_*-Umgebung wie der Server, initialisierte Datenbank (flask --app wachtl i
 python devtools/seed_demo.py http://127.0.0.1:5000 [ids.json]
 
 Legt zwei Standorte, zwei simulierte Probes mit Ping-Daten, einen Pfad- und einen WAN-Check samt
-Ergebnissen sowie aktive und beendete Alarme an. Idempotent ist es nicht – für eine frische DB gedacht.
+Ergebnissen, aktive und beendete Alarme sowie Störungsmeldungen (offen und erledigt) an. Idempotent ist es nicht – für eine frische DB gedacht.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from wachtl import checktypes, create_app, repo  # noqa: E402
+from wachtl import checktypes, create_app, repo, reports  # noqa: E402
 from wachtl.db import ins  # noqa: E402
 from wachtl.security import hash_token  # noqa: E402
 from wachtl.services import alerts  # noqa: E402
@@ -79,6 +79,21 @@ def main(base: str) -> dict:
              "labels": {"alertname": "WachtlProbeOffline", "severity": "critical", "probe": "1"},
              "annotations": {"summary": "Probe PC-EMPFANG offline"}},
         ]})
+        # Störungsmeldungen über dieselbe Prüfung wie die Probe-API (Tray-Symbol → Dienst → Server)
+        probes = {1: {"id": 1, "site_id": site, "hostname": "PC-EMPFANG"},
+                  2: {"id": 2, "site_id": site, "hostname": "SRV-DC01"}}
+        demo_reports = [
+            (1, 1200, "slow", "minutes", "Teams-Call ruckelt, Bildschirmfreigabe hängt", "KUNDE\\mmuster"),
+            (2, 2 * 3600, "voice_video", "short", "Telefon hat kurz keinen Ton", "KUNDE\\abecker"),
+            (1, 26 * 3600, "no_connection", "long", "Internet komplett weg, auch Outlook offline", "KUNDE\\mmuster"),
+            (2, 3 * 86400, "application", "ongoing", "DATEV lädt sehr langsam", ""),
+        ]
+        for i, (probe_id, ago, category, duration, text, user) in enumerate(demo_reports):
+            rid, _ = reports.store(probes[probe_id], reports.validate({
+                "report_id": f"00000000-0000-4000-8000-{i:012d}", "occurred_at": now - ago, "category": category,
+                "duration": duration, "description": text, "user": user, "hostname": probes[probe_id]["hostname"]}))
+            if category == "no_connection":
+                reports.set_status({"id": rid}, "done", "admin", "Störung beim Provider, behoben")
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
     return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan}
 

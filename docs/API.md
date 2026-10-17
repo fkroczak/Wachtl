@@ -13,6 +13,7 @@ Authentifizierung: `Authorization: Bearer <probe_id>.<secret>` (außer `enroll`)
 | POST | `/ingest` | Prometheus-Text, optional `Content-Encoding: gzip`, Header `X-Batch-Id` | 204 gespeichert oder bereits bekannt · 422 alle Zeilen verworfen · 503 Speicher nicht erreichbar (Probe wiederholt) |
 | POST | `/heartbeat` | `{"version", "os", "hostname", "buffer_items", "uptime_s"}` | 200 `{"config_etag", "server_time"}` |
 | POST | `/deregister` | `{}` | 204 – Probe abgemeldet (Deinstallation): deaktiviert, Token ab sofort ungültig, offene Aufträge verworfen |
+| POST | `/report` | `{"report_id", "occurred_at", "category", "duration", "description", "user", "hostname"}` | 201 `{"id"}` neu · 200 `{"id"}` dieselbe `report_id` gab es schon · 400 `{"error"}` (deutsch) – Störungsmeldung vom Tray-Symbol, Details in STOERUNGSMELDUNGEN.md |
 
 Fehler bei Authentifizierung: 401 (Token fehlt/falsch), 403 (Probe deaktiviert).
 
@@ -40,10 +41,18 @@ Authentifizierung über die Web-Sitzung; ändernde Aufrufe brauchen den Header `
 | GET | `/checks` | Nur lesen | Checks |
 | GET | `/check-status` | Nur lesen | `[{"probe_id", "hostname", "online", "check_id", "name", "type", "state", "detail", "ts"}]` – Zustand jeder Messung aller aktiven Probes; `state` = `ok`, `warn`, `down`, `stale` (keine Daten/überfällig) oder `waiting` |
 | GET | `/status` | Nur lesen | `[{"probe", "check_id", "up", "rtt", "loss"}]` – letzter Zustand aller Ziele |
-| GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "series": {"avg", "min", "max", "loss": [[ts_ms, wert], …]}}` |
+| GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d[&at=<unix>]` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "start", "end", "series": {"avg", "min", "max", "loss": [[ts_ms, wert], …]}}` – `at` legt das Fenster mittig um diesen Zeitpunkt (z. B. eine Störungsmeldung), ohne `at` endet es jetzt |
 | GET | `/probes/{id}/checks/{id}/stats` | Nur lesen | `{"1m"\|"5m"\|"15m"\|"1h"\|"24h": {"min", "median", "avg", "max", "jitter", "loss"}}` |
 | GET | `/alerts?status=firing\|resolved` | Nur lesen | Alarme |
 | POST | `/alerts/{id}/ack` | Operator | `{"hours": 4, "comment": "…"}` → `{"silence_id"}` |
+
+Störungsmeldungen für die Graph-Markierungen (Pfad ohne `/v1`, wie im Vertrag STOERUNGSMELDUNGEN.md):
+
+| Methode | Pfad | Rolle | Antwort |
+| --- | --- | --- | --- |
+| GET | `/api/reports?from=<unix>&to=<unix>[&probe_id=<id>][&site_id=<id>]` | Nur lesen | `{"reports": [{"id", "ts", "probe_id", "probe", "site", "category", "category_label", "duration_label", "description", "user", "status"}]}`, zeitlich aufsteigend; ohne `from`/`to` die letzten 24 h · 400 bei ungültigen Zahlen |
+
+Web-UI: `/meldungen?status=open|done|all&site=<id>&probe=<id>&page=<n>`; `POST /meldungen/<id>/status` (`action=done|open`, `note`, CSRF, Operator) mit Audit-Eintrag `report.done` / `report.reopen`.
 
 ## Intern
 

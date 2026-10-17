@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    wachtl-tray.exe: Tray-Symbol für die Benutzersitzung. .NET Framework 4.6.2 ist in Windows 10 1607 /
+    Server 2016 enthalten – es wird keine Laufzeit beigelegt, die .exe bleibt wenige hundert KB groß.
+    Keine NuGet-Abhängigkeiten zur Laufzeit (Microsoft.NETFramework.ReferenceAssemblies nur zum Bauen).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>wachtl-tray</AssemblyName>
+    <RootNamespace>Wachtl.Tray</RootNamespace>
+    <Version>0.6.0</Version>
+    <Product>Wachtl Tray</Product>
+    <Company>Wachtl</Company>
+    <Description>Wachtl – Netzwerk-Monitoring: Tray-Symbol und „Problem melden“</Description>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationIcon>..\Wachtl.Probe\wachtl.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Nur die .exe ausliefern: keine .exe.config, keine .pdb im Release -->
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- WinForms direkt aus dem Framework statt UseWindowsForms: baut so auch mit dem Linux-SDK (kein WindowsDesktop-SDK nötig). -->
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Runtime.Serialization" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\Wachtl.Probe\wachtl.ico" LogicalName="Wachtl.Tray.wachtl.ico" />
+  </ItemGroup>
+
+</Project>

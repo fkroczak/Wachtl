@@ -7,7 +7,7 @@ Ein Server pro Kunde, als Linux-VM mit Docker. Für Windows Server gibt es einen
 
 | Punkt | Empfehlung |
 | --- | --- |
-| VM | Debian 13 oder Ubuntu 24.04/26.04 LTS, 2 vCPU, 4 GB RAM, 40 GB SSD (reicht für 25 Probes × 10 Ziele) |
+| VM | Debian 13 oder Ubuntu 24.04/26.04 LTS, 2 vCPU, 4 GB RAM, 40 GB SSD für bis zu 25 Probes × 10 Ziele; mehr Probes: [BETRIEB.md](BETRIEB.md#größe-und-speicherplatz) |
 | Netz | Feste IP oder DNS-Name, erreichbar von allen Standorten (VPN/MPLS) |
 | Firewall | Eingehend TCP 443 (Probes, Browser), optional TCP 80 (Weiterleitung auf 443). Ausgehend: SMTP-Server und/oder `*.logic.azure.com`/`*.powerplatform.com` für Teams |
 | Zeit | NTP aktiv – Messwerte tragen Zeitstempel der Probes, große Abweichungen werden verworfen |

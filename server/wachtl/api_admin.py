@@ -6,6 +6,7 @@ import json
 from flask import Blueprint, jsonify, request
 
 from . import repo
+from . import reports as report_service
 from .db import q, q1
 from .security import check_csrf, current_user, login_required
 from .services import alerts as alert_service
@@ -106,7 +107,11 @@ def series(probe_id: int, check_id: int):
     except ValueError:
         return jsonify(error="hop muss zwischen 1 und 64 liegen"), 400
     try:
-        return jsonify(vm.ping_series(probe_id, check_id, range_key, hop))
+        at = _int_arg("at")
+    except ValueError:
+        return jsonify(error="at muss eine Unix-Zeit in Sekunden sein"), 400
+    try:
+        return jsonify(vm.ping_series(probe_id, check_id, range_key, hop, at))
     except vm.VMError as exc:
         return jsonify(error=str(exc)), 502
 
@@ -183,3 +188,29 @@ def ack(event_id: int):
         return jsonify(error=str(exc)), 502
     repo.audit(user["username"], "alert.ack", f"alert:{event_id}", f"{hours} h")
     return jsonify(silence_id=silence)
+
+
+# -- Störungsmeldungen für die Graph-Markierungen (Pfad laut docs/STOERUNGSMELDUNGEN.md) ------
+reports_bp = Blueprint("api_reports", __name__, url_prefix="/api")
+
+
+def _int_arg(name: str, default: int | None = None) -> int | None:
+    raw = request.args.get(name, "")
+    if raw == "":
+        return default
+    return int(raw)
+
+
+@reports_bp.get("/reports")
+@login_required(api=True)
+def reports():
+    try:
+        until = _int_arg("to", repo.now())
+        since = _int_arg("from", until - 86400)
+        probe_id = _int_arg("probe_id")
+        site_id = _int_arg("site_id")
+    except ValueError:
+        return jsonify(error="from, to, probe_id und site_id müssen ganze Zahlen sein"), 400
+    if since > until:
+        return jsonify(error="from muss vor to liegen"), 400
+    return jsonify(reports=report_service.for_chart(since, until, probe_id, site_id))

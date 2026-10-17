@@ -14,6 +14,7 @@ import zlib
 from flask import Blueprint, abort, current_app, g, jsonify, request
 
 from . import repo
+from . import reports as report_service
 from .db import ex, ins, q1
 from .security import hash_token, new_secret, probe_auth
 from .services import alerts as alert_service
@@ -172,6 +173,24 @@ def deregister():
                f"Deinstallation, IP {_client_ip()}")
     log.info("Probe %s (%s) hat sich abgemeldet", g.probe["id"], g.probe["hostname"])
     return "", 204
+
+
+@bp.post("/report")
+@probe_auth
+def report():
+    """Störungsmeldung eines Benutzers (Tray-Symbol), zugestellt über den lokalen Wachtl-Dienst.
+
+    201 = neu gespeichert, 200 = dieselbe report_id gab es schon (Nachlieferung).
+    """
+    try:
+        values = report_service.validate(request.get_json(silent=True))
+    except report_service.ReportError as exc:
+        return jsonify(error=str(exc)), 400
+    rid, created = report_service.store(g.probe, values)
+    if created:
+        log.info("Probe %s: Störungsmeldung %s (%s) von %s", g.probe["hostname"], rid, values["category"],
+                 values["user"] or "unbekannt")
+    return jsonify(id=rid), 201 if created else 200
 
 
 def _addresses(raw) -> list[str]:

@@ -5,7 +5,7 @@
   Voraussetzungen auf dem Build-Rechner: .NET 8 SDK, Inno Setup 6 (sonst per choco).
 #>
 param(
-    [string]$Version = '0.5.0',
+    [string]$Version = '0.6.0',
     [string]$Output = "$PSScriptRoot\..\dist\probe",
     # Windows-Build von iperf3 (BSD-Lizenz), https://github.com/ar51an/iperf3-win-builds
     [string]$IperfVersion = '3.21',
@@ -20,6 +20,16 @@ dotnet publish "$PSScriptRoot\Wachtl.Probe\Wachtl.Probe.csproj" -c Release -r wi
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none `
   -p:Version=$Version -o $Output
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish fehlgeschlagen' }
+
+# Tray-Symbol (Problem melden, Über, Beenden): .NET Framework 4.6.2 – in Windows enthalten, keine Laufzeit beilegen
+dotnet build "$PSScriptRoot\Wachtl.Tray\Wachtl.Tray.csproj" -c Release -p:Version=$Version
+if ($LASTEXITCODE -ne 0) { throw 'dotnet build (Tray) fehlgeschlagen' }
+Copy-Item "$PSScriptRoot\Wachtl.Tray\bin\Release\net462\wachtl-tray.exe" $Output -Force
+$traySize = (Get-Item "$Output\wachtl-tray.exe").Length
+Write-Host "wachtl-tray.exe: $([math]::Round($traySize / 1KB)) KB"
+if ($traySize -gt 2MB) { throw 'wachtl-tray.exe ist größer als 2 MB – wurde eine Laufzeit mitgepackt?' }
+$trayVersion = (Get-Item "$Output\wachtl-tray.exe").VersionInfo.ProductVersion
+if (-not $trayVersion.StartsWith($Version)) { throw "wachtl-tray.exe hat Version $trayVersion statt $Version" }
 
 & "$Output\wachtl-probe.exe" --version
 if ($LASTEXITCODE -ne 0) { throw 'wachtl-probe.exe startet nicht' }

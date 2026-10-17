@@ -11,7 +11,7 @@ mit einem fertigen Paket installiert. Rechne mit etwa 30 Minuten für den Server
 
 | Variante | Was tun |
 |---|---|
-| Windows Server | `WachtlSetup-0.5.0.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
+| Windows Server | `WachtlSetup-0.6.0.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
 | Linux-VM mit Docker | `sudo ./setup.sh wachtl.kunde.local` im Ordner `deploy`. Details: [INSTALL-SERVER.md](INSTALL-SERVER.md) |
 
 Am Ende zeigt das Setup die Adresse, den Admin-Zugang und den **SPKI-Pin**. Zugangsdaten sofort im
@@ -46,7 +46,9 @@ Bei sehr vielen PCs an einem Standort reicht es, die Bandbreiten-Checks nur eine
 1. **Verwaltung › Probes registrieren**: Standort wählen, „Für wie viele PCs“ eintragen, **Setup herunterladen**.
 2. Auf jedem PC `WachtlSetup-<Standort>.exe` als Administrator starten und **Installieren** klicken. Server, Pin und
    Token sind eingebaut; ist der Server gerade nicht erreichbar, meldet sich die Probe später selbst an.
-4. Nach 30 Sekunden steht der PC in der Übersicht unter **Probes** mit „online“.
+3. Nach 30 Sekunden steht der PC in der Übersicht unter **Probes** mit „online“.
+4. Neben der Uhr erscheint das Wachtl-Symbol. Test: Rechtsklick › **Problem melden …** › Senden – die Meldung steht
+   kurz darauf unter **Meldungen** und als Markierung im Graphen dieser Probe.
 
 Für viele PCs per Softwareverteilung: siehe [INSTALL-PROBE.md](INSTALL-PROBE.md), Abschnitt „Unbeaufsichtigt“.
 

@@ -36,12 +36,22 @@ Mehrere Server-Adressen mit Komma trennen. Ist die Probe schon installiert, frag
 ```powershell
 WachtlSetup-Standort.exe /VERYSILENT /SUPPRESSMSGBOXES
 # ohne Vorbelegung:
-WachtlSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
+WachtlSetup-0.6.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
 Exit-Code 0 = Probe läuft (angemeldet oder Anmeldung folgt automatisch), 10 = nicht betriebsbereit (Grund im `/LOG`,
 z. B. Token abgelaufen). `/SUPPRESSMSGBOXES` ist unbeaufsichtigt Pflicht. Parameter überschreiben die Vorbelegung.
 Auf einem bereits registrierten PC aktualisiert ein unbeaufsichtigter Lauf nur das Programm.
+
+`/NoTray` lässt das Tray-Symbol weg (kein Autostart-Eintrag); spätere Updates behalten das bei, `/Tray` schaltet es wieder ein. Unbeaufsichtigt per Softwareverteilung läuft das Setup
+meist als SYSTEM – das Symbol erscheint dann bei der nächsten Anmeldung der Benutzer.
+
+### Tray-Symbol: Problem melden
+
+Neben der Uhr zeigt das Wachtl-Symbol (`wachtl-tray.exe`, startet bei jeder Anmeldung) die Einträge **Problem melden …**,
+**Über Wachtl** und **Beenden**. Benutzer melden damit erlebte Netzprobleme mit Zeitpunkt (Jetzt oder eine einstellbare
+Uhrzeit), Art und Dauer; die Meldung erscheint im Web-UI unter „Meldungen“ und als Markierung in den Graphen dieser Probe.
+Verknüpfung im Startmenü: *Wachtl – Problem melden*. Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
 
 ## Deinstallation
 
