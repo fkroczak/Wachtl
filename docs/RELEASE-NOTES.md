@@ -3,6 +3,11 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.7
+
+- **Probes geführt einrichten**: Verwaltung › „Probes einrichten (geführt)“ fragt in vier Schritten alles Wichtige ab – Standort, Messungen (Standardpaket, bereits angehakt), Alarmierung per E-Mail oder Teams und die Anzahl der PCs – und bietet danach direkt das fertige Setup an. Alle Werte sind mit Standards vorbelegt; bei einem Fehler wird nichts halb angelegt.
+- **Ruhigere, neutrale Farben**: Grautöne mit einer zurückhaltenden Akzentfarbe statt Braun/Ocker, hell und dunkel.
+
 ## Neu in 0.6
 
 - **Wachtl-Symbol neben der Uhr** auf jedem Client mit Probe und auf dem Windows-Server: **Problem melden …**, **Über Wachtl** (was Wachtl ist und macht, Verbindung, Standort, Version) und **Beenden** (schließt nur das Symbol, der Messdienst läuft weiter). Auf dem Server zusätzlich **Dashboard öffnen**. Das Programm nutzt das in Windows enthaltene .NET Framework und ist rund 100 KB groß.

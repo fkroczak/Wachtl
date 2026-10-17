@@ -77,7 +77,7 @@
   </a>
   {% endfor %}
 </div>
-{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.admin') }}#standorte">Jetzt anlegen</a>{% endif %}</p>{% endif %}
+{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.setup_wizard') }}">Geführt einrichten</a>{% endif %}</p>{% endif %}
 
 <h2>Probes</h2>
 {% if probes %}
@@ -103,7 +103,7 @@
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p class="muted">Noch keine Probes registriert.</p>{% endif %}
+{% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
 <h2 id="bandbreite">Bandbreite</h2>
 {% if bandwidth %}

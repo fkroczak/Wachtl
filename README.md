@@ -28,7 +28,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Alarme | Probe offline, Ziel nicht erreichbar (3 Fehler in Folge), WAN gestört, Paketverlust, Latenz; Bestätigen = Stummschalten; Historie |
 | Betrieb | Linux: `setup.sh`, `backup.sh`/`restore.sh` · Windows: Setup-Assistent, `wachtl-server.cmd` |
 | Installation | Ein Setup `WachtlSetup` für Probe (Standard) und Server. Im Web-UI „Setup herunterladen“: alle Server-Adressen (Name und IP), Pin und Token eingebaut – auf dem PC nur „Installieren“. Ausweichen auf die IP, wenn ein Name nicht auflösbar ist; Anmeldung wird nachgeholt, wenn der Server bei der Installation nicht erreichbar ist |
-| Marke | Flaches Logo mit Wachtel-Umriss, Farben Wachtelbraun/Ocker/Weizen; Quelle `brand/render.py` |
+| Marke | Flaches Logo mit Wachtel-Umriss (Wachtelbraun/Ocker), Quelle `brand/render.py`; Oberfläche neutral grau mit gedämpftem Blau als Akzent |
 | Benachrichtigungen | E-Mail und Teams im Web-UI einstellbar, mit Testnachricht |
 | Pfade (0.3) | Traceroute + Dauerpings auf jeden Hop, MTR-Tabelle mit Bewertung (echter Verlust vs. ICMP-Drosselung, Latenzsprung), Pfadverlauf, Alarm bei Pfadwechsel |
 | Bandbreite (0.3) | iperf3 Probe ↔ Server und Probe ↔ Probe (TCP/UDP), WAN per HTTP oder iperf3; Zeitplan, Zeitfenster, Wochentage, „Jetzt messen“, Schwellwert-Alarm |
@@ -37,6 +37,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Standardpaket (0.4) | Ping, Traceroute, iperf3 und Speedtest mit einem Klick; Rollout-Anleitung [docs/ROLLOUT.md](docs/ROLLOUT.md) |
 | Deinstallation (0.4) | Probe meldet sich am Server ab, alle Firewall-Regeln und das Token werden entfernt; Server Windows/Linux (`deploy/uninstall.sh`) mit Prüfung auf offene Ports |
 | Tray-Symbol (0.6) | Symbol neben der Uhr auf Clients und Windows-Server: Problem melden, Über, Beenden ([docs/STOERUNGSMELDUNGEN.md](docs/STOERUNGSMELDUNGEN.md)) |
+| Geführte Einrichtung (0.7) | Verwaltung › Probes einrichten: Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten, mit Standards vorbelegt |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 

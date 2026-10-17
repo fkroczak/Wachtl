@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Probes einrichten{% endblock %}
+{% from "_forms.html" import field, error_summary %}
+{% block content %}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / Probes einrichten</nav>
+<h1>Probes einrichten</h1>
+<p class="muted">Vier Schritte, alles ist mit bewährten Standards vorbelegt. Prüfen, bei Bedarf anpassen, unten auf <strong>Einrichten</strong> klicken –
+  danach gibt es das fertige Setup für die PCs. Alles lässt sich später unter <a href="{{ url_for('web.admin') }}">Verwaltung</a> ändern.</p>
+{{ error_summary(errors) }}
+{% set f = form %}
+{% set n = notify_settings %}
+<form method="post" class="settings-form" data-check-form>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="steps">
+
+  <fieldset class="card">
+    <legend><h2>1 · Standort</h2></legend>
+    <p class="muted small">Wo stehen die PCs? Der Standort gruppiert die Probes in Übersicht und Alarmen.</p>
+    <div class="grid-form">
+      {% call(attrs) field("site_id", "Standort", error=field_errors.site_id) %}
+        <select name="site_id" {{ attrs }}>
+          <option value="new" {{ 'selected' if f.get('site_id', 'new' if not sites else '') == 'new' }}>Neuer Standort …</option>
+          {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if f.get('site_id') == s.id|string or (not f and loop.first) }}>{{ s.name }}</option>{% endfor %}
+        </select>
+      {% endcall %}
+      {% call(attrs) field("site_name", "Name des neuen Standorts", help="z. B. „Zentrale“ oder „Lager Coesfeld“", error=field_errors.site_name, show_if="site_id:new") %}
+        <input name="site_name" maxlength="100" value="{{ f.get('site_name', '') }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("customer_no", "Kundennummer (optional)", show_if="site_id:new") %}
+        <input name="customer_no" maxlength="20" value="{{ f.get('customer_no', '') }}" {{ attrs }}>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend><h2>2 · Messungen</h2></legend>
+    <p class="muted small">Das Standardpaket deckt LAN, Internet und den Weg zum Wachtl-Server ab. Was es schon gibt, wird nicht doppelt angelegt.</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th><span class="sr-only">Auswahl</span></th><th>Messung</th><th>Ziel</th><th>Wofür</th></tr></thead>
+      <tbody>{% for e in package %}
+        <tr class="{{ 'disabled' if e.exists or not e.available }}">
+          <td><input type="checkbox" name="items" value="{{ e.item.key }}" id="pkg-{{ e.item.key }}"
+                     {{ 'checked' if (e.item.key in f.getlist('items') if f else (e.available and not e.exists)) }} {{ 'disabled' if not e.available or e.exists }}></td>
+          <td><label for="pkg-{{ e.item.key }}">{{ e.item.name }}</label> <span class="muted small">{{ check_types[e.item.ctype].label }}</span>
+            {% if e.exists %}<span class="muted small">(schon vorhanden)</span>{% elif not e.available %}<span class="muted small">(Server-URL ohne Hostnamen)</span>{% endif %}</td>
+          <td>{{ e.target or '–' }}</td>
+          <td class="small">{{ e.item.description }}</td>
+        </tr>
+      {% endfor %}</tbody>
+    </table>
+    </div>
+    <div class="grid-form">
+      {% call(attrs) field("scope", "Gilt für", help="„Alle Probes“ ist für die meisten Kunden richtig – neue Standorte bekommen die Messungen dann automatisch.") %}
+        <select name="scope" {{ attrs }}>
+          <option value="all" {{ 'selected' if f.get('scope', 'all') == 'all' }}>alle Probes</option>
+          <option value="site" {{ 'selected' if f.get('scope') == 'site' }}>nur diesen Standort</option>
+        </select>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  <fieldset class="card">
+    <legend><h2>3 · Alarmierung</h2></legend>
+    <p class="muted small">Wer soll erfahren, wenn ein Standort, das Internet oder ein Ziel ausfällt? Leer lassen = keine Benachrichtigung.
+      SMTP-Benutzer und -Passwort stehen unter <a href="{{ url_for('web.admin') }}#benachrichtigungen">Verwaltung › Benachrichtigungen</a>.</p>
+    <div class="grid-form">
+      {% call(attrs) field("email_to", "E-Mail an", help="Mehrere Empfänger mit Komma trennen.", error=field_errors.email_to) %}
+        <input name="email_to" maxlength="500" value="{{ f.get('email_to', n.email_to) }}" placeholder="it@kunde.de" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("email_from", "Absender", error=field_errors.email_from) %}
+        <input name="email_from" maxlength="200" value="{{ f.get('email_from', n.email_from) }}" placeholder="wachtl@kunde.de" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("smtp_smarthost", "SMTP-Server", help="host:port, z. B. mail.kunde.de:587", error=field_errors.smtp_smarthost) %}
+        <input name="smtp_smarthost" maxlength="200" value="{{ f.get('smtp_smarthost', n.smtp_smarthost) }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("teams_webhook_url", "Microsoft-Teams-Webhook", help="optional, beginnt mit https://", error=field_errors.teams_webhook_url, wide=True) %}
+        <input name="teams_webhook_url" maxlength="1000" value="{{ f.get('teams_webhook_url', n.teams_webhook_url) }}" {{ attrs }}>
+      {% endcall %}
+    </div>
+    {% if rules %}
+    <p class="small">Aktive Alarmregeln (Standard): {% for r in rules %}{{ r.name }}{{ ', ' if not loop.last }}{% endfor %}.
+      <a href="{{ url_for('web.admin') }}#alarme">Schwellwerte ändern</a></p>
+    {% endif %}
+  </fieldset>
+
+  <fieldset class="card">
+    <legend><h2>4 · PCs</h2></legend>
+    <p class="muted small">Danach gibt es eine Setup-Datei mit Server, Pin und Token. Auf jedem PC starten und <em>Installieren</em> klicken.
+      {% if not probe_setup %}<strong>Hinweis:</strong> Auf diesem Server liegt noch kein Setup – dann zeigt Wachtl die Werte zum Eintragen.{% endif %}</p>
+    <div class="grid-form">
+      {% call(attrs) field("max_uses", "Für wie viele PCs", error=field_errors.max_uses) %}
+        <input name="max_uses" type="number" min="1" max="500" value="{{ f.get('max_uses', 25) }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("days", "Gültig", unit="Tage") %}
+        <input name="days" type="number" min="1" max="90" value="{{ f.get('days', 30) }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("proxy", "Proxy (optional)", help="Nur wenn die PCs den Server über einen Proxy erreichen.", error=field_errors.proxy) %}
+        <input name="proxy" maxlength="200" value="{{ f.get('proxy', '') }}" placeholder="http://proxy:3128" {{ attrs }}>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  </div>
+  <p><button class="primary">Einrichten</button></p>
+</form>
+{% endblock %}

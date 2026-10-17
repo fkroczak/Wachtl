@@ -15,7 +15,7 @@
     <form method="post" action="{{ url_for('web.token_setup') }}" class="row">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="token" value="{{ token }}">
-      <label class="grow">Proxy für diese PCs (optional) <input name="proxy" placeholder="http://proxy.kunde.local:3128"></label>
+      <label class="grow">Proxy für diese PCs (optional) <input name="proxy" value="{{ proxy or '' }}" placeholder="http://proxy.kunde.local:3128"></label>
       <button class="primary">Setup herunterladen</button>
     </form>
     {% else %}

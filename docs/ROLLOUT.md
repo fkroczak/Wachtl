@@ -23,6 +23,10 @@ vom Server aus funktionieren.
 
 ## 2. Standorte und Standardpaket
 
+**Am schnellsten:** Verwaltung › **Probes einrichten (geführt)**. Vier Schritte – Standort, Messungen (Standardpaket),
+Alarmierung (E-Mail/Teams) und Anzahl PCs – sind mit Standards vorbelegt. **Einrichten** legt alles an und bietet
+direkt das fertige Setup für die PCs an; weiter mit Schritt 3, Punkt 2. Von Hand geht es so:
+
 1. **Verwaltung › Standorte**: für jeden Standort einen Eintrag anlegen (z. B. „Zentrale“, „Lager Coesfeld“).
 2. **Verwaltung › Standardpaket**: alles angehakt lassen, „Gilt für: alle Probes“, **Standardpaket anlegen**.
 

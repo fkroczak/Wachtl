@@ -670,6 +670,88 @@ def standard_package():
     return redirect(url_for("web.admin") + "#checks")
 
 
+@bp.route("/admin/einrichtung", methods=["GET", "POST"])
+@login_required("admin")
+def setup_wizard():
+    """Geführte Einrichtung: Standort, Messungen, Alarmierung und Setup für die PCs in einem Durchgang."""
+    FieldError = checktypes.FieldError
+    sites = q("SELECT * FROM sites ORDER BY name")
+    public_url = current_app.config["PUBLIC_URL"]
+    form = request.form if request.method == "POST" else {}
+    current = notify.get_settings()
+    errors: list = []
+    if request.method == "POST":
+        site_choice = form.get("site_id", "new")
+        site_name = form.get("site_name", "").strip()
+        site = None
+        if site_choice == "new":
+            if not site_name:
+                errors.append(FieldError("Bitte einen Namen für den Standort angeben.", "site_name"))
+            elif q1("SELECT id FROM sites WHERE name = ?", (site_name,)):
+                errors.append(FieldError("Diesen Standort gibt es schon – bitte oben auswählen.", "site_name"))
+        else:
+            site = q1("SELECT * FROM sites WHERE id = ?", (int(site_choice) if site_choice.isdigit() else 0,))
+            if site is None:
+                errors.append(FieldError("Bitte einen Standort auswählen.", "site_id"))
+        scope = form.get("scope", "all")
+        if scope not in ("all", "site"):
+            abort(400)
+        values = {**current, **{k: form.get(k, "").strip() for k in ("email_to", "email_from", "smtp_smarthost",
+                                                                       "teams_webhook_url")}}
+        # Fehlertexte von notify.validate dem passenden Feld zuordnen (Anzeige am Feld)
+        notify_field = {"E-Mail": "email_to", "SMTP": "smtp_smarthost", "Absender": "email_from", "Teams": "teams_webhook_url"}
+        errors += [FieldError(e, next((f for k, f in notify_field.items() if e.startswith(k)), None))
+                   for e in notify.validate(values)]
+        try:
+            max_uses = int(form.get("max_uses", ""))
+            days = int(form.get("days", ""))
+            if not (1 <= max_uses <= 500 and 1 <= days <= 90):
+                raise ValueError
+        except ValueError:
+            errors.append(FieldError("PCs 1 bis 500, Gültigkeit 1 bis 90 Tage.", "max_uses"))
+        proxy = form.get("proxy", "").strip()
+        if proxy and not proxy.startswith(("http://", "https://")):
+            errors.append(FieldError("Proxy bitte mit Schema angeben, z. B. http://proxy.kunde.local:3128.", "proxy"))
+        if not errors:
+            user = current_user()["username"]
+            if site is None:
+                sid = ins("INSERT INTO sites (name, customer_no, description, created_at) VALUES (?, ?, ?, ?)",
+                          (site_name, form.get("customer_no", "").strip() or None, None, repo.now()))
+                repo.audit(user, "site.create", site_name)
+                site = q1("SELECT * FROM sites WHERE id = ?", (sid,))
+            created, skipped = standardpaket.apply(form.getlist("items"), scope,
+                                                   site["id"] if scope == "site" else None, public_url)
+            for cid, item in created:
+                repo.audit(user, "check.create", f"check:{cid}", f"Einrichtung: {item.name}")
+            if created:
+                _regen_rules()
+            if any(values[k] != current.get(k, "") for k in notify.FIELDS):
+                notify.save_settings(values)
+                repo.audit(user, "notify.update", detail="Einrichtung")
+                try:
+                    notify.write_config()
+                except OSError as exc:
+                    log.error("Alertmanager-Konfiguration nicht geschrieben: %s", exc)
+                    flash("Alarmierung gespeichert, aber die Alertmanager-Datei konnte nicht geschrieben werden.", "error")
+            token = repo.create_enrollment_token(site["id"], max_uses, days, user,
+                                                 form.get("description", "").strip() or "Geführte Einrichtung")
+            flash(f"Standort {site['name']}: {len(created)} Messungen angelegt"
+                  + (f", {len(skipped)} gab es schon" if skipped else "") + ". Jetzt das Setup herunterladen.", "ok")
+            setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
+            return render_template(
+                "token_created.html", token=token, site=site, days=days, max_uses=max_uses, proxy=proxy,
+                server_url=public_url, server_urls=repo.server_urls(), pin=current_app.config["SPKI_PIN"],
+                setup_name=setup.name if setup else None,
+            )
+    return render_template(
+        "einrichtung.html", sites=sites, form=form, notify_settings=current, errors=errors,
+        field_errors={e.field: e for e in reversed(errors) if getattr(e, "field", None)},
+        package=standardpaket.preview(public_url), check_types=checktypes.TYPES,
+        rules=[r for r in repo.alert_rules().values() if r["enabled"]],
+        probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]),
+    )
+
+
 @bp.post("/admin/measure")
 @login_required("admin")
 def measure_update():
