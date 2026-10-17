@@ -280,6 +280,7 @@ PAIRS = [
     ("--accent", "--accent-soft", 4.5), ("--text-muted", "--accent-soft", 4.5),
     ("--field-border", "--surface", 3.0), ("--off", "--surface", 3.0), ("--focus", "--bg", 3.0),
     ("--focus", "--surface", 3.0), ("--report", "--surface", 4.5), ("--report", "--bg", 4.5),
+    ("--jitter", "--surface", 3.0), ("--accent", "--band", 3.0),
 ]
 # Badges: Schrift auf 12 % der eigenen Farbe über --surface (siehe .badge.* in app.css)
 BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]
