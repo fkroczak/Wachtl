@@ -26,7 +26,10 @@ def main() -> int:
         logging.getLogger("wachtl.serverprobe").info("Server-Probe abgeschaltet (WACHTL_SERVER_PROBE=0)")
         stop.wait()
         return 0
-    ServerProbe(url, pin, state_dir, os.environ.get("WACHTL_IPERF_EXE"), stop).run()
+    # Tray-Endpunkt nur, wenn ein Port gesetzt ist (Windows-Server; im Docker-Container gibt es kein Tray)
+    tray_port = int(os.environ.get("WACHTL_TRAY_PORT") or 0) or None
+    ServerProbe(url, pin, state_dir, os.environ.get("WACHTL_IPERF_EXE"), stop, tray_port=tray_port,
+                public_url=os.environ.get("WACHTL_PUBLIC_URL", "")).run()
     return 0
 
 

@@ -10,6 +10,9 @@
 ;        proxy=
 ;   2. Parameter: /Server= /Pin= /Token= /Proxy= /Hostname=
 ;
+; Tray-Symbol (wachtl-tray.exe, „Problem melden“/„Über“/„Beenden“) startet bei jeder Anmeldung für alle Benutzer.
+; /NoTray installiert es nicht in den Autostart.
+;
 ; Unbeaufsichtigt (z. B. per Softwareverteilung):
 ;   WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin=… /Token=…
 ; Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup ab (Code ≠ 0,
@@ -56,6 +59,9 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Files]
 Source: "{#PublishDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Tray-Symbol neben der Uhr: Störung melden, Über, Beenden (.NET Framework 4.6.2, in Windows enthalten)
+Source: "{#PublishDir}\wachtl-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#PublishDir}\wachtl-tray.exe.config"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#PublishDir}\Install-Wachtl.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
 ; iperf3 für Bandbreitenmessungen (Client und optional Gegenstelle), BSD-Lizenz
@@ -67,6 +73,12 @@ Source: "{srcexe}"; DestDir: "{app}"; DestName: "WachtlProbeSetup.exe"; Flags: e
 Name: "{group}\Wachtl Probe – Einstellungen ändern"; Filename: "{app}\WachtlProbeSetup.exe"; IconFilename: "{app}\wachtl-probe.exe"
 Name: "{group}\Wachtl Probe – Status"; Filename: "{app}\wachtl-status.cmd"; IconFilename: "{app}\wachtl-probe.exe"
 Name: "{group}\Wachtl Probe – Logdateien"; Filename: "{commonappdata}\Wachtl\logs"
+Name: "{group}\Wachtl – Problem melden"; Filename: "{app}\wachtl-tray.exe"; Parameters: "--report"; IconFilename: "{app}\wachtl-tray.exe"
+
+[Registry]
+; Tray-Symbol bei jeder Anmeldung starten (alle Benutzer); Deinstallation entfernt den Eintrag
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Wachtl Tray"; ValueData: """{app}\wachtl-tray.exe"""; Flags: uninsdeletevalue; Check: TrayWanted
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Wachtl Tray"; Flags: deletevalue; Check: not TrayWanted
 
 [Run]
 Filename: "{code:GetServer}"; Description: "Wachtl-Dashboard im Browser öffnen"; Flags: postinstall shellexec nowait skipifsilent unchecked; Check: DashboardKnown
@@ -75,9 +87,11 @@ Filename: "{code:GetServer}"; Description: "Wachtl-Dashboard im Browser öffnen"
 ; Reihenfolge: zuerst am Server abmelden (Token wird dort ungültig), dann Dienst, Prozesse und Firewall-Regeln entfernen.
 Filename: "{app}\wachtl-probe.exe"; Parameters: "deregister --out ""{commonappdata}\Wachtl\deregister.ini"""; Flags: runhidden waituntilterminated; RunOnceId: "Deregister"
 Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "StopWachtl"
+; Tray-Symbole aller angemeldeten Benutzer schließen
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM wachtl-tray.exe"; Flags: runhidden waituntilterminated; RunOnceId: "StopTray"
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"
 ; nur die eigene iperf3.exe beenden (falls die Gegenstelle noch läuft), keine fremden iperf3-Prozesse
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe,wachtl-tray -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule ""name=Wachtl Probe iperf3"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"
 ; auch Regeln, die Windows selbst für diese Programme angelegt hat (Nachfrage „Zugriff zulassen“)
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\iperf3\iperf3.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallIperf"
@@ -183,6 +197,32 @@ end;
 function DashboardKnown(): Boolean;
 begin
   Result := SetupOk and EnrollDone and (GetServer('') <> '');
+end;
+
+function TrayWanted(): Boolean;
+var
+  I: Integer;
+begin
+  Result := True;
+  for I := 1 to ParamCount do
+    if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
+      Result := False;
+end;
+
+{ Symbol sofort für den angemeldeten Benutzer zeigen. Unbeaufsichtigt läuft das Setup meist als SYSTEM
+  (Softwareverteilung) – dann erscheint es ab der nächsten Anmeldung über den Autostart. }
+procedure StartTray();
+var
+  Code: Integer;
+begin
+  if TrayWanted() and SetupOk and not WizardSilent() then
+    ExecAsOriginalUser(ExpandConstant('{app}\wachtl-tray.exe'), '', '', SW_SHOWNORMAL, ewNoWait, Code);
+end;
+
+{ laufende Tray-Symbole aller Benutzer beenden, damit wachtl-tray.exe ersetzt werden kann }
+procedure StopTray();
+begin
+  RunHidden(ExpandConstant('{sys}\taskkill.exe'), '/F /IM wachtl-tray.exe');
 end;
 
 function NotRunningFromApp(): Boolean;
@@ -429,6 +469,7 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   RunHidden(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName);
+  StopTray();
   Result := '';
 end;
 
@@ -532,6 +573,7 @@ begin
       Exit;
     end;
     InstallService();
+    StartTray();
     if (not SetupOk) and (not WizardSilent()) then
       MsgBox(SetupError, mbError, MB_OK);
     if not SetupOk then

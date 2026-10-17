@@ -143,6 +143,12 @@ if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-probe.exe'))) {
     Copy-Item (Join-Path $ProbeDir '*') (Join-Path $Build 'probe') -Recurse
     Write-Host '    Probe-Paket beigelegt'
 }
+# Tray-Symbol auch auf dem Server (Störung melden, Dashboard öffnen) – aus dem Probe-Build
+if ($ProbeDir -and (Test-Path (Join-Path $ProbeDir 'wachtl-tray.exe'))) {
+    Copy-Item (Join-Path $ProbeDir 'wachtl-tray.exe') $Build -Force
+    if (Test-Path (Join-Path $ProbeDir 'wachtl-tray.exe.config')) { Copy-Item (Join-Path $ProbeDir 'wachtl-tray.exe.config') $Build -Force }
+    Write-Host '    Tray-Symbol beigelegt'
+}
 
 Step 'Selbsttest mit dem eingebetteten Python'
 $py = Join-Path $Build 'python\python.exe'

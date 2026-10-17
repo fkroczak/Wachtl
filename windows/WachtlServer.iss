@@ -55,6 +55,9 @@ Source: "{#BuildDir}\wachtl-server.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\THIRD-PARTY.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "assets\wachtl.ico"; DestDir: "{app}"; Flags: ignoreversion
+; Tray-Symbol: Störung melden, Über, Dashboard öffnen, Beenden (aus dem Probe-Build)
+Source: "{#BuildDir}\wachtl-tray.exe"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "{#BuildDir}\wachtl-tray.exe.config"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "{#BuildDir}\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs ignoreversion
 Source: "{#BuildDir}\probe\*"; DestDir: "{app}\probe"; Flags: recursesubdirs ignoreversion skipifsourcedoesntexist
 
@@ -66,16 +69,22 @@ Name: "{group}\Wachtl Status"; Filename: "{app}\wachtl-status.cmd"; WorkingDir: 
 Name: "{group}\Zugangsdaten (setup-info.txt)"; Filename: "{code:GetDataDir}\setup-info.txt"
 Name: "{group}\Logdateien"; Filename: "{code:GetDataDir}\logs"
 Name: "{group}\Probe-Paket"; Filename: "{app}\probe"; Check: ProbeIncluded
+Name: "{group}\Wachtl – Problem melden"; Filename: "{app}\wachtl-tray.exe"; Parameters: "--report"; Check: TrayIncluded
 
 [Registry]
 Root: HKLM; Subkey: "Software\Wachtl Server"; ValueType: string; ValueName: "DataDir"; ValueData: "{code:GetDataDir}"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "Software\Wachtl Server"; ValueType: string; ValueName: "Version"; ValueData: "{#AppVersion}"
+; Tray-Symbol bei jeder Anmeldung (alle Benutzer); /NoTray lässt es weg
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Wachtl Server Tray"; ValueData: """{app}\wachtl-tray.exe"""; Flags: uninsdeletevalue; Check: TrayWanted
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Wachtl Server Tray"; Flags: deletevalue; Check: not TrayWanted
 
 [Run]
 Filename: "{code:GetUrl}"; Description: "Wachtl im Browser öffnen"; Flags: postinstall shellexec nowait skipifsilent; Check: SetupSucceeded
 Filename: "notepad.exe"; Parameters: """{code:GetDataDir}\setup-info.txt"""; Description: "Zugangsdaten und SPKI-Pin anzeigen"; Flags: postinstall nowait skipifsilent unchecked; Check: SetupSucceeded
 
 [UninstallRun]
+; Tray-Symbole aller angemeldeten Benutzer schließen
+Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM wachtl-tray.exe"; Flags: runhidden waituntilterminated; RunOnceId: "StopTray"
 ; Dienst (samt Server-Probe), Firewall-Regeln und geplante Sicherung entfernen, danach prüfen, dass kein Port offen bleibt
 Filename: "{app}\python\python.exe"; Parameters: "-m wachtl.win.installer uninstall --result ""{commonappdata}\Wachtl Server Deinstallation.ini"""; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "WachtlUninstall"
 
@@ -234,6 +243,21 @@ end;
 function ProbeIncluded(): Boolean;
 begin
   Result := DirExists(ExpandConstant('{app}\probe'));
+end;
+
+function TrayIncluded(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{app}\wachtl-tray.exe'));
+end;
+
+function TrayWanted(): Boolean;
+var
+  I: Integer;
+begin
+  Result := TrayIncluded();
+  for I := 1 to ParamCount do
+    if (CompareText(ParamStr(I), '/NoTray') = 0) or (CompareText(ParamStr(I), '/NoTray=1') = 0) then
+      Result := False;
 end;
 
 { ---------- Assistent ---------- }
@@ -478,6 +502,7 @@ var
 begin
   { Laufenden Dienst vor dem Kopieren stoppen, sonst sind Dateien gesperrt }
   Exec(ExpandConstant('{sys}\net.exe'), 'stop WachtlServer', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM wachtl-tray.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
   Result := '';
 end;
 
@@ -564,9 +589,16 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+var
+  Code: Integer;
 begin
   if CurStep = ssPostInstall then
+  begin
     RunServerSetup();
+    { Tray-Symbol gleich für den angemeldeten Benutzer zeigen, sonst ab der nächsten Anmeldung }
+    if SetupOk and TrayWanted() and not WizardSilent() then
+      ExecAsOriginalUser(ExpandConstant('{app}\wachtl-tray.exe'), '', '', SW_SHOWNORMAL, ewNoWait, Code);
+  end;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);

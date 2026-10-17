@@ -15,6 +15,7 @@ from .. import __version__, repo
 from . import icmp, net
 from .api import Api, ApiError
 from .runners import BandwidthRunner, PathRunner, PingRunner, Runner, check_key
+from .tray import PENDING_FILE, PendingReports, ReportRejected, TrayEndpoint, TrayService
 
 log = logging.getLogger("wachtl.serverprobe")
 ENROLL_FILE = "enroll.json"     # legt der Server beim Start an (einmaliger Enrollment-Token)
@@ -48,7 +49,8 @@ def probe_hostname() -> str:
 
 class ServerProbe:
     def __init__(self, url: str, pin: str, state_dir: Path, iperf_exe: str | None = None,
-                 stop_event: threading.Event | None = None, pinger=None, gateway=None, measure=None):
+                 stop_event: threading.Event | None = None, pinger=None, gateway=None, measure=None,
+                 tray_port: int | None = None, public_url: str = ""):
         self.url, self.pin, self.state_dir, self.iperf_exe = url, pin, Path(state_dir), iperf_exe
         self.measurement = {"pinger": pinger or icmp.ping, "gateway": gateway or net.gateway}
         self.measure = measure
@@ -62,6 +64,11 @@ class ServerProbe:
         self.config_changed = threading.Event()
         self.started = time.monotonic()
         self.batch_no = 0
+        self.last_contact = 0.0
+        self.public_url = public_url
+        self.tray_port = tray_port
+        self.pending_reports = PendingReports(self.state_dir / PENDING_FILE)
+        self.tray: TrayEndpoint | None = None
 
     # -- Registrierung ---------------------------------------------------------
     def ensure_registered(self) -> bool:
@@ -87,6 +94,10 @@ class ServerProbe:
     # -- Ablauf -------------------------------------------------------------------
     def run(self) -> None:
         log.info("Wachtl-Server-Probe %s startet, Server %s, Daten %s", __version__, self.url, self.state_dir)
+        if self.tray_port:
+            self.tray = TrayEndpoint(TrayService(self.tray_status, self.send_report, self.pending_reports,
+                                                 probe_hostname(), ready=lambda: self.api is not None), self.tray_port)
+            self.tray.start()
         while not self.ensure_registered():
             log.info("Warte auf Registrierung (%s vom Server) …", self.state_dir / ENROLL_FILE)
             if self.stop_event.wait(30):
@@ -96,9 +107,30 @@ class ServerProbe:
         for t in loops:
             t.start()
         self.stop_event.wait()
+        if self.tray:
+            self.tray.stop()
         self.stop_runners()
         self.upload_pending()
         log.info("Server-Probe beendet")
+
+    # -- Tray-Symbol (Störungsmeldungen) --------------------------------------------
+    def tray_status(self) -> dict:
+        state = read_json(self.state_dir / STATE_FILE) or {}
+        return {
+            "role": "server", "name": probe_hostname(), "site": state.get("site_name") or "",
+            "server_url": self.public_url or self.url, "dashboard_url": self.public_url or self.url,
+            "version": __version__, "enrolled": self.api is not None,
+            "connected": self.last_contact > 0 and time.time() - self.last_contact < 120,
+            "last_contact": int(self.last_contact),
+        }
+
+    def send_report(self, report: dict) -> None:
+        try:
+            self.api.report(report)
+        except ApiError as exc:
+            if exc.status == 400:
+                raise ReportRejected(str(exc).split(": ", 1)[-1]) from exc
+            raise
 
     def sink(self, line: str) -> None:
         with self.buffer_lock:
@@ -196,7 +228,10 @@ class ServerProbe:
                     "hostname": probe_hostname(), "buffer_items": len(self.buffer),
                     "uptime_s": int(time.monotonic() - self.started), "addresses": net.local_addresses(),
                 })
+                self.last_contact = time.time()
                 self.handle_commands(resp.get("commands") or [])
+                if self.pending_reports.count():
+                    self.pending_reports.flush(self.send_report)
                 if resp.get("config_etag") != (self.config or {}).get("etag"):
                     self.config_changed.set()
             except (ApiError, OSError) as exc:

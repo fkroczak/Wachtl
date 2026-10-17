@@ -36,6 +36,8 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Server-Probe (0.4) | Der Server misst selbst – dieselben Checks wie die Probes, über das Probe-API, ohne offenen Port |
 | Standardpaket (0.4) | Ping, Traceroute, iperf3 und Speedtest mit einem Klick; Rollout-Anleitung [docs/ROLLOUT.md](docs/ROLLOUT.md) |
 | Deinstallation (0.4) | Probe meldet sich am Server ab, alle Firewall-Regeln und das Token werden entfernt; Server Windows/Linux (`deploy/uninstall.sh`) mit Prüfung auf offene Ports |
+| Tray-Symbol (0.5) | Symbol neben der Uhr auf Clients und Windows-Server: Problem melden, Über, Beenden ([docs/STOERUNGSMELDUNGEN.md](docs/STOERUNGSMELDUNGEN.md)) |
+| Störungsmeldungen (0.5) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
@@ -58,6 +60,7 @@ Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unte
 | `server/wachtl/serverprobe/` | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, HTTP-Speedtest) |
 | `deploy/` | Linux: Docker-Compose-Stack, `setup.sh`, `uninstall.sh`, Backup und Restore |
 | `windows/` | Windows-Server: Setup-Assistent (`WachtlServer.iss`), `build-server.ps1`, `wachtl-server.cmd`, `assets/` (Symbole, Assistenten-Bilder) |
+| `probe/Wachtl.Tray/` | Tray-Symbol `wachtl-tray.exe` (.NET Framework 4.6.2): Problem melden, Über, Beenden |
 | `probe/setup/` | Client-Setup-Assistent (`WachtlProbe.iss`) |
 | `brand/` | Logo-Quelle und Generator für SVG, PNG, ICO und Assistenten-Bilder |
 | `server/wachtl/win/` | Windows-Laufzeit: Dienst-Supervisor, HTTPS-Server, Einrichtung, Backup |

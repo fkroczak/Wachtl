@@ -113,6 +113,10 @@ class Api:
     def result(self, kind: str, payload: dict) -> None:
         self.json("POST", f"results/{kind}", payload)
 
+    def report(self, payload: dict) -> dict:
+        """Störungsmeldung vom Tray-Symbol weiterleiten (201 neu, 200 schon bekannt)."""
+        return self.json("POST", "report", payload)
+
 
 def _message(data: bytes) -> str:
     try:

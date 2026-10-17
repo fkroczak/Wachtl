@@ -15,12 +15,29 @@ $ErrorActionPreference = 'Stop'
 
 dotnet test "$PSScriptRoot\Wachtl.Probe.Tests\Wachtl.Probe.Tests.csproj" -c Release
 if ($LASTEXITCODE -ne 0) { throw 'Tests fehlgeschlagen' }
+foreach ($t in Get-ChildItem "$PSScriptRoot\*.Tests\*.Tests.csproj" | Where-Object Name -ne 'Wachtl.Probe.Tests.csproj') {
+    dotnet test $t.FullName -c Release
+    if ($LASTEXITCODE -ne 0) { throw "Tests fehlgeschlagen: $($t.Name)" }
+}
 
 dotnet publish "$PSScriptRoot\Wachtl.Probe\Wachtl.Probe.csproj" -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none `
   -p:Version=$Version -o $Output
 if ($LASTEXITCODE -ne 0) { throw 'dotnet publish fehlgeschlagen' }
 Copy-Item "$PSScriptRoot\..\installer\Install-Wachtl.ps1" $Output -Force
+
+# Tray-Symbol (Problem melden, Über, Beenden): .NET Framework 4.6.2 – in Windows enthalten, keine Laufzeit beilegen
+$trayOut = Join-Path ([IO.Path]::GetTempPath()) 'wachtl-tray-publish'
+if (Test-Path $trayOut) { Remove-Item $trayOut -Recurse -Force }
+dotnet publish "$PSScriptRoot\Wachtl.Tray\Wachtl.Tray.csproj" -c Release -p:DebugType=none -p:Version=$Version -o $trayOut
+if ($LASTEXITCODE -ne 0) { throw 'dotnet publish (Tray) fehlgeschlagen' }
+Copy-Item "$trayOut\wachtl-tray.exe" $Output -Force
+if (Test-Path "$trayOut\wachtl-tray.exe.config") { Copy-Item "$trayOut\wachtl-tray.exe.config" $Output -Force }
+$traySize = (Get-Item "$Output\wachtl-tray.exe").Length
+Write-Host "wachtl-tray.exe: $([math]::Round($traySize / 1KB)) KB"
+if ($traySize -gt 2MB) { throw 'wachtl-tray.exe ist größer als 2 MB – wurde eine Laufzeit mitgepackt?' }
+$trayVersion = (Get-Item "$Output\wachtl-tray.exe").VersionInfo.ProductVersion
+if (-not $trayVersion.StartsWith($Version)) { throw "wachtl-tray.exe hat Version $trayVersion statt $Version" }
 
 & "$Output\wachtl-probe.exe" --version
 if ($LASTEXITCODE -ne 0) { throw 'wachtl-probe.exe startet nicht' }
@@ -52,4 +69,4 @@ if (-not $iscc) {
 $out = (Resolve-Path $Output).Path
 & $iscc "/DAppVersion=$Version" "/DPublishDir=$out" "/O$out" "$PSScriptRoot\setup\WachtlProbe.iss" 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup fehlgeschlagen' }
-Write-Host "Fertig: $out\wachtl-probe.exe, $out\WachtlProbeSetup-$Version.exe" -ForegroundColor Green
+Write-Host "Fertig: $out\wachtl-probe.exe, $out\wachtl-tray.exe, $out\WachtlProbeSetup-$Version.exe" -ForegroundColor Green

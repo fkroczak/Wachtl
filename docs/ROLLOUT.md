@@ -47,6 +47,8 @@ Bei sehr vielen PCs an einem Standort reicht es, die Bandbreiten-Checks nur eine
 2. **Paket herunterladen** (ZIP mit Setup und `wachtl-probe.ini` – Server, Pin und Token sind eingetragen).
 3. Auf jedem PC: ZIP entpacken, `WachtlProbeSetup-0.4.0.exe` als Administrator starten, nur noch **Weiter** klicken.
 4. Nach 30 Sekunden steht der PC in der Übersicht unter **Probes** mit „online“.
+5. Neben der Uhr erscheint das Wachtl-Symbol. Test: Rechtsklick › **Problem melden …** › Senden – die Meldung steht
+   kurz darauf unter **Meldungen** und als Markierung im Graphen dieser Probe.
 
 Für viele PCs per Softwareverteilung: siehe [INSTALL-PROBE.md](INSTALL-PROBE.md), Abschnitt „Unbeaufsichtigt“.
 

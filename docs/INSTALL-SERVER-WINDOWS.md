@@ -82,6 +82,13 @@ Konfiguration (Ports, Aufbewahrung) steht in `<Daten>\config\wachtl.env`. Nach �
 Neue Servernamen: Setup erneut ausführen ist der einfachste Weg; alternativ `WACHTL_HOSTNAMES` anpassen – das Zertifikat
 wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin bleibt gleich.
 
+### Tray-Symbol
+
+Neben der Uhr erscheint für jeden angemeldeten Benutzer das Wachtl-Symbol mit **Problem melden …**, **Über Wachtl**,
+**Dashboard öffnen** und **Beenden**. Meldungen vom Server laufen über die Server-Probe (lokal auf `127.0.0.1:47251`) und
+erscheinen wie die der Clients unter „Meldungen“. Ohne Symbol installieren: Setup-Parameter `/NoTray`.
+Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
+
 ## Ordner und Logs
 
 | Pfad | Inhalt |

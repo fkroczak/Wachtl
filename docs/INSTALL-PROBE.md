@@ -42,6 +42,16 @@ Ohne `/Pin` wird unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen)
 aktualisiert ein unbeaufsichtigter Lauf nur das Programm. Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
 `WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
 
+`/NoTray` lässt das Tray-Symbol weg (kein Autostart-Eintrag). Unbeaufsichtigt per Softwareverteilung läuft das Setup
+meist als SYSTEM – das Symbol erscheint dann bei der nächsten Anmeldung der Benutzer.
+
+### Tray-Symbol: Problem melden
+
+Neben der Uhr zeigt das Wachtl-Symbol (`wachtl-tray.exe`, startet bei jeder Anmeldung) die Einträge **Problem melden …**,
+**Über Wachtl** und **Beenden**. Benutzer melden damit erlebte Netzprobleme mit Zeitpunkt (Jetzt oder eine einstellbare
+Uhrzeit), Art und Dauer; die Meldung erscheint im Web-UI unter „Meldungen“ und als Markierung in den Graphen dieser Probe.
+Verknüpfung im Startmenü: *Wachtl – Problem melden*. Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
+
 Deinstallation: Apps › Wachtl Probe, oder `"C:\Program Files\Wachtl\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES`.
 Der Deinstaller lässt nichts zurück, was von außen erreichbar wäre:
 
