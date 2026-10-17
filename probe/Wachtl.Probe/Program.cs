@@ -30,6 +30,7 @@ if (!WindowsServiceHelpers.IsWindowsService())
 
 builder.Services.AddSingleton<GatewayResolver>();
 builder.Services.AddSingleton<ProbeStatus>();
+builder.Services.AddSingleton<LiveStats>();
 builder.Services.AddSingleton<ClientDiagnostics>();
 builder.Services.AddHostedService<ProbeWorker>();
 builder.Services.AddHostedService<TrayEndpoint>();

@@ -17,6 +17,9 @@ namespace Wachtl.Tray
         private readonly ContextMenuStrip _menu;
         private readonly ToolStripMenuItem _dashboardItem;
         private readonly ToolStripMenuItem _findingsItem;
+        private readonly ToolStripLabel[] _liveItems = new ToolStripLabel[LiveTexts.MaxLines];
+        private readonly ToolStripSeparator _liveSeparator = new ToolStripSeparator { Visible = false };
+        private readonly System.Windows.Forms.Timer _liveTimer;
         private readonly System.Windows.Forms.Timer _pollTimer;
         private readonly System.Windows.Forms.Timer _findingsTimer;
         private readonly System.Windows.Forms.Timer _balloonTimer;
@@ -44,7 +47,24 @@ namespace Wachtl.Tray
             var aboutItem = new ToolStripMenuItem("Über Wachtl", null, (s, e) => OpenAbout());
             _dashboardItem = new ToolStripMenuItem("Dashboard öffnen", null, (s, e) => OpenDashboard()) { Visible = false };
             var exitItem = new ToolStripMenuItem("Beenden", null, (s, e) => ExitThread());
+            // Oben im Menü: Ping ins Internet, aktuelle Datenrate, letzter Speedtest – aktualisiert alle 2 s, solange es offen ist
+            for (var i = 0; i < _liveItems.Length; i++)
+            {
+                _liveItems[i] = new ToolStripLabel { Visible = false, Padding = new Padding(22, 1, 8, 1), TextAlign = ContentAlignment.MiddleLeft };
+                _menu.Items.Add(_liveItems[i]);
+            }
+
+            _menu.Items.Add(_liveSeparator);
             _menu.Items.AddRange(new ToolStripItem[] { reportItem, _findingsItem, aboutItem, _dashboardItem, new ToolStripSeparator(), exitItem });
+            _liveTimer = new System.Windows.Forms.Timer { Interval = 2_000 };
+            _liveTimer.Tick += (s, e) => RefreshStatus();
+            _menu.Opening += (s, e) =>
+            {
+                UpdateLive();
+                RefreshStatus();
+                _liveTimer.Start();
+            };
+            _menu.Closed += (s, e) => _liveTimer.Stop();
 
             _trayIcon = AppIcons.Load(SystemInformation.SmallIconSize);
             _icon = new NotifyIcon
@@ -129,6 +149,7 @@ namespace Wachtl.Tray
                 var state = status?.Connection ?? TrayConnection.ServiceDown;
                 _icon.Text = TrayTexts.Tooltip(state);
                 _dashboardItem.Visible = status != null && status.IsServer && !string.IsNullOrEmpty(status.DashboardUrl);
+                UpdateLive();
             }
             catch (Exception)
             {
@@ -138,6 +159,19 @@ namespace Wachtl.Tray
             {
                 _polling = false;
             }
+        }
+
+        private void UpdateLive()
+        {
+            var lines = LiveTexts.Lines(_status?.Internet, DateTime.Now);
+            for (var i = 0; i < _liveItems.Length; i++)
+            {
+                var visible = i < lines.Count;
+                _liveItems[i].Text = visible ? lines[i] : string.Empty;
+                _liveItems[i].Visible = visible;
+            }
+
+            _liveSeparator.Visible = lines.Count > 0;
         }
 
         public async void RefreshFindings()
@@ -297,6 +331,7 @@ namespace Wachtl.Tray
             if (disposing)
             {
                 _pollTimer.Dispose();
+                _liveTimer.Dispose();
                 _findingsTimer.Dispose();
                 _balloonTimer.Dispose();
                 _clickTimer.Dispose();

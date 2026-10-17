@@ -25,6 +25,7 @@ public sealed class ProbeWorker : BackgroundService
     private readonly GatewayResolver _gateway;
     private readonly ProbeStatus _status;
     private readonly ClientDiagnostics _diagnostics;
+    private readonly LiveStats _live;
     private readonly Dictionary<string, IAsyncDisposable> _runners = new();
     private IperfServerHost? _iperfServer;
     private readonly SemaphoreSlim _configChanged = new(0, 1);
@@ -37,8 +38,9 @@ public sealed class ProbeWorker : BackgroundService
     private SampleBuffer? _buffer;
 
     public ProbeWorker(ILogger<ProbeWorker> logger, ILoggerFactory loggerFactory, GatewayResolver gateway, ProbeStatus status,
-        ClientDiagnostics diagnostics)
+        ClientDiagnostics diagnostics, LiveStats live)
     {
+        _live = live;
         _logger = logger;
         _loggerFactory = loggerFactory;
         _gateway = gateway;
@@ -262,6 +264,7 @@ public sealed class ProbeWorker : BackgroundService
             }
 
             _config = config;
+            _live.KeepChecks(wanted.Values.Select(c => c.Id));
         }
 
         _diagnostics.Configure(config.ClientFindings);
@@ -277,9 +280,13 @@ public sealed class ProbeWorker : BackgroundService
             (result, token) => _api!.PostResultAsync("results/path", result, token),
             _loggerFactory.CreateLogger<PathRunner>()),
         "iperf" or "speedtest" => new BandwidthRunner(check, _state?.Proxy,
-            (result, token) => _api!.PostResultAsync("results/bandwidth", result, token),
+            (result, token) =>
+            {
+                _live.RecordBandwidth(check, result); // letzter Speedtest fürs Tray-Menü
+                return _api!.PostResultAsync("results/bandwidth", result, token);
+            },
             _loggerFactory.CreateLogger<BandwidthRunner>()),
-        _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>()),
+        _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>(), _live),
     };
 
     private void HandleCommands(IEnumerable<ProbeCommand> commands)

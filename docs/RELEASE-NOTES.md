@@ -5,6 +5,7 @@
 
 ## Neu in 0.8.2
 
+- **Internet auf einen Blick im Tray-Menü**: Oben im Menü des Wachtl-Symbols stehen jetzt die aktuelle Antwortzeit ins Internet (bis zu drei Referenzen, mit Verlust der letzten Minute), der aktuelle Datenverkehr des PCs (↓ Download / ↑ Upload) und das Ergebnis des letzten Speedtests mit Uhrzeit. Solange das Menü offen ist, aktualisieren sich die Werte alle 2 s.
 - **„Über Wachtl“ erklärt die Netzwerk-Hinweise**: Das Fenster nennt jetzt auch, dass Wachtl Probleme am PC (z. B. getrenntes Kabel, Treiberfehler) erkennt und neben der Uhr mit Lösungsvorschlag meldet.
 
 ## Neu in 0.8.1

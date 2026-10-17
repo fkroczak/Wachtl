@@ -33,6 +33,7 @@ namespace Wachtl.Tray.Core
         [DataMember(Name = "connected")] public bool Connected { get; set; }
         [DataMember(Name = "last_contact")] public long LastContact { get; set; }
         [DataMember(Name = "pending_reports")] public int PendingReports { get; set; }
+        [DataMember(Name = "internet")] public LiveInternet? Internet { get; set; }
 
         public bool IsServer => Role == "server";
 

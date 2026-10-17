@@ -19,6 +19,9 @@ public sealed class TrayStatusResponse
     public bool Connected { get; init; }
     public long LastContact { get; init; }
     public int PendingReports { get; init; }
+
+    /// <summary>Aktuelle Werte fürs Menü: Ping ins Internet, Datenrate, letzter Speedtest (ab 0.8.2).</summary>
+    public LiveInternet? Internet { get; init; }
 }
 
 /// <summary>
@@ -46,12 +49,14 @@ public sealed class TrayApi
     private readonly string _hostname;
     private readonly ILogger? _logger;
     private readonly FindingFeed _findings;
+    private readonly LiveStats? _live;
 
     public TrayApi(int port, ProbeStatus status, PendingReports pending,
         Func<ServerReport, CancellationToken, Task<ReportSendResult>> send,
         RateLimiter? rate = null, Func<DateTimeOffset>? clock = null, string? hostname = null, ILogger? logger = null,
-        FindingFeed? findings = null)
+        FindingFeed? findings = null, LiveStats? live = null)
     {
+        _live = live;
         _port = port;
         _status = status;
         _pending = pending;
@@ -138,6 +143,7 @@ public sealed class TrayApi
             Connected = _status.IsConnected(now),
             LastContact = _status.LastContact,
             PendingReports = _pending.Count,
+            Internet = _live?.Snapshot(),
         };
     }
 
