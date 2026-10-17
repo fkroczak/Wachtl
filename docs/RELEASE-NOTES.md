@@ -3,6 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.1
+
+- **Sprechblase mit vollständigem Lösungsvorschlag**: Jeder Hinweis hat eine eigene Kurzfassung für die Sprechblase (z. B. „Das Netzwerkkabel von „Ethernet“ ist nicht verbunden. Lösung: Stecker am PC und an der Netzwerkdose fest einstecken …“). Bisher schnitt Windows den Text nach 255 Zeichen mitten im Lösungsvorschlag ab. Die ausführliche Fassung steht weiter im Detailfenster (Klick auf die Sprechblase) und im Web-UI.
+
 ## Neu in 0.8
 
 - **Ausfälle ab 5 s**: Ziel und WAN gelten ab 5 s ohne Antwort als ausgefallen (vorher 3 Pings bzw. 30 s). Die Regel prüft jede Sekunde, kurze Ausfälle zwischen zwei Auswertungen gehen nicht mehr verloren. Beginn und Dauer in der Ausfallübersicht sind sekundengenau.

@@ -2,7 +2,8 @@ using System.Globalization;
 
 namespace Wachtl.Probe.Diagnostics;
 
-public sealed record FindingText(string Title, string Message, string Solution = "");
+/// <summary>Texte eines Hinweises. <c>Balloon</c> ist die Kurzfassung für die Sprechblase (Windows: höchstens 255 Zeichen).</summary>
+public sealed record FindingText(string Title, string Message, string Solution = "", string Balloon = "");
 
 /// <summary>Deutsche Texte der Client-Hinweise: kurz, für Anwender verständlich, mit Lösungsvorschlag.</summary>
 public static class FindingTexts
@@ -18,7 +19,9 @@ public static class FindingTexts
         $"Die Netzwerkkarte „{a.Name}“ hat keine Verbindung mehr: Das Netzwerkkabel ist ausgesteckt oder die Gegenstelle (Netzwerkdose, Switch) antwortet nicht."
         + (fallback is null ? string.Empty : $" Die Verbindung läuft vorerst über „{fallback}“ weiter."),
         "Prüfen Sie, ob das Netzwerkkabel am PC und an der Netzwerkdose bzw. am Switch fest eingesteckt ist (der Stecker muss einrasten). "
-        + "Leuchtet an der Buchse keine Lampe, Kabel oder Netzwerkdose tauschen.");
+        + "Leuchtet an der Buchse keine Lampe, Kabel oder Netzwerkdose tauschen.",
+        $"Das Netzwerkkabel von „{a.Name}“ ist nicht verbunden.\n"
+        + "Lösung: Stecker am PC und an der Netzwerkdose fest einstecken. Leuchtet keine Lampe, Kabel tauschen.");
 
     public static FindingText CableReconnected(string name, TimeSpan downtime) => new(
         "Netzwerkkabel wieder verbunden",
@@ -29,7 +32,9 @@ public static class FindingTexts
         $"Der WLAN-Adapter „{a.Name}“ hat die Verbindung zum Funknetz verloren."
         + (fallback is null ? string.Empty : $" Die Verbindung läuft vorerst über „{fallback}“ weiter."),
         "Prüfen Sie, ob WLAN eingeschaltet und der Flugmodus aus ist. Gehen Sie näher an den Access Point "
-        + "oder verbinden Sie sich über die Netzwerkliste neu mit dem Funknetz.");
+        + "oder verbinden Sie sich über die Netzwerkliste neu mit dem Funknetz.",
+        $"WLAN „{a.Name}“ hat keine Verbindung.\n"
+        + "Lösung: WLAN einschalten, Flugmodus aus, näher zum Access Point gehen.");
 
     public static FindingText WifiReconnected(string name, TimeSpan downtime) => new(
         "WLAN wieder verbunden",
@@ -40,7 +45,9 @@ public static class FindingTexts
         $"Die Netzwerkkarte „{a.Name}“ arbeitet nur noch mit {Speed(newBps)} statt {Speed(oldBps)}. "
         + "Datenübertragungen, Backups und Updates werden dadurch deutlich langsamer.",
         "Netzwerkkabel prüfen oder tauschen (mindestens Cat 5e, ohne Knicke, Stecker fest). Anderen Switch-Port bzw. andere Netzwerkdose testen. "
-        + DuplexAuto + " Energiesparen der Netzwerkkarte abschalten (z. B. „Energy Efficient Ethernet“).");
+        + DuplexAuto + " Energiesparen der Netzwerkkarte abschalten (z. B. „Energy Efficient Ethernet“).",
+        $"„{a.Name}“ läuft nur noch mit {Speed(newBps)} statt {Speed(oldBps)}.\n"
+        + "Lösung: Netzwerkkabel tauschen (mind. Cat 5e) oder andere Netzwerkdose bzw. anderen Switch-Port testen.");
 
     public static FindingText SpeedRestored(string name, long bps) => new(
         "Netzwerkgeschwindigkeit wieder normal",
@@ -51,13 +58,17 @@ public static class FindingTexts
         $"Die Netzwerkkarte „{a.Name}“ ist nur mit {Speed(bps)} verbunden, üblich ist 1 Gbit/s. "
         + "Große Dateien, Backups und Updates dauern dadurch ein Vielfaches länger.",
         "Netzwerkkabel prüfen oder tauschen (mindestens Cat 5e – bei 100 Mbit/s sind oft nicht alle Adern verbunden). "
-        + "Anderen Switch-Port bzw. andere Netzwerkdose testen. " + DuplexAuto);
+        + "Anderen Switch-Port bzw. andere Netzwerkdose testen. " + DuplexAuto,
+        $"„{a.Name}“ ist nur mit {Speed(bps)} verbunden, üblich ist 1 Gbit/s.\n"
+        + "Lösung: Netzwerkkabel tauschen (mind. Cat 5e) oder andere Netzwerkdose testen.");
 
     public static FindingText Flapping(AdapterState a, int count) => new(
         "Netzwerkverbindung bricht wiederholt ab",
         $"Die Netzwerkkarte „{a.Name}“ hat die Verbindung in den letzten 10 Minuten {count}-mal verloren und wieder aufgebaut. "
         + "Jede Unterbrechung stört laufende Anrufe, Downloads und Anmeldungen.",
-        "Netzwerkkabel und Switch-Port bzw. Netzwerkdose tauschen. " + PowerSaving + " Treiber der Netzwerkkarte aktualisieren.");
+        "Netzwerkkabel und Switch-Port bzw. Netzwerkdose tauschen. " + PowerSaving + " Treiber der Netzwerkkarte aktualisieren.",
+        $"„{a.Name}“ hat die Verbindung in 10 Minuten {count}-mal verloren.\n"
+        + "Lösung: Kabel und Netzwerkdose tauschen, Energiesparen der Netzwerkkarte abschalten.");
 
     public static FindingText FlappingResolved(string name) => new(
         "Netzwerkverbindung wieder stabil",
@@ -74,6 +85,14 @@ public static class FindingTexts
                   + "Bleibt der Fehler, die IT informieren – die Netzwerkkarte kann defekt sein.",
             _ => "Treiber der Netzwerkkarte neu installieren oder aktualisieren (Website des Herstellers bzw. Windows Update) und den PC neu starten. "
                  + "Bleibt der Fehler, die IT informieren – die Netzwerkkarte kann defekt sein.",
+        },
+        $"Die Netzwerkkarte meldet Fehler {code.ToString(CultureInfo.InvariantCulture)}: {DriverCode(code)}.\nLösung: "
+        + code switch
+        {
+            28 => "Treiber installieren, danach den PC neu starten.",
+            14 => "PC neu starten.",
+            43 => "PC ganz herunterfahren und wieder einschalten, Treiber aktualisieren.",
+            _ => "Treiber neu installieren und den PC neu starten. Hilft das nicht, die IT informieren.",
         });
 
     public static FindingText DriverOk(string device) => new(
@@ -85,7 +104,9 @@ public static class FindingTexts
         $"Windows hat die Netzwerkkarte{(string.IsNullOrEmpty(adapter) ? string.Empty : $" „{adapter}“")} in den letzten 15 Minuten "
         + $"{count}-mal zurückgesetzt (Ereignis NDIS 10400). Dabei bricht die Verbindung jedes Mal kurz ab.",
         "Treiber der Netzwerkkarte aktualisieren (Website des Herstellers). " + PowerSaving
-        + " In den erweiterten Eigenschaften „Energy Efficient Ethernet“ bzw. „Green Ethernet“ ausschalten.");
+        + " In den erweiterten Eigenschaften „Energy Efficient Ethernet“ bzw. „Green Ethernet“ ausschalten.",
+        $"Windows hat die Netzwerkkarte in 15 Minuten {count}-mal zurückgesetzt, die Verbindung bricht dabei ab.\n"
+        + "Lösung: Treiber aktualisieren, Energiesparen der Netzwerkkarte abschalten.");
 
     public static FindingText NicResetResolved() => new(
         "Netzwerkkarte läuft wieder stabil",
@@ -96,7 +117,9 @@ public static class FindingTexts
         $"Die Netzwerkkarte „{a.Name}“ hat keine IP-Adresse vom DHCP-Server erhalten und nutzt die Notadresse {a.Ipv4.FirstOrDefault()}. "
         + "Netzwerk und Internet sind so nicht erreichbar.",
         "Netzwerkkabel und Switch-Port bzw. Netzwerkdose prüfen (richtiges Netz bzw. VLAN?). Prüfen, ob der DHCP-Server läuft und freie Adressen hat. "
-        + "Danach in der Eingabeaufforderung „ipconfig /renew“ ausführen oder das Kabel kurz aus- und wieder einstecken.");
+        + "Danach in der Eingabeaufforderung „ipconfig /renew“ ausführen oder das Kabel kurz aus- und wieder einstecken.",
+        $"„{a.Name}“ hat keine IP-Adresse vom DHCP-Server, das Netzwerk ist nicht erreichbar.\n"
+        + "Lösung: Kabel kurz aus- und wieder einstecken. Hilft das nicht, die IT informieren.");
 
     public static FindingText ApipaResolved(string name, string? ip) => new(
         "IP-Adresse wieder erhalten",
@@ -107,7 +130,9 @@ public static class FindingTexts
         $"Die Netzwerkkarte „{a.Name}“ hat eine IP-Adresse ({a.Ipv4.FirstOrDefault(ip => !AdapterClassifier.IsApipa(ip))}), aber kein Standard-Gateway. "
         + "Andere Netze und das Internet sind dadurch nicht erreichbar.",
         "Bei fester IP-Adresse das Standard-Gateway in den IPv4-Einstellungen der Netzwerkkarte eintragen. "
-        + "Bei DHCP prüfen, ob der DHCP-Server die Option „Router“ (Option 3) verteilt, danach „ipconfig /renew“ ausführen.");
+        + "Bei DHCP prüfen, ob der DHCP-Server die Option „Router“ (Option 3) verteilt, danach „ipconfig /renew“ ausführen.",
+        $"„{a.Name}“ hat kein Standard-Gateway, Internet und andere Netze sind nicht erreichbar.\n"
+        + "Lösung: Die IT informieren – das Gateway fehlt in den IP-Einstellungen bzw. im DHCP.");
 
     public static FindingText GatewayResolved() => new(
         "Standard-Gateway wieder vorhanden",
@@ -117,7 +142,9 @@ public static class FindingTexts
         "Viele fehlerhafte Datenpakete",
         $"Die Netzwerkkarte „{a.Name}“ hat in der letzten Minute {errors.ToString(CultureInfo.InvariantCulture)} fehlerhafte oder verworfene Pakete gezählt "
         + $"({percent.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',')} %). Das führt zu Aussetzern und langsamen Übertragungen.",
-        "Netzwerkkabel und Switch-Port bzw. Netzwerkdose tauschen. " + DuplexAuto + " Treiber der Netzwerkkarte aktualisieren.");
+        "Netzwerkkabel und Switch-Port bzw. Netzwerkdose tauschen. " + DuplexAuto + " Treiber der Netzwerkkarte aktualisieren.",
+        $"„{a.Name}“ zählt viele fehlerhafte Pakete ({percent.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',')} %), das führt zu Aussetzern.\n"
+        + "Lösung: Kabel und Netzwerkdose tauschen, Treiber aktualisieren.");
 
     public static FindingText NicErrorsResolved(string name) => new(
         "Datenpakete wieder fehlerfrei",

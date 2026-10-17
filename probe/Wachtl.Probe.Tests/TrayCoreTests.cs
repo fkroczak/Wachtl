@@ -79,7 +79,7 @@ public class TrayCoreTests
     {
         var status = Json.Read<TrayStatus>(
             "{\"role\":\"server\",\"name\":\"SRV\",\"site\":\"Zentrale\",\"server_url\":\"https://w\",\"dashboard_url\":\"https://w\"," +
-            "\"version\":\"0.8.0\",\"enrolled\":true,\"connected\":false,\"last_contact\":1792230000,\"pending_reports\":2,\"neu\":1}")!;
+            "\"version\":\"0.8.1\",\"enrolled\":true,\"connected\":false,\"last_contact\":1792230000,\"pending_reports\":2,\"neu\":1}")!;
         Assert.True(status.IsServer);
         Assert.Equal("https://w", status.DashboardUrl);
         Assert.Equal(1792230000, status.LastContact);
@@ -266,5 +266,24 @@ public class TrayCoreTests
         Assert.True(b.Text.Length <= 255);
         Assert.EndsWith("…", b.Text);
         Assert.Equal(FindingNotifier.NoFindings, new FindingNotifier().ActiveSummary());
+    }
+
+    [Fact]
+    public void BalloonUsesShortTextOfProbe()
+    {
+        var f = F(1, "a");
+        f.Message = new string('m', 300);
+        f.Solution = "lange Lösung";
+        f.Balloon = "Kabel nicht verbunden.\nLösung: Stecker fest einstecken.";
+        Assert.Equal(f.Balloon, FindingNotifier.BalloonText(f));
+        // Ältere Probe ohne Kurzfassung: wie bisher Meldung + Lösung
+        f.Balloon = null;
+        Assert.StartsWith("mmm", FindingNotifier.BalloonText(f));
+        // Entwarnung zeigt die Meldung, nicht die Kurzfassung
+        var resolved = F(2, "b");
+        resolved.State = "resolved";
+        resolved.Message = "Wieder verbunden.";
+        resolved.Balloon = "Kurz";
+        Assert.Equal("Wieder verbunden.", FindingNotifier.BalloonText(resolved));
     }
 }

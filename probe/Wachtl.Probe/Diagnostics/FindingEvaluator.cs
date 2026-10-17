@@ -559,6 +559,7 @@ public sealed class FindingEvaluator
             Title = ClientFinding.Clamp(c.Text.Title, ClientFinding.MaxTitle),
             Message = ClientFinding.Clamp(c.Text.Message, ClientFinding.MaxText),
             Solution = ClientFinding.Clamp(c.Text.Solution, ClientFinding.MaxText),
+            Balloon = ClientFinding.Clamp(c.Text.Balloon, ClientFinding.MaxBalloon),
             Details = ClientFinding.ClampDetails(c.Details),
             DetectedAt = detected.ToUnixTimeSeconds(),
         };
@@ -582,6 +583,7 @@ public sealed class FindingEvaluator
             Title = ClientFinding.Clamp(c.Text.Title, ClientFinding.MaxTitle),
             Message = ClientFinding.Clamp(c.Text.Message, ClientFinding.MaxText),
             Solution = ClientFinding.Clamp(c.Text.Solution, ClientFinding.MaxText),
+            Balloon = ClientFinding.Clamp(c.Text.Balloon, ClientFinding.MaxBalloon),
             Details = ClientFinding.ClampDetails(c.Details),
             DetectedAt = old.DetectedAt,
         };

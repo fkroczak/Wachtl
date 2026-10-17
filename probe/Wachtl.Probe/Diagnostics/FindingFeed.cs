@@ -11,6 +11,7 @@ public sealed class TrayFindingItem
     public string Title { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
     public string Solution { get; init; } = string.Empty;
+    public string Balloon { get; init; } = string.Empty;
     public string Adapter { get; init; } = string.Empty;
     public long DetectedAt { get; init; }
     public long? ResolvedAt { get; init; }
@@ -112,6 +113,7 @@ public sealed class FindingFeed
                         Title = e.Finding.Title,
                         Message = e.Finding.Message,
                         Solution = e.Finding.Solution,
+                        Balloon = e.Finding.Balloon,
                         Adapter = e.Finding.Adapter,
                         DetectedAt = e.Finding.DetectedAt,
                         ResolvedAt = e.Finding.ResolvedAt,

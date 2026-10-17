@@ -38,6 +38,7 @@ public sealed class ClientFinding
 {
     public const int MaxTitle = 120;
     public const int MaxText = 500;
+    public const int MaxBalloon = 255;
     public const int MaxDetails = 20;
 
     public string FindingId { get; init; } = string.Empty;
@@ -54,6 +55,10 @@ public sealed class ClientFinding
     public string Title { get; init; } = string.Empty;
     public string Message { get; init; } = string.Empty;
     public string Solution { get; init; } = string.Empty;
+
+    /// <summary>Kurzfassung für die Sprechblase; nur lokal für das Tray-Symbol, geht nicht an den Server.</summary>
+    [JsonIgnore]
+    public string Balloon { get; init; } = string.Empty;
     public Dictionary<string, string> Details { get; init; } = new();
 
     /// <summary>Unix-Sekunden.</summary>
