@@ -1,0 +1,2 @@
+63df90577e6d817e507e5e641aafaa8ed75a17c1a5f32978396fee3b6d8ea203  WachtlProbeSetup-0.4.0.exe
+4d8949ba15d14c242eadcae35235b3521842bca5e5e770344e6f7fe301a21808  WachtlServerSetup-0.4.0.exe
