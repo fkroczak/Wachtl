@@ -18,6 +18,8 @@ namespace Wachtl.Tray
             "den Weg ins Internet und die Bandbreite und meldet die Werte an den Wachtl-Server der IT.\n\n" +
             "Über „Problem melden“ können Sie Störungen melden. Sie werden in den Messgraphen markiert, " +
             "damit die IT sieht, was zu diesem Zeitpunkt im Netzwerk los war.\n\n" +
+            "Erkennt Wachtl ein Problem an diesem PC, zum Beispiel ein getrenntes Kabel oder einen Treiberfehler, " +
+            "erscheint neben der Uhr ein Hinweis mit Lösungsvorschlag.\n\n" +
             "Es werden keine Inhalte, Webseiten oder Dateien erfasst.";
 
         private readonly TrayClient _client;
