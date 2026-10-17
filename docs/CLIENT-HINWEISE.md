@@ -21,7 +21,7 @@ WAN-Miniport, Bluetooth, Npcap) werden ignoriert.
 | **Netzwerkkabel getrennt** | kritisch | Eine LAN-Karte, die verbunden war, hat keinen Link mehr. Läuft die Verbindung über eine andere Karte weiter (z. B. Notebook vom Dock genommen): nur Info, keine Sprechblase |
 | **WLAN getrennt** | Warnung | WLAN-Adapter verliert die Verbindung, und kein Kabel übernimmt |
 | **Netzwerk langsamer** (Link-Geschwindigkeit gesunken) | Warnung | z. B. 1 Gbit/s → 100 Mbit/s. Typisch: Kabel mit fehlenden Adern, Switch-Port, Energiesparen |
-| **Langsame Netzwerkverbindung** | Warnung, bei 10 Mbit/s kritisch | LAN-Karte seit 30 s unter 1 Gbit/s verbunden |
+| **Langsame Netzwerkverbindung** | Info (100 Mbit/s, keine Sprechblase), unter 100 Mbit/s kritisch | LAN-Karte seit 30 s unter 1 Gbit/s verbunden. 100 Mbit/s ist an Telefonen und USB-Adaptern üblich, daher nur im Web-UI |
 | **Netzwerkverbindung bricht wiederholt ab** | Warnung | mindestens 3 Abbrüche in 10 min |
 | **Problem mit der Netzwerkkarte oder ihrem Treiber** | kritisch | Geräte-Manager meldet einen Fehlercode (z. B. 10, 28, 31, 43). „Deaktiviert“ zählt nicht |
 | **Treiber setzt die Netzwerkkarte wiederholt zurück** | Warnung | mindestens 2 Ereignisse NDIS 10400 in 15 min |
@@ -29,7 +29,9 @@ WAN-Miniport, Bluetooth, Npcap) werden ignoriert.
 | **Kein Standard-Gateway** | Warnung | IP-Adresse vorhanden, aber kein Gateway |
 | **Viele fehlerhafte Datenpakete** | Warnung | mehr als 50 fehlerhafte oder verworfene Pakete pro Minute und über 0,5 % |
 
-Damit kurze Zustände keinen Fehlalarm auslösen, muss ein Zustand etwa 10 s bestehen (Kabel getrennt: sofort).
+Damit kurze Zustände keinen Fehlalarm auslösen, muss ein Zustand etwa 10 s bestehen. „Kabel getrennt“ geht sofort als
+Info an den Server und wird nach 15 s ohne andere Verbindung kritisch (Sprechblase). Nach Ruhezustand oder
+Standby zählen 60 s lang keine Abbrüche, Geschwindigkeitswechsel und Rücksetzungen – die Karte handelt den Link neu aus.
 Nach dem Beheben meldet Wachtl „wieder verbunden“ bzw. „wieder normal“ mit der Dauer der Störung. Derselbe Hinweis
 für dieselbe Karte erscheint frühestens nach 30 min erneut, außer er wird schlimmer.
 

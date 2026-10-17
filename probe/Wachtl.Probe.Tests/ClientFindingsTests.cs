@@ -292,7 +292,7 @@ public class FindingEvaluatorTests
             new NicResetEvent(suspend.AddSeconds(2), "Intel(R) Ethernet Connection I219-V"),
             new NicResetEvent(resume.AddSeconds(10), "Intel(R) Ethernet Connection I219-V"),
         };
-        Assert.Empty(PollFor(TimeSpan.FromMinutes(2), Eth()).Where(f => f.Kind == FindingKinds.NicReset));
+        Assert.DoesNotContain(PollFor(TimeSpan.FromMinutes(2), Eth()), f => f.Kind == FindingKinds.NicReset);
         var list = new List<ClientFinding>();
         while (_now < resume.AddMinutes(2))
         {

@@ -142,6 +142,7 @@ public sealed class FindingEvaluator
             foreach (var at in _adapters.Values)
             {
                 at.Downs.RemoveAll(d => d >= last);
+                at.DownSince = null; // die 15 s für „Kabel getrennt“/„WLAN getrennt“ zählen ab dem Aufwachen
             }
         }
 
