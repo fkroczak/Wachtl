@@ -43,6 +43,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
 
 Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heatmaps, mTLS und automatische Probe-Updates.
+Konzept für die automatische Fehlerdiagnose mit Lösungsvorschlägen: [docs/DIAGNOSE-KONZEPT.md](docs/DIAGNOSE-KONZEPT.md).
 
 ## Download
 
