@@ -41,6 +41,8 @@ DisableProgramGroupPage=yes
 DisableWelcomePage=yes
 DefaultGroupName={code:GetProductName}
 UsePreviousAppDir=yes
+; Pflicht bei einer AppId aus [Code]; es gibt ohnehin nur Deutsch
+UsePreviousLanguage=no
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
