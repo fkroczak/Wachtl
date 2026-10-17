@@ -37,6 +37,8 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Standardpaket (0.4) | Ping, Traceroute, iperf3 und Speedtest mit einem Klick; Rollout-Anleitung [docs/ROLLOUT.md](docs/ROLLOUT.md) |
 | Deinstallation (0.4) | Probe meldet sich am Server ab, alle Firewall-Regeln und das Token werden entfernt; Server Windows/Linux (`deploy/uninstall.sh`) mit Prüfung auf offene Ports |
 | Tray-Symbol (0.6) | Symbol neben der Uhr auf Clients und Windows-Server: Problem melden, Über, Beenden ([docs/STOERUNGSMELDUNGEN.md](docs/STOERUNGSMELDUNGEN.md)) |
+| Kurzausfälle (0.7) | Ziel und WAN gelten ab 5 s ohne Antwort als gestört, sekundengenaue Dauer in der Ausfallübersicht |
+| Client-Hinweise (0.7) | Probe erkennt Kabel getrennt, Link-Geschwindigkeit, Treiberfehler, DHCP/Gateway, Paketfehler – Sprechblase mit Lösung auf dem PC, Anzeige im Web-UI ([docs/CLIENT-HINWEISE.md](docs/CLIENT-HINWEISE.md)) |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 

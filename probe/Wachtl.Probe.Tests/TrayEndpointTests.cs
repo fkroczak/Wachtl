@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Wachtl.Probe.Config;
+using Wachtl.Probe.Diagnostics;
 using Wachtl.Probe.Tray;
 using Wachtl.Tray.Core;
 
@@ -34,11 +35,13 @@ public sealed class TrayEndpointTests : IDisposable
         return Task.FromResult(new ReportSendResult(_outcome, _outcome == ReportSendOutcome.Rejected ? "occurred_at ungültig" : null));
     }
 
+    private readonly FindingFeed _feed = new(startSeq: 1000);
+
     private TrayApi Api(PendingReports? pending = null, RateLimiter? rate = null) =>
-        new(Port, _status, pending ?? new PendingReports(PendingPath), FakeSend, rate, () => Now, "PC-TEST");
+        new(Port, _status, pending ?? new PendingReports(PendingPath), FakeSend, rate, () => Now, "PC-TEST", findings: _feed);
 
     private static TrayHttpRequest Request(string method, string path, string body = "", string host = "127.0.0.1:47251",
-        string? tray = "1", string contentType = "application/json")
+        string? tray = "1", string contentType = "application/json", string query = "")
     {
         var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Host"] = host, ["Content-Type"] = contentType };
         if (tray is not null)
@@ -46,7 +49,7 @@ public sealed class TrayEndpointTests : IDisposable
             headers["X-Wachtl-Tray"] = tray;
         }
 
-        return new TrayHttpRequest { Method = method, Path = path, Headers = headers, Body = body };
+        return new TrayHttpRequest { Method = method, Path = path, Query = query, Headers = headers, Body = body };
     }
 
     private static string ReportBody(long occurred, string category = "slow", string? extra = null) =>
@@ -65,6 +68,9 @@ public sealed class TrayEndpointTests : IDisposable
         Assert.Equal("/tray/v1/report", request.Path);
         Assert.Equal("127.0.0.1:47251", request.Header("host"));
         Assert.Equal("{\"a\":1}", request.Body);
+        Assert.Equal("x=1", request.Query);
+        Assert.Equal("1", request.QueryValue("x"));
+        Assert.Null(request.QueryValue("since"));
     }
 
     [Theory]
@@ -257,6 +263,85 @@ public sealed class TrayEndpointTests : IDisposable
         Assert.Equal("", report.Description);
     }
 
+    // -- Client-Hinweise ----------------------------------------------------
+
+    private static ClientFinding Finding(string id, string state = "active") => new()
+    {
+        FindingId = id, Kind = FindingKinds.CableUnplugged, Severity = "critical", State = state, Adapter = "Ethernet",
+        AdapterDescription = "Intel", Title = "Netzwerkkabel getrennt", Message = "m", Solution = "s", DetectedAt = 1_792_229_990,
+        ResolvedAt = state == "resolved" ? 1_792_230_000 : null, Details = new() { ["x"] = "y" },
+    };
+
+    [Fact]
+    public async Task FindingsMatchContract()
+    {
+        _feed.Publish(Finding("a"));
+        _feed.Publish(Finding("b"));
+        _feed.Publish(Finding("a", "resolved"));
+
+        var response = await Api().HandleAsync(Request("GET", TrayApi.FindingsPath, query: "since=0"), default);
+        Assert.Equal(200, response.Status);
+        using var doc = JsonDocument.Parse(response.Json);
+        var root = doc.RootElement;
+        Assert.True(root.GetProperty("notify").GetBoolean());
+        Assert.Equal(1003, root.GetProperty("latest_seq").GetInt64());
+        var items = root.GetProperty("findings").EnumerateArray().ToList();
+        Assert.Equal(new long[] { 1002, 1003 }, items.Select(i => i.GetProperty("seq").GetInt64()));
+        var a = items[1];
+        Assert.Equal("a", a.GetProperty("finding_id").GetString());
+        Assert.Equal("resolved", a.GetProperty("state").GetString());
+        Assert.Equal(1_792_230_000, a.GetProperty("resolved_at").GetInt64());
+        Assert.Equal(JsonValueKind.Null, items[0].GetProperty("resolved_at").ValueKind);
+        foreach (var name in new[] { "seq", "finding_id", "kind", "severity", "state", "title", "message", "solution", "adapter", "detected_at", "resolved_at" })
+        {
+            Assert.True(a.TryGetProperty(name, out _), name);
+        }
+
+        var since = await Api().HandleAsync(Request("GET", TrayApi.FindingsPath, query: "since=1002"), default);
+        Assert.Single(JsonDocument.Parse(since.Json).RootElement.GetProperty("findings").EnumerateArray());
+        var all = await Api().HandleAsync(Request("GET", TrayApi.FindingsPath), default);
+        Assert.Equal(2, JsonDocument.Parse(all.Json).RootElement.GetProperty("findings").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData("since=abc", 400)]
+    [InlineData("since=-1", 400)]
+    [InlineData("since=5&x=1", 200)]
+    public async Task FindingsValidateSince(string query, int expected)
+    {
+        Assert.Equal(expected, (await Api().HandleAsync(Request("GET", TrayApi.FindingsPath, query: query), default)).Status);
+    }
+
+    [Fact]
+    public async Task FindingsAreGuardedLikeTheRest()
+    {
+        Assert.Equal(403, (await Api().HandleAsync(Request("GET", TrayApi.FindingsPath, tray: null), default)).Status);
+        Assert.Equal(403, (await Api().HandleAsync(Request("GET", TrayApi.FindingsPath, host: "evil.example:47251"), default)).Status);
+        Assert.Equal(405, (await Api().HandleAsync(Request("POST", TrayApi.FindingsPath, "{}"), default)).Status);
+    }
+
+    [Fact]
+    public async Task ConfigSwitchesNotifyAndMonitor()
+    {
+        var diagnostics = new ClientDiagnostics(_status, NullLogger.Instance, new PendingFindings(Path.Combine(_dir, "f.json")), _feed);
+        diagnostics.Publish(new[] { Finding("a") });
+        Assert.Equal(1, diagnostics.Pending.Count);
+
+        diagnostics.Configure(new ClientFindingsConfig { Enabled = true, Notify = false });
+        var response = await Api().HandleAsync(Request("GET", TrayApi.FindingsPath), default);
+        Assert.False(JsonDocument.Parse(response.Json).RootElement.GetProperty("notify").GetBoolean());
+        Assert.True(diagnostics.Enabled);
+
+        diagnostics.Configure(new ClientFindingsConfig { Enabled = false, Notify = true });
+        Assert.False(diagnostics.Enabled);
+        Assert.False(_feed.Notify);
+        Assert.Empty(_feed.Since(0).Findings);
+
+        diagnostics.Configure(null); // älterer Server ohne client_findings
+        Assert.True(diagnostics.Enabled);
+        Assert.True(_feed.Notify);
+    }
+
     // -- Puffer -------------------------------------------------------------
 
     private static ServerReport Report(int i) => new() { ReportId = $"id-{i}", OccurredAt = i, Category = "slow" };
@@ -341,6 +426,11 @@ public sealed class TrayEndpointTests : IDisposable
             Assert.Equal(ReportOutcome.Queued, queued.Outcome);
             Assert.Equal(1, client.GetStatus()!.PendingReports);
             Assert.Equal("Zentrale", client.GetStatus()!.Site);
+
+            // Client-Hinweise über die echte Schnittstelle (ohne Hinweis-Quelle: leer, notify an)
+            var poll = client.GetFindings(0);
+            Assert.Equal(FindingsPollStatus.Ok, poll.Status);
+            Assert.Empty(poll.Response!.Findings!);
         }
         finally
         {

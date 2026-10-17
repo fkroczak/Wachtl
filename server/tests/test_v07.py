@@ -50,6 +50,28 @@ class ClientFindingApiTest(AppTestCase):
         self.assertEqual(rows[0]["state"], "resolved")
         self.assertGreaterEqual(rows[0]["resolved_at"], f["detected_at"])
 
+    def test_resolution_keeps_problem_and_solution(self):
+        # Die Probe schickt beim Beheben den Entwarnungstext, das Problem steht in details.problem
+        f = self.item()
+        self.post(f)
+        self.post({**f, "state": "resolved", "resolved_at": repo.now(), "title": "Netzwerkkabel wieder verbunden",
+                   "message": "Wieder verbunden (Unterbrechung 3 Min.)", "solution": "",
+                   "details": {"problem": "Netzwerkkabel getrennt", "duration_s": "180"}})
+        row = q1("SELECT * FROM client_findings")
+        self.assertEqual((row["title"], row["solution"]), ("Netzwerkkabel getrennt", f["solution"]))
+        details = json.loads(row["details"])
+        self.assertEqual(details["resolution"], "Wieder verbunden (Unterbrechung 3 Min.)")
+        self.assertEqual(details["speed_mbps"], "1000")
+        # nur als behoben angekommen (Kabel war beim Senden schon wieder drin)
+        g = self.item(state="resolved", resolved_at=repo.now(), title="Netzwerkkabel wieder verbunden",
+                      message="Wieder verbunden", solution="", details={"problem": "Netzwerkkabel getrennt"})
+        self.post(g)
+        row = q1("SELECT * FROM client_findings WHERE finding_id = ?", (g["finding_id"],))
+        self.assertEqual(row["title"], "Netzwerkkabel getrennt")
+        self.make_user()
+        self.login()
+        self.assertIn("Wieder verbunden (Unterbrechung 3 Min.)", self.client.get(f"/probes/{self.pid}").get_data(as_text=True))
+
     def test_invalid_items_are_skipped(self):
         good = self.item(kind="future_kind_from_newer_probe", title="")
         r = self.post(good, self.item(severity="egal"), self.item(detected_at="gestern"), "kein Objekt")

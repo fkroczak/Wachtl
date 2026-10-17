@@ -34,7 +34,8 @@ Einiges geht **sofort mit den vorhandenen Daten** (Abschnitt [Sofort umsetzbar](
 Nicht gemessen: DNS, TCP-Verbindungsaufbau, SMB, MTU, Link-Geschwindigkeit/Duplex, Fehlerzähler der Netzwerkkarte,
 WLAN, ARP/MAC von Gateway und Server, Windows-Ereignisse, öffentliche IP, Auslastung der Leitung.
 
-Bekannte Schwäche in der Auswertung: Der Alarm **WAN gestört** braucht 30 s Ausfall aller Referenzen. Ein
+Erledigt in 0.7: Ausfälle ab 5 s (sekundengenau) und Client-Hinweise zu Netzwerkkarte, Kabel und Treiber
+([CLIENT-HINWEISE.md](CLIENT-HINWEISE.md)). Stand 0.6 war: Der Alarm **WAN gestört** braucht 30 s Ausfall aller Referenzen. Ein
 20-s-Ausfall erscheint deshalb nur als mehrere „einzelne Internet-Referenz“-Störungen, nicht als WAN.
 Beginn und Ende eines Ausfalls sind wegen des 15-s-Auswertetakts nur auf ±15 s genau.
 

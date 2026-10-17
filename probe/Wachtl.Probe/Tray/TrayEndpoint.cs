@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Wachtl.Probe.Config;
+using Wachtl.Probe.Diagnostics;
 
 namespace Wachtl.Probe.Tray;
 
@@ -24,19 +25,19 @@ public sealed class TrayEndpoint : BackgroundService
     private readonly TrayApi _api;
     private readonly SemaphoreSlim _slots = new(MaxConcurrent, MaxConcurrent);
 
-    public TrayEndpoint(ProbeStatus status, ILogger<TrayEndpoint> logger)
+    public TrayEndpoint(ProbeStatus status, ClientDiagnostics diagnostics, ILogger<TrayEndpoint> logger)
         : this(ResolvePort(), status, new PendingReports(Path.Combine(StateStore.DataDir, "reports-pending.json"), logger),
-            logger)
+            logger, diagnostics.Feed)
     {
     }
 
-    internal TrayEndpoint(int port, ProbeStatus status, PendingReports pending, ILogger logger)
+    internal TrayEndpoint(int port, ProbeStatus status, PendingReports pending, ILogger logger, FindingFeed? findings = null)
     {
         Port = port;
         _status = status;
         _pending = pending;
         _logger = logger;
-        _api = new TrayApi(port, status, pending, status.SendReportAsync, logger: logger);
+        _api = new TrayApi(port, status, pending, status.SendReportAsync, logger: logger, findings: findings);
     }
 
     public int Port { get; }

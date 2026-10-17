@@ -90,11 +90,22 @@ public sealed class IperfServerConfig
     public int Port { get; init; } = 5201;
 }
 
+/// <summary>Client-Hinweise (Netzwerkkarte, Kabel, DHCP …): erkennen, an den Server senden, im Tray anzeigen.</summary>
+public sealed class ClientFindingsConfig
+{
+    /// <summary>false: keine Erkennung, nichts wird gesendet.</summary>
+    public bool Enabled { get; init; } = true;
+
+    /// <summary>false: keine Sprechblasen im Tray (der Server erhält die Hinweise trotzdem).</summary>
+    public bool Notify { get; init; } = true;
+}
+
 public sealed class ProbeConfig
 {
     public long ProbeId { get; init; }
     public List<CheckConfig> Checks { get; init; } = new();
     public IperfServerConfig IperfServer { get; init; } = new();
+    public ClientFindingsConfig ClientFindings { get; init; } = new();
     public List<string> ServerUrls { get; init; } = new();
     public int UploadIntervalS { get; init; } = 10;
     public int HeartbeatIntervalS { get; init; } = 30;

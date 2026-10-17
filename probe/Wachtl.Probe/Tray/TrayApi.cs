@@ -1,5 +1,7 @@
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Wachtl.Probe.Diagnostics;
 using Wachtl.Probe.Transport;
 
 namespace Wachtl.Probe.Tray;
@@ -27,6 +29,7 @@ public sealed class TrayApi
 {
     public const string StatusPath = "/tray/v1/status";
     public const string ReportPath = "/tray/v1/report";
+    public const string FindingsPath = "/tray/v1/findings";
     public const int ReportsPerHour = 30;          // je Benutzer
     public const int ReportsPerHourTotal = 300;    // je PC, auch für Terminalserver mit vielen Benutzern
 
@@ -42,10 +45,12 @@ public sealed class TrayApi
     private readonly Func<DateTimeOffset> _clock;
     private readonly string _hostname;
     private readonly ILogger? _logger;
+    private readonly FindingFeed _findings;
 
     public TrayApi(int port, ProbeStatus status, PendingReports pending,
         Func<ServerReport, CancellationToken, Task<ReportSendResult>> send,
-        RateLimiter? rate = null, Func<DateTimeOffset>? clock = null, string? hostname = null, ILogger? logger = null)
+        RateLimiter? rate = null, Func<DateTimeOffset>? clock = null, string? hostname = null, ILogger? logger = null,
+        FindingFeed? findings = null)
     {
         _port = port;
         _status = status;
@@ -55,6 +60,7 @@ public sealed class TrayApi
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _hostname = hostname ?? Environment.MachineName;
         _logger = logger;
+        _findings = findings ?? new FindingFeed();
     }
 
     /// <summary>Kopfzeilen-Schutz gegen Browser (CSRF, DNS-Rebinding). Null = erlaubt.</summary>
@@ -108,7 +114,9 @@ public sealed class TrayApi
                 return Status();
             case ReportPath when request.Method == "POST":
                 return await ReportAsync(request.Body, ct).ConfigureAwait(false);
-            case StatusPath or ReportPath:
+            case FindingsPath when request.Method == "GET":
+                return Findings(request);
+            case StatusPath or ReportPath or FindingsPath:
                 return TrayHttpResponse.Error(405, "Methode nicht erlaubt.");
             default:
                 return TrayHttpResponse.Error(404, "Unbekannte Adresse.");
@@ -131,6 +139,20 @@ public sealed class TrayApi
             LastContact = _status.LastContact,
             PendingReports = _pending.Count,
         };
+    }
+
+    /// <summary>GET /tray/v1/findings?since=&lt;seq&gt;: Client-Hinweise mit Nummer größer since.</summary>
+    private TrayHttpResponse Findings(TrayHttpRequest request)
+    {
+        var since = 0L;
+        var value = request.QueryValue("since");
+        if (!string.IsNullOrEmpty(value)
+            && (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out since) || since < 0))
+        {
+            return TrayHttpResponse.Error(400, "since muss eine nicht negative ganze Zahl sein.");
+        }
+
+        return new TrayHttpResponse(200, JsonSerializer.Serialize(_findings.Since(since), ApiClient.JsonOptions));
     }
 
     private TrayHttpResponse Status() =>

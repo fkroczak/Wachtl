@@ -115,8 +115,21 @@ def store(probe: dict, values: dict) -> bool:
     existing = q1("SELECT id, state FROM client_findings WHERE probe_id = ? AND finding_id = ?",
                   (probe["id"], values["finding_id"]))
     details = json.dumps(values["details"], ensure_ascii=False, sort_keys=True)
+    if values["state"] == "resolved" and values["details"].get("problem"):
+        # Die Probe schickt beim Beheben den Entwarnungstext („wieder verbunden“) und das Problem in details.
+        resolution = (values["message"] or values["title"])[:MAX_DETAIL_VALUE]
+        values = {**values, "title": values["details"]["problem"][:MAX_TITLE],
+                  "details": {**values["details"], "resolution": resolution}}
     if existing:
         if existing["state"] == "resolved" and values["state"] == "active":
+            return False
+        if values["state"] == "resolved":
+            # Problem, Text und Lösungsvorschlag des aktiven Hinweises bleiben stehen
+            old = q1("SELECT details FROM client_findings WHERE id = ?", (existing["id"],))
+            merged = {**json.loads(old["details"] or "{}"), **values["details"]}
+            ex("UPDATE client_findings SET state = 'resolved', resolved_at = ?, details = ?, updated_at = ? "
+               "WHERE id = ?",
+               (values["resolved_at"], json.dumps(merged, ensure_ascii=False, sort_keys=True), ts, existing["id"]))
             return False
         ex("UPDATE client_findings SET kind = ?, severity = ?, state = ?, adapter = ?, adapter_description = ?, "
            "title = ?, message = ?, solution = ?, details = ?, detected_at = ?, resolved_at = ?, updated_at = ? "

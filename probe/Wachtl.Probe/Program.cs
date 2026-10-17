@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Wachtl.Probe;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
+using Wachtl.Probe.Diagnostics;
 using Wachtl.Probe.Logging;
 using Wachtl.Probe.Tray;
 
@@ -29,6 +30,7 @@ if (!WindowsServiceHelpers.IsWindowsService())
 
 builder.Services.AddSingleton<GatewayResolver>();
 builder.Services.AddSingleton<ProbeStatus>();
+builder.Services.AddSingleton<ClientDiagnostics>();
 builder.Services.AddHostedService<ProbeWorker>();
 builder.Services.AddHostedService<TrayEndpoint>();
 
