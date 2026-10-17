@@ -11,7 +11,7 @@ mit einem fertigen Paket installiert. Rechne mit etwa 30 Minuten für den Server
 
 | Variante | Was tun |
 |---|---|
-| Windows Server | `WachtlServerSetup-0.4.0.exe` als Administrator starten, den Seiten folgen. Als Hostname den DNS-Namen **und** die IP des Servers eintragen, z. B. `wachtl.kunde.local,10.0.0.5`. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
+| Windows Server | `WachtlServerSetup-0.5.0.exe` als Administrator starten, den Seiten folgen. Als Hostname den DNS-Namen **und** die IP des Servers eintragen, z. B. `wachtl.kunde.local,10.0.0.5`. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
 | Linux-VM mit Docker | `sudo ./setup.sh wachtl.kunde.local` im Ordner `deploy`. Details: [INSTALL-SERVER.md](INSTALL-SERVER.md) |
 
 Am Ende zeigt das Setup die Adresse, den Admin-Zugang und den **SPKI-Pin**. Zugangsdaten sofort im
@@ -45,7 +45,7 @@ Bei sehr vielen PCs an einem Standort reicht es, die Bandbreiten-Checks nur eine
 
 1. **Verwaltung › Probes registrieren**: Standort wählen, „Nutzungen“ = Anzahl PCs, **Token erzeugen**.
 2. **Paket herunterladen** (ZIP mit Setup und `wachtl-probe.ini` – Server, Pin und Token sind eingetragen).
-3. Auf jedem PC: ZIP entpacken, `WachtlProbeSetup-0.4.0.exe` als Administrator starten, nur noch **Weiter** klicken.
+3. Auf jedem PC: ZIP entpacken, `WachtlProbeSetup-0.5.0.exe` als Administrator starten, nur noch **Weiter** klicken.
 4. Nach 30 Sekunden steht der PC in der Übersicht unter **Probes** mit „online“.
 5. Neben der Uhr erscheint das Wachtl-Symbol. Test: Rechtsklick › **Problem melden …** › Senden – die Meldung steht
    kurz darauf unter **Meldungen** und als Markierung im Graphen dieser Probe.

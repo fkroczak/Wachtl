@@ -18,7 +18,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
                                               Alertmanager ─▶ E-Mail / Teams, Historie zurück an Flask
 ```
 
-## Stand: 0.4
+## Stand: 0.5
 
 | Bereich | Enthalten |
 | --- | --- |
@@ -70,7 +70,7 @@ Fertige, in der CI auf Windows Server getestete Setups liegen im Repository unte
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.4.0.exe` starten
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlServerSetup-0.5.0.exe` starten
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
 3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md) – kompakt für den Rollout beim Kunden: [docs/ROLLOUT.md](docs/ROLLOUT.md)

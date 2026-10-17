@@ -14,12 +14,12 @@
 ; /NoTray installiert es nicht in den Autostart.
 ;
 ; Unbeaufsichtigt (z. B. per Softwareverteilung):
-;   WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin=… /Token=…
+;   WachtlProbeSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin=… /Token=…
 ; Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup ab (Code ≠ 0,
 ; Grund im /LOG). 10 = installiert, aber der Dienst startet nicht. /SUPPRESSMSGBOXES ist unbeaufsichtigt Pflicht.
 
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "0.5.0"
 #endif
 #ifndef PublishDir
   #define PublishDir "..\..\dist\probe"

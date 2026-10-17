@@ -10,10 +10,10 @@
     Voraussetzungen: Windows, Python 3.12 (für pip), Inno Setup 6 (wird sonst per choco installiert).
 
 .EXAMPLE
-    .\windows\build-server.ps1 -Version 0.4.0
+    .\windows\build-server.ps1 -Version 0.5.0
 #>
 param(
-    [string]$Version = '0.4.0',
+    [string]$Version = '0.5.0',
     [string]$PythonVersion = '3.12.10',
     [string]$VmVersion = 'v1.149.0',
     [string]$AlertmanagerVersion = '0.28.1',

@@ -16,7 +16,7 @@ automatisch (verzögert) und braucht keinen angemeldeten Benutzer.
 ## 1. Setup-Assistent (empfohlen)
 
 Im Web-UI unter **Verwaltung › Probes registrieren** einen Token erzeugen und **Paket herunterladen** wählen.
-Das ZIP enthält `WachtlProbeSetup-0.4.0.exe` und eine `wachtl-probe.ini` mit Server, Pin und Token.
+Das ZIP enthält `WachtlProbeSetup-0.5.0.exe` und eine `wachtl-probe.ini` mit Server, Pin und Token.
 Auf dem PC entpacken und das Setup als Administrator starten:
 
 | Seite | Inhalt |
@@ -33,14 +33,14 @@ legt immer der Server fest (Verwaltung › Checks) – am PC selbst gibt es daf�
 ### Unbeaufsichtigt (Softwareverteilung, GPO, Intune)
 
 ```powershell
-WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
+WachtlProbeSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
 Exit-Code 0 = Probe läuft. Schlägt die Verbindungsprüfung oder Registrierung fehl, bricht das Setup mit einem Code ≠ 0 ab
 (Grund im `/LOG`); 10 = installiert, aber der Dienst startet nicht. `/SUPPRESSMSGBOXES` ist unbeaufsichtigt Pflicht.
 Ohne `/Pin` wird unbeaufsichtigt nicht installiert (kein ungeprüftes Vertrauen). Auf einem bereits registrierten PC
 aktualisiert ein unbeaufsichtigter Lauf nur das Programm. Liegt eine `wachtl-probe.ini` neben dem Setup, genügt
-`WachtlProbeSetup-0.4.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
+`WachtlProbeSetup-0.5.0.exe /VERYSILENT /SUPPRESSMSGBOXES`.
 
 `/NoTray` lässt das Tray-Symbol weg (kein Autostart-Eintrag). Unbeaufsichtigt per Softwareverteilung läuft das Setup
 meist als SYSTEM – das Symbol erscheint dann bei der nächsten Anmeldung der Benutzer.
