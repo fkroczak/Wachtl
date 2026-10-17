@@ -1,4 +1,4 @@
-"""0.7: Ausfälle ab 5 s (sekundengenau) und Client-Hinweise der Probes."""
+"""0.8: Ausfälle ab 5 s (sekundengenau) und Client-Hinweise der Probes."""
 from __future__ import annotations
 
 import json

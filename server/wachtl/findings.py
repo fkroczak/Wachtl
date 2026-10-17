@@ -1,4 +1,4 @@
-"""Client-Hinweise (0.7): was eine Probe auf ihrem PC selbst erkennt – Kabel getrennt, Link-Geschwindigkeit,
+"""Client-Hinweise (0.8): was eine Probe auf ihrem PC selbst erkennt – Kabel getrennt, Link-Geschwindigkeit,
 Treiberfehler, keine DHCP-Adresse … Die Probe zeigt sie dem Benutzer als Sprechblase und liefert sie hierher.
 
 Titel, Text und Lösungsvorschlag kommt von der Probe (gleicher Wortlaut wie in der Sprechblase).

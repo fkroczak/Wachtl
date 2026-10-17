@@ -112,7 +112,7 @@ def series(probe_id: int, check_id: int):
     except ValueError:
         return jsonify(error="at muss eine Unix-Zeit in Sekunden sein"), 400
     try:
-        return jsonify(vm.ping_series(probe_id, check_id, range_key, hop, at))
+        return jsonify({**vm.ping_series(probe_id, check_id, range_key, hop, at), "thr": repo.graph_thresholds()})
     except vm.VMError as exc:
         return jsonify(error=str(exc)), 502
 

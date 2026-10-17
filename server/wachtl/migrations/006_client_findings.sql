@@ -1,4 +1,4 @@
--- 0.7: Kurzausfälle ab 5 s und Client-Hinweise der Probes (Netzwerkkarte, Kabel, Treiber).
+-- 0.8: Kurzausfälle ab 5 s und Client-Hinweise der Probes (Netzwerkkarte, Kabel, Treiber).
 
 -- Ausfälle werden ab einer Mindestdauer in Sekunden erkannt statt nach „N Fehlern in Folge“ bzw. 30 s.
 -- Nur die alten Standardwerte werden angepasst, eigene Werte bleiben.

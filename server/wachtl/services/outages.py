@@ -44,6 +44,7 @@ class Outage:
     site: str
     site_name: str
     target: str
+    check_id: str
     start: int
     end: int | None
     summary: str
@@ -177,7 +178,7 @@ def load(since: int, site_id: str | None = None, min_duration: int = 0, include_
         items.append(Outage(
             id=r["id"], cause=cause, probe=labels.get("probe", ""), probe_name=labels.get("probe_name", "?"),
             site=labels.get("site", ""), site_name=labels.get("site_name", "?"), target=labels.get("target", ""),
-            start=start, end=end, summary=r["summary"] or r["alertname"],
+            check_id=labels.get("check_id", ""), start=start, end=end, summary=r["summary"] or r["alertname"],
         ))
     mark_consequences(items)
     out = [o for o in items
@@ -212,7 +213,7 @@ def summarize(items: list[Outage]) -> dict:
         c = by_cause.setdefault(o.cause, {"label": o.cause_label, "count": 0, "seconds": 0})
         c["count"] += 1
         c["seconds"] += o.duration
-        s = by_site.setdefault(o.site_name, {"count": 0, "seconds": 0})
+        s = by_site.setdefault(o.site_name, {"count": 0, "seconds": 0, "site": o.site})
         s["count"] += 1
         s["seconds"] += o.duration
     return {

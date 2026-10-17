@@ -75,6 +75,7 @@ def _metric_names(hop: int | None) -> dict[str, str]:
         "rtt": f"wachtl_{kind}_rtt_ms", "up": f"wachtl_{kind}_up", "jitter": f"wachtl_{kind}_jitter_ms",
         "avg_1m": f"wachtl:{kind}_rtt_ms:avg_1m", "min_1m": f"wachtl:{kind}_rtt_ms:min_1m",
         "max_1m": f"wachtl:{kind}_rtt_ms:max_1m", "p50_1m": f"wachtl:{kind}_rtt_ms:p50_1m",
+        "q_1m": f"wachtl:{kind}_rtt_ms:quantiles_1m",
         "loss_1m": f"wachtl:{kind}_loss_ratio_1m", "jitter_1m": f"wachtl:{kind}_jitter_ms:avg_1m",
     }
 
@@ -84,9 +85,12 @@ def _hop_sel(probe_id: int, check_id: int, hop: int | None) -> str:
     return sel if hop is None else sel + f',hop="{int(hop):02d}"'
 
 
+QUANTILES = ("0.1", "0.25", "0.5", "0.75", "0.9")
+
+
 def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = None,
                 at: int | None = None) -> dict:
-    """Latenz (avg/min/max), Jitter und Paketverlust für den Graphen der Ziel- bzw. Hop-Detailseite.
+    """Smokeping-Graph der Ziel- bzw. Hop-Detailseite: Quantile p10/p25/p50/p75/p90 und Paketverlust je Schritt.
 
     ``at`` (Unix-Sekunden) legt das Fenster mittig um diesen Zeitpunkt, z. B. eine Störungsmeldung;
     ohne ``at`` endet es jetzt.
@@ -100,32 +104,30 @@ def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = 
     sel = _hop_sel(probe_id, check_id, hop)
     m = _metric_names(hop)
     w = f"{step}s"
-    jw = f"{max(step, 120)}s"  # Jitter kommt nur alle 60 s
+    # mehrere Hop-IPs (Lastverteilung) werden zusammengefasst, Quantile je phi
+    hops = (lambda e: f"avg({e})") if hop is not None else (lambda e: e)
     if use_agg:
+        # shortcut: Quantile langer Zeiträume sind Mittel der Minuten-Quantile (wie Smokepings RRD-Konsolidierung),
+        # nicht exakt; Bänder fehlen für Zeiten vor dem Update (Regel quantiles_1m neu), der Median nicht.
+        # Exakt ginge nur mit Histogrammen je Minute – nachrüsten, falls kurze Spitzen in 7d/30d verschwinden.
         queries = {
-            "avg": f"avg_over_time({m['avg_1m']}{{{sel}}}[{w}])",
-            "min": f"min_over_time({m['min_1m']}{{{sel}}}[{w}])",
-            "max": f"max_over_time({m['max_1m']}{{{sel}}}[{w}])",
-            "jitter": f"avg_over_time({m['jitter_1m']}{{{sel}}}[{jw}])",
-            "loss": f"avg_over_time({m['loss_1m']}{{{sel}}}[{w}]) * 100",
+            "q": f"avg by (phi) (avg_over_time({m['q_1m']}{{{sel}}}[{w}]))",
+            "p50": hops(f"avg_over_time({m['p50_1m']}{{{sel}}}[{w}])"),
+            "loss": hops(f"avg_over_time({m['loss_1m']}{{{sel}}}[{w}]) * 100"),
         }
         base = _cfg("VM_AGG_URL")
     else:
         queries = {
-            "avg": f"avg_over_time({m['rtt']}{{{sel}}}[{w}])",
-            "min": f"min_over_time({m['rtt']}{{{sel}}}[{w}])",
-            "max": f"max_over_time({m['rtt']}{{{sel}}}[{w}])",
-            "jitter": f"avg_over_time({m['jitter']}{{{sel}}}[{jw}])",
-            "loss": f"(1 - avg_over_time({m['up']}{{{sel}}}[{w}])) * 100",
+            "q": f'avg by (phi) (quantiles_over_time("phi", {", ".join(QUANTILES)}, {m["rtt"]}{{{sel}}}[{w}]))',
+            "loss": hops(f"(1 - avg_over_time({m['up']}{{{sel}}}[{w}])) * 100"),
         }
         base = _cfg("VM_RAW_URL")
-    series = {}
+    series = {f"p{round(float(phi) * 100)}": [] for phi in QUANTILES}
     for key, query in queries.items():
-        # mehrere Hop-IPs (Lastverteilung) werden zusammengefasst
-        query = f"avg({query})" if hop is not None else query
-        result = _get(base, "/api/v1/query_range", {"query": query, "start": start, "end": end, "step": step})
-        values = result[0]["values"] if result else []
-        series[key] = [[int(ts) * 1000, _num(v)] for ts, v in values]
+        for item in _get(base, "/api/v1/query_range", {"query": query, "start": start, "end": end, "step": step}):
+            name = f"p{round(float(item['metric']['phi']) * 100)}" if key == "q" else key
+            series[name] = [[int(ts) * 1000, _num(v)] for ts, v in item["values"]]
+    series.setdefault("loss", [])
     return {"range": range_key, "step_s": step, "source": "agg" if use_agg else "raw", "series": series,
             "start": start, "end": end}
 
@@ -251,3 +253,25 @@ def live_status() -> dict[tuple[str, str], dict]:
             k = (m.get("probe", ""), m.get("check_id", ""))
             status.setdefault(k, dict.fromkeys(queries))[key] = _num(item["value"][1])
     return status
+
+
+def site_sparklines(site_id: int) -> dict[tuple[str, str], dict]:
+    """Je (Probe, Check) eines Standorts: Latenz-Median und Verlust je Minute der letzten Stunde, Jitter (5 min).
+
+    Zwei Bereichs- und eine Sofortabfrage für den ganzen Standort – für die Mini-Graphen im Standort-Dashboard.
+    """
+    end = int(time.time())
+    sel = f'site="{int(site_id)}"'
+    out: dict[tuple[str, str], dict] = {}
+
+    def entry(m: dict) -> dict:
+        return out.setdefault((m.get("probe", ""), m.get("check_id", "")), {"rtt": [], "loss": [], "jitter": None})
+
+    for key, query in (("rtt", f"quantile_over_time(0.5, wachtl_ping_rtt_ms{{{sel}}}[60s])"),
+                       ("loss", f"(1 - avg_over_time(wachtl_ping_up{{{sel}}}[60s])) * 100")):
+        params = {"query": query, "start": end - 3600, "end": end, "step": 60}
+        for item in _get(_cfg("VM_RAW_URL"), "/api/v1/query_range", params):
+            entry(item["metric"])[key] = [(int(float(ts)), _num(v)) for ts, v in item["values"]]
+    for item in instant(f"avg_over_time(wachtl_ping_jitter_ms{{{sel}}}[5m])"):
+        entry(item["metric"])["jitter"] = _num(item["value"][1])
+    return out

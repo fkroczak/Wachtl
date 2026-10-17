@@ -3,10 +3,18 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
-## Neu in 0.7 (in Arbeit)
+## Neu in 0.8
 
 - **Ausfälle ab 5 s**: Ziel und WAN gelten ab 5 s ohne Antwort als ausgefallen (vorher 3 Pings bzw. 30 s). Die Regel prüft jede Sekunde, kurze Ausfälle zwischen zwei Auswertungen gehen nicht mehr verloren. Beginn und Dauer in der Ausfallübersicht sind sekundengenau.
 - **Client-Hinweise**: Die Probe erkennt am PC getrenntes Kabel, gesunkene oder niedrige Link-Geschwindigkeit, instabile Verbindung, Treiberfehler, Rücksetzen der Netzwerkkarte, fehlende DHCP-Adresse, fehlendes Gateway und Paketfehler. Der Benutzer sieht eine Sprechblase mit Lösungsvorschlag, der Server zeigt die Hinweise auf Übersicht, Standort und Probe. Details: `docs/CLIENT-HINWEISE.md`.
+
+## Neu in 0.7
+
+- **Probes geführt einrichten**: Verwaltung › „Probes einrichten (geführt)“ fragt in vier Schritten alles Wichtige ab – Standort, Messungen (Standardpaket, bereits angehakt), Alarmierung per E-Mail oder Teams und die Anzahl der PCs – und bietet danach direkt das fertige Setup an. Alle Werte sind mit Standards vorbelegt; bei einem Fehler wird nichts halb angelegt.
+- **Graph wie Smokeping/HOP7**: Rauch-Bänder (80 % und mittlere 50 % der Pings), Median-Linie gefärbt nach Paketverlust, Latenzschwelle, Zeiten über der Alarmschwelle hinterlegt, Verluststreifen unter der Zeitachse, Störungsmeldungen als Markierung. Tooltip mit Median und Streuung, Bedienung per Tastatur, Zoom durch Aufziehen.
+- **Standort als Dashboard**: Kennzahlen (Probes online, Probleme, Alarme, Meldungen, Internet, Bandbreite) und je Probe ein Widget mit Kurzwerten und Mini-Graph der letzten Stunde. Probes mit Fehlern stehen oben, rot umrandet, mit dem Problem im Klartext.
+- **Alles verlinkt**: Standorte, Probes, Ziele, Alarme, Meldungen und Audit-Einträge führen überall zur passenden Seite; ein Test sorgt dafür, dass das so bleibt.
+- **Ruhigere, neutrale Farben**: Grautöne mit einer zurückhaltenden Akzentfarbe statt Braun/Ocker, hell und dunkel.
 
 ## Neu in 0.6
 

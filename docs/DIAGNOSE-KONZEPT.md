@@ -34,7 +34,7 @@ Einiges geht **sofort mit den vorhandenen Daten** (Abschnitt [Sofort umsetzbar](
 Nicht gemessen: DNS, TCP-Verbindungsaufbau, SMB, MTU, Link-Geschwindigkeit/Duplex, Fehlerzähler der Netzwerkkarte,
 WLAN, ARP/MAC von Gateway und Server, Windows-Ereignisse, öffentliche IP, Auslastung der Leitung.
 
-Erledigt in 0.7: Ausfälle ab 5 s (sekundengenau) und Client-Hinweise zu Netzwerkkarte, Kabel und Treiber
+Erledigt in 0.8: Ausfälle ab 5 s (sekundengenau) und Client-Hinweise zu Netzwerkkarte, Kabel und Treiber
 ([CLIENT-HINWEISE.md](CLIENT-HINWEISE.md)). Stand 0.6 war: Der Alarm **WAN gestört** braucht 30 s Ausfall aller Referenzen. Ein
 20-s-Ausfall erscheint deshalb nur als mehrere „einzelne Internet-Referenz“-Störungen, nicht als WAN.
 Beginn und Ende eines Ausfalls sind wegen des 15-s-Auswertetakts nur auf ±15 s genau.
@@ -368,10 +368,11 @@ Empfehlung für den Kunden jetzt: eine **Probe auf dem Fileserver** installieren
 
 | Phase | Inhalt |
 |---|---|
-| 0.7 | Sofort umsetzbar (oben), Diagnose-Seite |
-| 0.8 | Probe: DNS-, TCP-Port- und HTTP-Check, MTU-Check, Netzwerkkarte + Ereignisse, öffentliche IP |
-| 0.9 | VoIP-Profil, Latenz unter Last, HTTP-Stream, Dauertransfer, ARP/MAC |
-| 1.0 | SNMP (Auslastung, Port-Fehler, STP), WLAN, Probe → Switch-Zuordnung |
+| 0.8 (erledigt) | Ausfälle ab 5 s sekundengenau, Netzwerkkarte + Ereignisse als Client-Hinweise mit Sprechblase |
+| 0.9 | Rest von „Sofort umsetzbar“ (Wiederkehr, Standort-Korrelation, MOS, Soll-Bandbreite), Diagnose-Seite |
+| 1.0 | Probe: DNS-, TCP-Port- und HTTP-Check, MTU-Check, öffentliche IP |
+| 1.1 | VoIP-Profil, Latenz unter Last, HTTP-Stream, Dauertransfer, ARP/MAC |
+| 1.2 | SNMP (Auslastung, Port-Fehler, STP), WLAN, Probe → Switch-Zuordnung |
 
 Jede neue Messart entsteht doppelt: in der Windows-Probe (C#) und in der Server-Probe (Python), mit Eintrag in
 `checktypes.py`, Ingest-Freigabe, `checkstatus` und Alarmregeln (Ablauf siehe Code-Kommentare in `checktypes.py`).

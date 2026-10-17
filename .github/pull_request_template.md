@@ -17,5 +17,6 @@ Details und Beispiele: [`docs/quality-guardrails.md`](../docs/quality-guardrails
 - [ ] **Text:** Kurze Sätze, aktive Formulierungen, Fachbegriffe nur wo nötig und dann erklärt. Link- und Buttontexte sagen, was passiert.
 - [ ] **Scannbarkeit:** Überschriften gliedern die Seite logisch (eine h1, keine Sprünge). Wichtiges steht zuerst.
 - [ ] **Mobil:** Bei 320 px Breite bedienbar, kein seitliches Scrollen außerhalb von Tabellen.
+- [ ] **Verweise sind Links:** Neu angezeigte Standorte, Probes, Checks/Ziele und Meldungen verlinken auf ihre Seite (Linktext = Name, `templates/_links.html`).
 - [ ] **Screenreader:** Neue Bedienelemente haben eindeutige Namen (auch wenn sie sich je Tabellenzeile wiederholen). Status nicht nur über Farbe.
 - [ ] **Tastatur:** Alles mit Tab/Enter/Leertaste erreichbar, Fokus sichtbar, keine Fokusfalle.

@@ -2,6 +2,7 @@
 {% block title %}{{ probe.hostname }}{% endblock %}
 {% from "_forms.html" import field %}
 {% from "_reports.html" import report_table with context %}
+{% from "_links.html" import alert_links, check_target with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -16,6 +17,7 @@
         {% elif probe.status != 'active' %}<span class="dot off"></span> deaktiviert
         {% elif probe_online(probe) %}<span class="dot ok"></span> online
         {% else %}<span class="dot down"></span> offline{% endif %}</dd>
+      <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
       <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
       <dt>iperf3-Gegenstelle</dt><dd>{{ ('aktiv, Port %d'|format(probe.iperf_port)) if probe.iperf_server else 'aus' }}</dd>
@@ -58,7 +60,7 @@
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
       <td>{{ KIND_LABELS[st.kind] }}</td>
       <td><a href="{{ check_url(probe, st.check) }}">{{ st.check.name }}</a></td>
-      <td>{{ st.check.target }}</td>
+      <td>{{ check_target(st.check) }}</td>
       <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}</td>
       <td>{{ st.ts|ago if st.ts else '–' }}</td>
     </tr>
@@ -115,7 +117,7 @@
     {% set ref = last.down or last.up %}
     <tr>
       <td><a href="{{ url_for('web.bandwidth_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
-      <td>{{ c.target }}</td>
+      <td>{{ check_target(c) }}</td>
       {% for d in ('down', 'up') %}
         {% set r = last[d] %}
         <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error }}">Fehler</span>
@@ -175,7 +177,7 @@
 <table>
   <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Ende</th></tr></thead>
   <tbody>{% for a in alerts %}
-    <tr><td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td><td>{{ a.summary or a.alertname }}</td>
+    <tr><td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td><td>{{ a.summary or a.alertname }}{% set refs = alert_links(a, False) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
       <td>{{ a.starts_at|dt }}</td><td>{{ a.ends_at|dt if a.ends_at else 'aktiv' }}</td></tr>
   {% endfor %}</tbody>
 </table>

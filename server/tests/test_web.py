@@ -1,7 +1,7 @@
 import json
 from unittest import mock
 
-from wachtl.db import q, q1
+from wachtl.db import ex, q, q1
 
 from .helpers import AppTestCase
 
@@ -113,16 +113,31 @@ class WebTest(AppTestCase):
         self.login()
         r = self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=99y")
         self.assertEqual(r.status_code, 400)
-        fake = {"status": "success", "data": {"result": [{"values": [[1700000000, "1.5"], [1700000001, "NaN"]]}]}}
-        resp = mock.Mock()
-        resp.json.return_value = fake
-        resp.raise_for_status.return_value = None
-        with mock.patch("wachtl.services.vm._session.get", return_value=resp) as get:
+        values = [[1700000000, "1.5"], [1700000001, "NaN"]]
+
+        def fake(url, params, timeout):
+            query = params["query"]
+            result = ([{"metric": {"phi": phi}, "values": values} for phi in ("0.1", "0.25", "0.75", "0.9")]
+                      if "phi" in query else [{"metric": {}, "values": values}])
+            resp = mock.Mock()
+            resp.json.return_value = {"status": "success", "data": {"result": result}}
+            return resp
+
+        ex("UPDATE alert_rules SET enabled = FALSE WHERE kind = 'packet_loss_critical'")
+        with mock.patch("wachtl.services.vm._session.get", side_effect=fake) as get:
             r = self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=7d")
         body = r.get_json()
         self.assertEqual(body["source"], "agg")
-        self.assertEqual(body["series"]["avg"], [[1700000000000, 1.5], [1700000001000, None]])
-        self.assertIn("wachtl:ping_rtt_ms:avg_1m", get.call_args_list[0].kwargs["params"]["query"])
+        self.assertEqual(sorted(body["series"]), ["loss", "p10", "p25", "p50", "p75", "p90"])
+        self.assertEqual(body["series"]["p25"], [[1700000000000, 1.5], [1700000001000, None]])
+        self.assertEqual(body["series"]["p50"], body["series"]["p25"])
+        self.assertIn("wachtl:ping_rtt_ms:quantiles_1m", get.call_args_list[0].kwargs["params"]["query"])
+        self.assertEqual(body["thr"], {"lat_warn_ms": 100, "lat_window_s": 300, "loss_warn_pct": 2, "loss_bad_pct": None,
+                                       "loss_window_s": 300})
+        with mock.patch("wachtl.services.vm._session.get", side_effect=fake) as get:
+            self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=1h")
+        self.assertIn('quantiles_over_time("phi", 0.1, 0.25, 0.5, 0.75, 0.9, wachtl_ping_rtt_ms{',
+                      get.call_args_list[0].kwargs["params"]["query"])
 
 
 class ProbePackageTest(AppTestCase):
@@ -166,7 +181,7 @@ class PrefilledSetupTest(AppTestCase):
         os.makedirs(self.probe_dir)
         with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
             f.write(b"MZ-alt")
-        with open(os.path.join(self.probe_dir, "WachtlSetup-0.6.0.exe"), "wb") as f:
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.8.0.exe"), "wb") as f:
             f.write(b"MZ" + b"x" * 5000)
         self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
                                SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])
@@ -239,3 +254,70 @@ class LiveStatusGapsTest(AppTestCase):
             for url in ("/", "/sites/1", f"/probes/{enrolled['probe_id']}"):
                 r = self.client.get(url)
                 self.assertEqual(r.status_code, 200, url)
+
+
+class SiteDashboardTest(AppTestCase):
+    """Standort-Dashboard: Kennzahlen, ein Widget je Probe, Probleme zuerst und hervorgehoben, Mini-Graph."""
+
+    def setUp(self):
+        super().setUp()
+        from wachtl import repo
+        self.ok = self.enroll("PC-OK")["probe_id"]  # legt den Standort an
+        site = q1("SELECT site_id FROM probes WHERE id = ?", (self.ok,))["site_id"]
+        r = self.client.post("/api/probe/v1/enroll", json={"enrollment_token": self.make_token(site, "tok-2"),
+                                                         "hostname": "PC-AUS", "os": "Windows 11", "version": "0.1.0"})
+        self.off = r.get_json()["probe_id"]
+        now = repo.now()
+        ex("UPDATE probes SET last_seen = ?", (now,))
+        ex("UPDATE probes SET last_seen = ? WHERE id = ?", (now - 3600, self.off))
+        ex("UPDATE checks SET created_at = ?", (now - 3600,))
+        probe = q1("SELECT * FROM probes WHERE id = ?", (self.ok,))
+        self.pings = [c for c in repo.checks_for_probe(probe) if c["type"] == "ping"]
+        self.live = {(str(self.ok), str(c["id"])): {"up": 1, "rtt": 12.5, "loss": 0.0} for c in self.pings}
+        self.site = site
+        self.make_user()
+        self.login()
+
+    def get(self, sparks=None):
+        side = sparks if isinstance(sparks, Exception) else None
+        with mock.patch("wachtl.services.vm.live_status", return_value=self.live), \
+             mock.patch("wachtl.services.vm.site_sparklines", return_value=sparks or {}, side_effect=side):
+            r = self.client.get(f"/sites/{self.site}")
+        self.assertEqual(r.status_code, 200)
+        return r.get_data(as_text=True)
+
+    def test_problem_probe_first_and_highlighted(self):
+        from wachtl.services import alerts
+        alerts.store_webhook({"alerts": [{"status": "firing", "fingerprint": "x", "startsAt": "2026-10-16T08:00:00Z",
+                                          "labels": {"alertname": "WachtlProbeOffline", "severity": "critical",
+                                                     "probe": str(self.off)},
+                                          "annotations": {"summary": "Probe PC-AUS offline"}}]})
+        html = self.get()
+        self.assertIn("Probes online", html)
+        self.assertIn('<span class="num">1 / 2</span>', html)
+        self.assertIn(f'href="/meldungen?site={self.site}"', html)
+        self.assertIn('href="#alarme"', html)
+        self.assertLess(html.index("PC-AUS</a></h3>"), html.index("PC-OK</a></h3>"))
+        bad = html[html.index('class="card pw bad"'):html.index("PC-OK</a></h3>")]
+        self.assertIn("Probe offline – letzter Kontakt vor 1 h", bad)
+        self.assertIn("Alarm: Probe PC-AUS offline", bad)
+        self.assertIn("2 Probleme", bad)
+        self.assertIn('class="card pw ok"', html)
+        self.assertIn("12.5 ms", html)
+        self.assertIn('<details id="alle-messungen">', html)
+
+    def test_sparkline_and_vm_failure(self):
+        import time
+        ref = next((c for c in self.pings if c["role"] == "reference"), self.pings[0])
+        now = int(time.time())
+        sparks = {(str(self.ok), str(ref["id"])): {
+            "rtt": [(now - 120, 10.0), (now - 60, 20.0), (now, None)], "loss": [(now - 60, 50.0)], "jitter": 1.5}}
+        html = self.get(sparks)
+        self.assertIn('<svg class="spark"', html)
+        self.assertIn("Latenz-Median der letzten Stunde", html)
+        self.assertIn("Paketverlust in 1 von 60 Minuten", html)
+        self.assertIn('height="15.0"', html)  # 50 % Verlust = halbe Höhe
+        self.assertIn("1.50 ms", html)  # Jitter
+        from wachtl.services import vm
+        html = self.get(vm.VMError("weg"))
+        self.assertIn("Kein Latenzverlauf der letzten Stunde.", html)

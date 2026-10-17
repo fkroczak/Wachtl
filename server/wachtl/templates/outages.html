@@ -21,7 +21,7 @@
   <div class="card kv"><h2 class="card-title">Nach Ursache</h2><dl>
     {% for key, c in summary.by_cause %}<dt>{{ c.label }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
   <div class="card kv"><h2 class="card-title">Nach Standort</h2><dl>
-    {% for name, c in summary.by_site[:8] %}<dt>{{ name }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
+    {% for name, c in summary.by_site[:8] %}<dt>{% if c.site|int %}<a href="{{ url_for('web.site', site_id=c.site|int) }}">{{ name }}</a>{% else %}{{ name }}{% endif %}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
 </section>
 
 <table>
@@ -34,7 +34,7 @@
         {% if o.consequence_of %}<br><span class="muted small">Folge von: {{ o.consequence_of }}</span>{% endif %}</td>
       <td>{% if o.site %}<a href="{{ url_for('web.site', site_id=o.site|int) }}">{{ o.site_name }}</a>{% endif %}</td>
       <td>{% if o.probe %}<a href="{{ url_for('web.probe', probe_id=o.probe|int) }}">{{ o.probe_name }}</a>{% endif %}</td>
-      <td>{{ o.target if o.cause not in ('probe', 'wan') else '' }}</td>
+      <td>{% if o.cause not in ('probe', 'wan') %}{% if o.probe|int and o.check_id|int %}<a href="{{ url_for('web.target', probe_id=o.probe|int, check_id=o.check_id|int) }}" aria-label="{{ o.target }} von {{ o.probe_name }}">{{ o.target }}</a>{% else %}{{ o.target }}{% endif %}{% endif %}</td>
       <td class="small">{{ o.summary }}</td>
     </tr>
   {% else %}<tr><td colspan="7" class="muted">Keine Ausfälle im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>

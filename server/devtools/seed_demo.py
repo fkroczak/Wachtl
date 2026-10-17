@@ -21,7 +21,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from wachtl import checktypes, create_app, findings, repo, reports  # noqa: E402
-from wachtl.db import ins  # noqa: E402
+from wachtl.db import ins, q1  # noqa: E402
 from wachtl.security import hash_token  # noqa: E402
 from wachtl.services import alerts  # noqa: E402
 
@@ -68,15 +68,21 @@ def main(base: str) -> dict:
         def iso(t: int) -> str:
             return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
 
+        def who(probe_id: int) -> dict:
+            # Labels wie in den echten Alarmregeln (alertgen.BY_PROBE): Namen für Texte und Links
+            r = q1("SELECT p.hostname, p.site_id, s.name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?",
+                   (probe_id,))
+            return {"probe": str(probe_id), "probe_name": r["hostname"], "site": str(r["site_id"]), "site_name": r["name"]}
+
         alerts.store_webhook({"alerts": [
             {"status": "firing", "fingerprint": "demo-1", "startsAt": iso(now - 900),
-             "labels": {"alertname": "WachtlPacketLoss", "severity": "warning", "probe": "2", "cause": "wan"},
+             "labels": {"alertname": "WachtlPacketLoss", "severity": "warning", **who(2), "cause": "wan"},
              "annotations": {"summary": "Paketverlust 6 % zu Google DNS (SRV-DC01)"}},
             {"status": "firing", "fingerprint": "demo-2", "startsAt": iso(now - 300),
-             "labels": {"alertname": "WachtlTargetDown", "severity": "critical", "probe": "1"},
+             "labels": {"alertname": "WachtlTargetDown", "severity": "critical", **who(1)},
              "annotations": {"summary": "Cloudflare DNS nicht erreichbar (PC-EMPFANG)"}},
             {"status": "resolved", "fingerprint": "demo-3", "startsAt": iso(now - 86400), "endsAt": iso(now - 80000),
-             "labels": {"alertname": "WachtlProbeOffline", "severity": "critical", "probe": "1"},
+             "labels": {"alertname": "WachtlProbeOffline", "severity": "critical", **who(1)},
              "annotations": {"summary": "Probe PC-EMPFANG offline"}},
         ]})
         # Störungsmeldungen über dieselbe Prüfung wie die Probe-API (Tray-Symbol → Dienst → Server)

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ site.name }}{% endblock %}
 {% from "_reports.html" import report_table with context %}
+{% from "_links.html" import alert_links with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -9,8 +10,94 @@
 {% if site.description %}<p class="muted">{{ site.description }}</p>{% endif %}
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
 
+<section class="cards stats" aria-label="Kennzahlen des Standorts">
+  <a class="card stat {{ 'bad' if kpi.online < kpi.active }}" href="#probes"><span class="num">{{ kpi.online }} / {{ kpi.active }}</span><span>Probes online</span></a>
+  <a class="card stat {{ 'bad' if kpi.problems }}" href="#probes"><span class="num">{{ kpi.problems }}</span><span>Messungen mit Problemen</span></a>
+  <a class="card stat {{ 'bad' if alerts }}" href="#alarme"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
+  <a class="card stat" href="{{ url_for('web.reports_view', site=site.id) }}"><span class="num">{{ kpi.reports }}</span><span>Offene Meldungen</span></a>
+  <div class="card stat {{ {'gestört': 'bad', 'auffällig': 'warn'}.get(net, '') }}"><span class="num word">{{ net or '–' }}</span><span>Internet (Referenz-Pings)</span></div>
+  {% if bw %}{% set p, st = bw %}
+  <a class="card stat {{ {'down': 'bad', 'warn': 'warn', 'stale': 'warn'}.get(st.state, '') }}" href="{{ check_url(p, st.check) }}">
+    <span class="num word">{% for d, arrow in (('down', '↓'), ('up', '↑')) %}{% set r = st.values[d] %}{{ arrow }} {{ '%.0f'|format(r.mbps) if r and r.mbps is not none else '–' }}{{ '<br>'|safe if loop.first }}{% endfor %}</span>
+    <span>Mbit/s · {{ KIND_LABELS[st.kind] }} {{ st.ts|ago }}{% if st.problem %} · {{ st.label }}{% endif %}</span></a>
+  {% endif %}
+</section>
+
+<h2 id="probes">Probes</h2>
+{% if widgets %}
+<p class="muted">Probes mit Problemen stehen oben. Werte zur Internet-Referenz: Latenz der letzten Minute, Verlust und Jitter der letzten 5 Minuten. Der Mini-Graph zeigt den Latenz-Median der letzten Stunde, rote Balken zeigen Paketverlust.</p>
+<ul class="cards widgets">
+  {% for w in widgets %}{% set p = w.probe %}
+  <li class="card pw {{ w.level }}">
+    <h3><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a></h3>
+    <p class="pw-state">
+      {% if p.deregistered_at %}<span class="dot off"></span> deinstalliert
+      {% elif w.level == 'inactive' %}<span class="dot off"></span> deaktiviert
+      {% elif w.online %}<span class="dot ok"></span> online{% else %}<span class="dot down"></span> offline{% endif %}
+      {% if w.issues %} · <strong class="{{ 'down-t' if w.level == 'bad' else 'warn-t' }}">{{ w.issues|length }} {{ 'Problem' if w.issues|length == 1 else 'Probleme' }}</strong>{% endif %}
+    </p>
+    {% if w.issues %}
+    <ul class="pw-issues {{ 'down-t' if w.level == 'bad' else 'warn-t' }}">
+      {% for i in w.issues[:4] %}<li>{{ i }}</li>{% endfor %}
+      {% if w.issues|length > 4 %}<li>und {{ w.issues|length - 4 }} weitere</li>{% endif %}
+    </ul>
+    {% endif %}
+    {% if w.level != 'inactive' %}
+    {% if w.ref %}
+    <dl class="pw-kv">
+      <dt>Latenz</dt><dd>{{ w.ref.values.rtt|ms }} <span class="muted small">zu {{ w.ref.check.name }}</span></dd>
+      <dt>Verlust</dt><dd>{{ w.ref.values.loss|pct }}</dd>
+      <dt>Jitter</dt><dd>{{ w.jitter|ms }}</dd>
+      {% if w.gateway %}<dt>Gateway</dt><dd><span class="dot {{ w.gateway.state }}"></span> {{ w.gateway.label }}</dd>{% endif %}
+    </dl>
+    {% endif %}
+    <p class="small">Checks:{% for k, lbl in (('ok', 'ok'), ('warn', 'auffällig'), ('down', 'gestört'), ('stale', 'keine Daten')) %}{{ ' ·' if not loop.first }} <span class="{{ k ~ '-t' if w.counts[k] else 'muted' }}">{{ w.counts[k] }} {{ lbl }}</span>{% endfor %}</p>
+    {% if w.spark %}
+    <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" role="img" aria-label="{{ w.spark.label }}">
+      <path d="{{ w.spark.d }}"/>{% for x, h in w.spark.loss %}<rect x="{{ x }}" y="{{ 30 - h }}" width="2" height="{{ h }}"/>{% endfor %}
+    </svg>
+    {% else %}<p class="spark muted small">Kein Latenzverlauf der letzten Stunde.</p>{% endif %}
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
+
+<h2 id="alarme">Aktive Alarme</h2>
+{% if alerts %}
+<div class="scroll">
+<table>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th></tr></thead>
+  <tbody>
+  {% for a in alerts %}
+    <tr>
+      <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
+      <td>{{ a.summary or a.alertname }}{% set refs = alert_links(a) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
+      <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="muted small"><a href="{{ url_for('web.alerts') }}">Alle Alarme und Verlauf</a></p>
+{% else %}<p class="muted">Keine aktiven Alarme an diesem Standort.</p>{% endif %}
+
+<h2 id="hinweise">Hinweise von PCs</h2>
+{% if client_findings %}
+<p class="muted">Was die Probes an diesem Standort auf ihrem PC erkannt haben – aktive und die der letzten 7 Tage.</p>
+{{ findings_table(client_findings) }}
+{% else %}<p class="muted">Keine Hinweise von PCs an diesem Standort in den letzten 7 Tagen.</p>{% endif %}
+
+<h2 id="meldungen">Störungsmeldungen</h2>
+{% if reports %}
+<p class="muted">Die neuesten Meldungen von Benutzern an diesem Standort. <a href="{{ url_for('web.reports_view', status='all', site=site.id) }}">Alle Meldungen dieses Standorts</a></p>
+{{ report_table(reports) }}
+{% else %}<p class="muted">Von diesem Standort gibt es keine Meldungen.</p>{% endif %}
+
 {% if probes %}
-<p class="muted">Alle Messungen je Probe: bei Pings Latenz der letzten Minute und Verlust der letzten 5 Minuten, bei Pfaden die Hops, bei Bandbreiten die letzte Messung. Rot umrandet = keine aktuellen Daten.</p>
+<details id="alle-messungen">
+<summary><h2>Alle Messungen je Probe</h2></summary>
+<p class="muted">Bei Pings Latenz der letzten Minute und Verlust der letzten 5 Minuten, bei Pfaden die Hops, bei Bandbreiten die letzte Messung. Rot umrandet = keine aktuellen Daten.</p>
 <div class="scroll">
 <table class="matrix">
   <thead>
@@ -42,17 +129,6 @@
   </tbody>
 </table>
 </div>
-{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
-
-<h2 id="hinweise">Hinweise von PCs</h2>
-{% if client_findings %}
-<p class="muted">Was die Probes an diesem Standort auf ihrem PC erkannt haben – aktive und die der letzten 7 Tage.</p>
-{{ findings_table(client_findings) }}
-{% else %}<p class="muted">Keine Hinweise von PCs an diesem Standort in den letzten 7 Tagen.</p>{% endif %}
-
-<h2 id="meldungen">Störungsmeldungen</h2>
-{% if reports %}
-<p class="muted">Die neuesten Meldungen von Benutzern an diesem Standort. <a href="{{ url_for('web.reports_view', status='all', site=site.id) }}">Alle Meldungen dieses Standorts</a></p>
-{{ report_table(reports) }}
-{% else %}<p class="muted">Von diesem Standort gibt es keine Meldungen.</p>{% endif %}
+</details>
+{% endif %}
 {% endblock %}
