@@ -2,6 +2,7 @@ using System.Net.NetworkInformation;
 using Microsoft.Extensions.Logging;
 using Wachtl.Probe.Config;
 using Wachtl.Probe.Metrics;
+using Wachtl.Probe.Tray;
 
 namespace Wachtl.Probe.Checks;
 
@@ -11,11 +12,13 @@ public sealed class PingRunner : IAsyncDisposable
     private readonly ISampleSink _sink;
     private readonly GatewayResolver _gateway;
     private readonly ILogger _logger;
+    private readonly LiveStats? _live;
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _task;
 
-    public PingRunner(CheckConfig check, ISampleSink sink, GatewayResolver gateway, ILogger logger)
+    public PingRunner(CheckConfig check, ISampleSink sink, GatewayResolver gateway, ILogger logger, LiveStats? live = null)
     {
+        _live = live;
         Check = check;
         _sink = sink;
         _gateway = gateway;
@@ -50,6 +53,7 @@ public sealed class PingRunner : IAsyncDisposable
                     : await PingHelper.SendAsync(ping, address, timeout, payload, options, ct).ConfigureAwait(false);
 
                 _sink.Add(MetricLine.Format(MetricLine.PingUp, Check.Id, reply.Success ? 1 : 0, timestamp));
+                _live?.RecordPing(Check, reply.Success, reply.RttMs);
                 if (reply.Success)
                 {
                     _sink.Add(MetricLine.Format(MetricLine.PingRtt, Check.Id, reply.RttMs, timestamp));

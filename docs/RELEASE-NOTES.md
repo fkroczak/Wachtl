@@ -3,6 +3,11 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.2
+
+- **Internet auf einen Blick im Tray-Menü**: Oben im Menü des Wachtl-Symbols stehen jetzt die aktuelle Antwortzeit ins Internet (bis zu drei Referenzen, mit Verlust der letzten Minute), der aktuelle Datenverkehr des PCs (↓ Download / ↑ Upload) und das Ergebnis des letzten Speedtests mit Uhrzeit. Solange das Menü offen ist, aktualisieren sich die Werte alle 2 s.
+- **„Über Wachtl“ erklärt die Netzwerk-Hinweise**: Das Fenster nennt jetzt auch, dass Wachtl Probleme am PC (z. B. getrenntes Kabel, Treiberfehler) erkennt und neben der Uhr mit Lösungsvorschlag meldet.
+
 ## Neu in 0.8.1
 
 - **Sprechblase mit vollständigem Lösungsvorschlag**: Jeder Hinweis hat eine eigene Kurzfassung für die Sprechblase (z. B. „Das Netzwerkkabel von „Ethernet“ ist nicht verbunden. Lösung: Stecker am PC und an der Netzwerkdose fest einstecken …“). Bisher schnitt Windows den Text nach 255 Zeichen mitten im Lösungsvorschlag ab. Die ausführliche Fassung steht weiter im Detailfenster (Klick auf die Sprechblase) und im Web-UI.

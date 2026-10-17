@@ -10,7 +10,7 @@
     <OutputType>WinExe</OutputType>
     <AssemblyName>wachtl-tray</AssemblyName>
     <RootNamespace>Wachtl.Tray</RootNamespace>
-    <Version>0.8.1</Version>
+    <Version>0.8.2</Version>
     <Product>Wachtl Tray</Product>
     <Company>Wachtl</Company>
     <Description>Wachtl – Netzwerk-Monitoring: Tray-Symbol und „Problem melden“</Description>

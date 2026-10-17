@@ -5,11 +5,15 @@ Wachtl-Symbol (`wachtl-tray.exe`). Rechtsklick (oder Linksklick) öffnet das Men
 
 | Eintrag | Funktion |
 | --- | --- |
+| *Ping 1.1.1.1: 12 ms* (bis 3 Zeilen) | aktuelle Antwortzeit jeder Internet-Referenz (Ping-Check mit Rolle „Referenz“), dazu der Verlust der letzten Minute, wenn es welchen gab (ab 0.8.2) |
+| *Jetzt: ↓ 3,2 Mbit/s ↑ 0,4 Mbit/s* | aktueller Datenverkehr des PCs über die Netzwerkkarte mit Gateway – was gerade läuft, keine Messung der Leitung |
+| *Speedtest 14:05: ↓ 246 Mbit/s ↑ 38 Mbit/s* | Ergebnis des letzten WAN-Speedtests dieses PCs (nur wenn ein Speedtest-Check für ihn eingerichtet ist) |
 | **Problem melden …** | kleines Fenster: Zeitpunkt (**Jetzt** vorausgewählt oder eine einstellbare Uhrzeit), Art der Störung, ungefähre Dauer, optional Beschreibung. **Senden** schickt die Meldung über den lokalen Wachtl-Dienst an den Server. |
 | **Über Wachtl** | kurze Übersicht: was Wachtl ist, was es misst, mit welchem Server und Standort dieser PC verbunden ist, Version und Verbindungszustand. |
 | **Beenden** | schließt nur das Symbol für diese Anmeldung. Der Messdienst läuft weiter; nach der nächsten Anmeldung erscheint das Symbol wieder. |
 
-Auf dem Server gibt es zusätzlich **Dashboard öffnen**.
+Auf dem Server gibt es zusätzlich **Dashboard öffnen**. Die Zeilen mit Ping und Datenrate stehen nur auf Clients;
+solange das Menü offen ist, aktualisieren sie sich alle 2 s.
 
 Im Web-UI erscheinen die Meldungen unter **Meldungen** (Navigation, mit Zahl der neuen), in der **Übersicht**, auf der
 Seite der Probe und des Standorts – und als senkrechte Markierung in den Graphen, genau zum gemeldeten Zeitpunkt.
@@ -50,11 +54,16 @@ höchstens 30 Meldungen je Stunde und Benutzer und 300 je Rechner (sonst `429`).
   "site": "Zentrale",                   // Standort (leer, wenn unbekannt)
   "server_url": "https://wachtl.kunde.local",
   "dashboard_url": "https://wachtl.kunde.local",   // nur role=server, sonst ""
-  "version": "0.8.1",
+  "version": "0.8.2",
   "enrolled": true,
   "connected": true,                    // letzte Verbindung zum Server < 2 min her
   "last_contact": 1792230000,           // Unix-Sekunden, 0 = noch nie
-  "pending_reports": 0                  // noch nicht zugestellte Meldungen
+  "pending_reports": 0,                 // noch nicht zugestellte Meldungen
+  "internet": {                         // ab 0.8.2, nur Clients: Werte fürs Menü
+    "pings": [{"target": "1.1.1.1", "up": true, "rtt_ms": 12.3, "loss_pct": 0}],
+    "rx_mbps": 3.21, "tx_mbps": 0.4,    // aktueller Datenverkehr, null beim ersten Abruf
+    "speedtest": {"down_mbps": 245.6, "up_mbps": 38.2, "ts": 1792229000}   // null ohne Speedtest
+  }
 }
 ```
 

@@ -25,19 +25,20 @@ public sealed class TrayEndpoint : BackgroundService
     private readonly TrayApi _api;
     private readonly SemaphoreSlim _slots = new(MaxConcurrent, MaxConcurrent);
 
-    public TrayEndpoint(ProbeStatus status, ClientDiagnostics diagnostics, ILogger<TrayEndpoint> logger)
+    public TrayEndpoint(ProbeStatus status, ClientDiagnostics diagnostics, LiveStats live, ILogger<TrayEndpoint> logger)
         : this(ResolvePort(), status, new PendingReports(Path.Combine(StateStore.DataDir, "reports-pending.json"), logger),
-            logger, diagnostics.Feed)
+            logger, diagnostics.Feed, live)
     {
     }
 
-    internal TrayEndpoint(int port, ProbeStatus status, PendingReports pending, ILogger logger, FindingFeed? findings = null)
+    internal TrayEndpoint(int port, ProbeStatus status, PendingReports pending, ILogger logger, FindingFeed? findings = null,
+        LiveStats? live = null)
     {
         Port = port;
         _status = status;
         _pending = pending;
         _logger = logger;
-        _api = new TrayApi(port, status, pending, status.SendReportAsync, logger: logger, findings: findings);
+        _api = new TrayApi(port, status, pending, status.SendReportAsync, logger: logger, findings: findings, live: live);
     }
 
     public int Port { get; }
