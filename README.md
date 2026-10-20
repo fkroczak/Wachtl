@@ -1,8 +1,8 @@
 # Wachtl
 
 Netzwerk-Monitoring für Kunden mit mehreren Standorten: Windows-PCs und -Server messen als Dienst
-Latenz, Paketverlust und Jitter (Ping im 1-s-Takt), den Pfad ins Internet Hop für Hop und die Bandbreite
-(iperf3 intern, HTTP/iperf3 ins WAN). Ein zentraler Server beim Kunden speichert, wertet aus, zeigt Graphen,
+Latenz, Paketverlust und Jitter (Ping im 1-s-Takt), den Pfad ins Internet Hop für Hop, die Bandbreite
+(iperf3 intern, HTTP/iperf3 ins WAN) und die Sprachqualität (RTP-Sprachtest mit MOS). Ein zentraler Server beim Kunden speichert, wertet aus, zeigt Graphen,
 erkennt Ausfälle mit Ursache und alarmiert per E-Mail oder Microsoft Teams. Alles ist im Web-UI einstellbar.
 
 Der Server läuft wahlweise als **Linux-VM mit Docker** oder als **Windows-Dienst** (Setup-Assistent, kein Docker).
@@ -18,7 +18,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
                                               Alertmanager ─▶ E-Mail / Teams, Historie zurück an Flask
 ```
 
-## Stand: 0.8
+## Stand: 0.9
 
 | Bereich | Enthalten |
 | --- | --- |
@@ -41,6 +41,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Kurzausfälle (0.8) | Ziel und WAN gelten ab 5 s ohne Antwort als gestört, sekundengenaue Dauer in der Ausfallübersicht |
 | Client-Hinweise (0.8) | Probe erkennt Kabel getrennt, Link-Geschwindigkeit, Treiberfehler, DHCP/Gateway, Paketfehler – Sprechblase mit Lösung auf dem PC, Anzeige im Web-UI ([docs/CLIENT-HINWEISE.md](docs/CLIENT-HINWEISE.md)) |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
+| Sprache (0.9) | RTP-Sprachtest wie ein Telefonat (G.711/G.729) zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor: MOS, Laufzeit, Jitter und Verlust je Richtung, Alarm bei schlechter Sprachqualität ([docs/MESSUNGEN.md](docs/MESSUNGEN.md#sprache-rtpvoip)) |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
@@ -60,7 +61,8 @@ und `SHA256SUMS.txt`. Bis 0.4 waren es zwei Setups. Auf GitHub die Datei öffnen
 | --- | --- |
 | `server/` | Flask-Collector und Dashboard (Python 3.12), Tests unter `server/tests` |
 | `probe/` | Windows-Probe (C# / .NET 8) und xUnit-Tests, `build.ps1` |
-| `server/wachtl/serverprobe/` | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, HTTP-Speedtest) |
+| `server/wachtl/serverprobe/` | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, HTTP-Speedtest, Sprache) |
+| `server/wachtl/rtp/` | RTP-Sprachtest: Protokoll, MOS-Berechnung, Reflektor (`python -m wachtl.rtp`); Gegenstück der Probe in `probe/Wachtl.Probe/Rtp/` |
 | `deploy/` | Linux: Docker-Compose-Stack, `setup.sh`, `uninstall.sh`, Backup und Restore |
 | `windows/` | Setup für Probe und Server (`WachtlSetup.iss`), `build-server.ps1`, `wachtl-server.cmd`, `assets/` (Symbole, Assistenten-Bilder) |
 | `probe/Wachtl.Tray/` | Tray-Symbol `wachtl-tray.exe` (.NET Framework 4.6.2): Problem melden, Über, Beenden |
@@ -72,7 +74,7 @@ und `SHA256SUMS.txt`. Bis 0.4 waren es zwei Setups. Auf GitHub die Datei öffnen
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.8.4.exe` starten, Rolle „Wachtl-Server“
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.9.0.exe` starten, Rolle „Wachtl-Server“
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
 3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md) – kompakt für den Rollout beim Kunden: [docs/ROLLOUT.md](docs/ROLLOUT.md)

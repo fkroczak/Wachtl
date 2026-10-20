@@ -3,9 +3,9 @@
   {%- for kind, name, url, label in alert_refs(a, with_probe) %}{{ ' · ' if not loop.first }}{{ kind }} <a href="{{ url }}"{% if label %} aria-label="{{ kind }} {{ label }}"{% endif %}>{{ name }}</a>{% endfor -%}
 {%- endmacro %}
 
-{#- Ziel/Gegenstelle eines Checks; iperf3 gegen eine andere Probe verlinkt diese Probe -#}
+{#- Ziel/Gegenstelle eines Checks; iperf3 oder Sprachtest gegen eine andere Probe verlinkt diese Probe -#}
 {% macro check_target(c) -%}
-  {%- set p = c.params|fromjson if c.type == 'iperf' else {} -%}
+  {%- set p = c.params|fromjson if c.type in ('iperf', 'rtp') else {} -%}
   {%- if p.peer == 'probe' and p.peer_probe_id %}<a href="{{ url_for('web.probe', probe_id=p.peer_probe_id) }}">{{ c.target }}</a>
   {%- else %}{{ c.target }}{% endif -%}
 {%- endmacro %}

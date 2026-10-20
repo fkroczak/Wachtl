@@ -1,7 +1,7 @@
 """Standardpaket: fertige Checks für einen neuen Kunden oder Standort mit einem Klick.
 
 Gedacht für den Rollout durch Kollegen ohne tiefe Netzwerkkenntnisse: Ping auf Gateway, Internet und
-Wachtl-Server, Traceroute ins Internet und zum Server, iperf3 zum Server und ein WAN-Speedtest.
+Wachtl-Server, Traceroute ins Internet und zum Server, iperf3 zum Server, ein WAN-Speedtest und ein Sprachtest.
 Bereits vorhandene Checks gleicher Art und gleichen Ziels werden nicht doppelt angelegt.
 """
 from __future__ import annotations
@@ -50,10 +50,15 @@ ITEMS: tuple[Item, ...] = (
     Item("speedtest_wan", "speedtest", "Speedtest Internet", "",
          "Download und Upload ins Internet (Cloudflare), alle 6 Stunden.",
          params={"method": "http", "direction": "both", "duration_s": 10, "streams": 4, "schedule_min": 360}),
+    Item("rtp_server", "rtp", "Sprachtest zum Wachtl-Server", "",
+         "Simuliertes Telefonat (G.711) zum Server, 30 s alle 15 Minuten: Sprachqualität (MOS), Jitter und Verlust "
+         "je Richtung. Braucht Probe 0.9 und UDP 5004 zum Server.",
+         params={"peer": "server", "codec": "g711", "duration_s": 30, "schedule_min": 15}),
 )
 BY_KEY = {i.key: i for i in ITEMS}
-# Nicht automatisch bei einer neuen Installation (belastet das LAN alle 6 Stunden) – im Standardpaket wählbar.
-NOT_DEFAULT = frozenset({"iperf_server"})
+# Nicht automatisch bei einer neuen Installation (iperf3 belastet das LAN alle 6 Stunden, der Sprachtest braucht
+# Probes ab 0.9 und UDP 5004 zum Server) – im Standardpaket wählbar.
+NOT_DEFAULT = frozenset({"iperf_server", "rtp_server"})
 
 
 def server_host(public_url: str) -> str | None:
@@ -116,7 +121,7 @@ def apply(keys: list[str], scope: str, scope_id: int | None, public_url: str) ->
             skipped.append(f"{item.name}: gibt es schon")
             continue
         if item.ctype in checktypes.SCHEDULED_TYPES:
-            interval, timeout = params["schedule_min"] * 60, params["timeout_s"] * 1000
+            interval, timeout = params["schedule_min"] * 60, checktypes.timeout_ms(item.ctype, params)
         else:
             interval, timeout = item.interval_s, item.timeout_ms
         role = item.role if item.ctype == "ping" else checktypes.ROLE_DEFAULT[item.ctype]

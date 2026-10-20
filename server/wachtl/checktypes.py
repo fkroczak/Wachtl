@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 TIME_RE = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 HOSTPORT_RE = re.compile(r"^\[?[A-Za-z0-9.:-]{1,253}\]?$")
@@ -63,6 +63,11 @@ THRESHOLD_FIELDS = (
     Field("min_up_mbps", "Alarm, wenn Upload unter", "float", 0, 0, 100000, unit="Mbit/s",
           help="0 = kein Alarm", group="Schwellwerte"),
 )
+
+# Sprachtest: kurze Tests häufiger als Bandbreitentests (ein Gespräch belastet die Leitung kaum)
+RTP_SCHEDULE_FIELDS = tuple(replace(f, default=15) if f.key == "schedule_min" else f for f in SCHEDULE_FIELDS)
+RTP_PEERS = (("server", "Wachtl-Server"), ("probe", "andere Probe"),
+             ("host", "eigene Gegenstelle (Wachtl-Reflektor oder UDP-Echo)"))
 
 TYPES: dict[str, CheckType] = {
     "ping": CheckType(
@@ -148,10 +153,38 @@ TYPES: dict[str, CheckType] = {
             Field("timeout_s", "Abbruch nach", "int", 90, 10, 600, unit="s"),
         ) + SCHEDULE_FIELDS + THRESHOLD_FIELDS,
     ),
+    "rtp": CheckType(
+        "rtp", "Sprache (RTP/VoIP)",
+        "Simuliert ein Telefonat: die Probe sendet einen RTP-Sprachstrom an einen Reflektor und misst je Richtung "
+        "Laufzeit, Jitter und Paketverlust. Daraus ergibt sich die Sprachqualität als MOS (1–4,5).",
+        "Gegenstelle", "", False,
+        (
+            Field("peer", "Gegenstelle", "choice", "server", choices=RTP_PEERS, group="Gegenstelle"),
+            Field("peer_probe_id", "Probe", "int", 0, 0, None, show_if=("peer", ("probe",)), group="Gegenstelle"),
+            Field("host", "Host", "host", "", show_if=("peer", ("host",)), group="Gegenstelle",
+                  help="Ein anderer Wachtl-Server, ein Reflektor (python -m wachtl.rtp) oder ein UDP-Echo-Dienst. "
+                       "Beim Echo gibt es nur Werte für Hin- und Rückweg zusammen."),
+            Field("port", "UDP-Port", "int", 5004, 1, 65535, show_if=("peer", ("host",)), group="Gegenstelle",
+                  help="Wachtl-Server und Probes nutzen ihren eingestellten Reflektor-Port."),
+            Field("codec", "Codec", "choice", "g711",
+                  choices=(("g711", "G.711 (64 kbit/s, Standard bei SIP-Telefonen)"), ("g729", "G.729 (8 kbit/s)"))),
+            Field("ptime_ms", "Paketabstand", "int", 20, 10, 60, unit="ms",
+                  help="Sprache je Paket; Telefone senden meist alle 20 ms, manche alle 30 ms."),
+            Field("duration_s", "Testdauer", "int", 30, 5, 300, unit="s"),
+            Field("dscp", "DSCP-Markierung", "int", 46, 0, 63,
+                  help="46 = EF (Sprache). Windows setzt die Markierung nur mit QoS-Richtlinie (GPO) für "
+                       "wachtl-probe.exe, sonst geht das Paket unmarkiert raus. 0 = keine."),
+        ) + RTP_SCHEDULE_FIELDS + (
+            Field("min_mos", "Alarm, wenn MOS unter", "float", 3.6, 0, 4.5, group="Schwellwerte",
+                  help="3,6 = viele Gesprächspartner merken Störungen. 0 = kein Alarm."),
+        ),
+    ),
 }
 
-ROLE_DEFAULT = {"ping": "target", "path": "target", "iperf": "target", "speedtest": "reference"}
-SCHEDULED_TYPES = ("iperf", "speedtest")
+ROLE_DEFAULT = {"ping": "target", "path": "target", "iperf": "target", "speedtest": "reference", "rtp": "target"}
+BANDWIDTH_TYPES = ("iperf", "speedtest")
+SCHEDULED_TYPES = BANDWIDTH_TYPES + ("rtp",)
+PEER_TYPES = ("iperf", "rtp")       # Gegenstelle Wachtl-Server, andere Probe oder eigener Host
 
 
 class FieldError(str):
@@ -204,7 +237,7 @@ def parse_params(type_key: str, form: dict, *, probe_ids: set[int] | None = None
             errors.append(FieldError(f"{f.label}: {exc}", f.key))
             values[f.key] = f.default
 
-    if type_key == "iperf":
+    if type_key in PEER_TYPES:
         if values["peer"] == "host" and not values["host"]:
             errors.append(FieldError("Host der Gegenstelle fehlt.", "host"))
         if values["peer"] == "probe" and probe_ids is not None and values["peer_probe_id"] not in probe_ids:
@@ -221,9 +254,17 @@ def parse_params(type_key: str, form: dict, *, probe_ids: set[int] | None = None
             values["weekdays"] = "".join(sorted(set(values["weekdays"])))
         if values["offset_min"] >= max(values["schedule_min"], 1) and values["schedule_min"]:
             errors.append(FieldError("Versatz muss kleiner als das Messintervall sein.", "offset_min"))
-        if values["duration_s"] * (2 if values["direction"] == "both" else 1) + 10 > values["timeout_s"]:
+        if "timeout_s" in values and \
+                values["duration_s"] * (2 if values["direction"] == "both" else 1) + 10 > values["timeout_s"]:
             errors.append(FieldError("„Abbruch nach“ ist kürzer als die Testdauer.", "timeout_s"))
     return values, errors
+
+
+def timeout_ms(type_key: str, params: dict) -> int:
+    """Spalte ``timeout_ms`` geplanter Checks: Abbruchzeit, beim Sprachtest Testdauer plus Reserve."""
+    if type_key == "rtp":
+        return (int(params["duration_s"]) + 10) * 1000
+    return int(params["timeout_s"]) * 1000
 
 
 def _convert(f: Field, raw: str):
@@ -290,6 +331,9 @@ def summary(check: dict, params: dict, probe_names: dict[int, str] | None = None
     if t == "path":
         hops = {"all": "alle Hops", "first": f"erste {p['first_n']} Hops", "none": "nur Traceroute"}[p["ping_hops"]]
         return f"{hops} alle {check['interval_s']} s, Pfad alle {p['trace_interval_min']} min"
+    if t == "rtp":
+        when = f"alle {p['schedule_min']} min" if p["schedule_min"] else "nur manuell"
+        return f"{p['codec'].upper().replace('G', 'G.', 1)}, {p['ptime_ms']} ms, {p['duration_s']} s, {when}"
     direction = {"down": "↓", "up": "↑", "both": "↓↑"}[p["direction"]]
     when = f"alle {p['schedule_min']} min" if p["schedule_min"] else "nur manuell"
     proto = p.get("protocol", "tcp").upper() if t == "iperf" or p.get("method") == "iperf" else "HTTP"
@@ -298,7 +342,7 @@ def summary(check: dict, params: dict, probe_names: dict[int, str] | None = None
 
 def target_for(type_key: str, params: dict, probe_names: dict[int, str] | None = None) -> str:
     """Anzeigename der Gegenstelle für iperf-/Speedtest-Checks (Spalte ``target``)."""
-    if type_key == "iperf":
+    if type_key in PEER_TYPES:
         if params["peer"] == "server":
             return "wachtl-server"
         if params["peer"] == "probe":

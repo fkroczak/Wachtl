@@ -20,7 +20,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from wachtl import checktypes, create_app, findings, repo, reports  # noqa: E402
+from wachtl import checktypes, create_app, findings, repo, reports, rtp  # noqa: E402
 from wachtl.db import ins, q1  # noqa: E402
 from wachtl.security import hash_token  # noqa: E402
 from wachtl.services import alerts  # noqa: E402
@@ -50,6 +50,8 @@ def main(base: str) -> dict:
                                  checktypes.merged("path", {}))
         wan = repo.create_check("Internet-Speedtest", "", "target", 1, 1000, "all", None, "speedtest",
                                 checktypes.merged("speedtest", {}))
+        voice = repo.create_check("Sprache zum Server", "wachtl-server", "target", 900, 40000, "all", None, "rtp",
+                                  checktypes.merged("rtp", {}))
         hops = [{"hop": 1, "ip": "192.168.1.1"}, {"hop": 2, "ip": "10.10.0.1"}, {"hop": 3, "ip": None},
                 {"hop": 4, "ip": "1.1.1.1"}]
         path_hash = hashlib.sha256(json.dumps([[h["hop"], h["ip"]] for h in hops]).encode()).hexdigest()[:16]
@@ -64,6 +66,21 @@ def main(base: str) -> dict:
                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (probe_id, wan, now - 7200 * i, "speedtest", direction, "speed.example", "http",
                          base_mbps + random.gauss(0, 10), None, None, 0, 12.0, 10, "schedule", None))
+            for i in range(24):
+                up_loss, down_loss = max(0.0, random.gauss(0.2, 0.3)), max(0.0, random.gauss(0.4, 0.6))
+                jitter_up, jitter_down = abs(random.gauss(2, 1)), abs(random.gauss(4, 2))
+                rtt = 18 + abs(random.gauss(0, 4))
+                r = min(rtp.r_factor(rtt / 2, j, l, rtp.CODECS["g711"], 20)
+                        for j, l in ((jitter_up, up_loss), (jitter_down, down_loss)))
+                ins("INSERT INTO rtp_runs (probe_id, check_id, ts, peer, codec, ptime_ms, duration_s, mode, sent, "
+                    "received, rtt_ms, rtt_max_ms, loss_pct, up_loss_pct, down_loss_pct, jitter_ms, up_jitter_ms, "
+                    "down_jitter_ms, out_of_order, r_factor, mos, trigger, error) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (probe_id, voice, now - 900 * i, "wachtl.example:5004", "g711", 20, 30, "wachtl", 1500,
+                     int(1500 * (1 - (up_loss + down_loss) / 100)), round(rtt, 2), round(rtt * 2.5, 2),
+                     round(up_loss + down_loss, 2), round(up_loss, 2), round(down_loss, 2),
+                     round(max(jitter_up, jitter_down), 2), round(jitter_up, 2), round(jitter_down, 2), 0,
+                     round(r, 1), round(rtp.mos(r), 2), "schedule", None))
 
         def iso(t: int) -> str:
             return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
@@ -116,7 +133,7 @@ def main(base: str) -> dict:
                 "message": msg, "solution": sol, "detected_at": now - ago,
                 "resolved_at": now - ago + dur if state == "resolved" else None}))
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
-    return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan}
+    return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice}
 
 
 if __name__ == "__main__":

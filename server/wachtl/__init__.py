@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
 
-__version__ = "0.8.4"
+__version__ = "0.9.0"
 
 
 def _env(key: str, default: str | None = None) -> str | None:
@@ -36,6 +36,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         SPKI_PIN=_env("SPKI_PIN", ""),
         PROBE_DIR=_env("PROBE_DIR", ""),
         IPERF_PORT=int(_env("IPERF_PORT", "5201") or 0),
+        RTP_PORT=int(_env("RTP_PORT", "5004") or 0),     # RTP-Reflektor für Sprachtests, 0 = aus
         SERVER_PROBE=_env("SERVER_PROBE", "1") == "1",
         SERVER_PROBE_DIR=_env("SERVER_PROBE_DIR", ""),
         SERVER_PROBE_SITE=_env("SERVER_PROBE_SITE", "Wachtl-Server"),

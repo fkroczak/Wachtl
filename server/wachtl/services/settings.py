@@ -18,11 +18,19 @@ FIELDS: tuple[Field, ...] = (
           help="Leer = Hostname aus der Server-URL. Bei NAT die von den Standorten erreichbare Adresse."),
     Field("iperf_port", "Port für Probes", "int", 5201, 1, 65535, group="iperf3-Server",
           help="Bei Portweiterleitung der äußere Port; der Server selbst lauscht auf dem bei der Installation gewählten Port."),
+    Field("rtp_enabled", "RTP-Reflektor auf dem Wachtl-Server", "bool", True, group="RTP-Reflektor (Sprachtest)",
+          help="Probes können Sprachtests gegen den Wachtl-Server ausführen."),
+    Field("rtp_host", "Adresse für Probes", "host", "", group="RTP-Reflektor (Sprachtest)",
+          help="Leer = Hostname aus der Server-URL. Bei NAT die von den Standorten erreichbare Adresse."),
+    Field("rtp_port", "UDP-Port für Probes", "int", 5004, 1, 65535, group="RTP-Reflektor (Sprachtest)",
+          help="Bei Portweiterleitung der äußere Port; der Server selbst lauscht auf dem bei der Installation gewählten Port."),
     Field("upload_interval_s", "Messwerte hochladen alle", "int", 10, 2, 300, unit="s", group="Probes"),
     Field("heartbeat_interval_s", "Heartbeat alle", "int", 30, 10, 300, unit="s", group="Probes",
           help="Bestimmt auch, wie schnell „Jetzt messen“ ankommt."),
     Field("config_poll_s", "Konfiguration spätestens abrufen alle", "int", 300, 30, 3600, unit="s", group="Probes"),
     Field("probe_iperf_port", "Standard-Port der iperf3-Gegenstelle auf Probes", "int", 5201, 1, 65535, group="Probes"),
+    Field("probe_rtp_port", "UDP-Port des RTP-Reflektors auf Probes", "int", 5004, 1, 65535, group="Probes",
+          help="Gilt für Probes, die als Gegenstelle eingerichtet sind."),
     Field("client_findings_enabled", "Netzwerkkarte und Kabel auf den PCs überwachen", "bool", True,
           group="Client-Hinweise",
           help="Die Probe erkennt z. B. getrenntes Kabel, gesunkene Link-Geschwindigkeit, Treiberfehler und "
@@ -44,6 +52,9 @@ def get() -> dict:
     installed = int(current_app.config.get("IPERF_PORT") or 0)
     values["iperf_port"] = installed or 5201
     values["iperf_enabled"] = bool(installed)
+    rtp = int(current_app.config.get("RTP_PORT") or 0)
+    values["rtp_port"] = rtp or 5004
+    values["rtp_enabled"] = bool(rtp)
     for row in q("SELECT key, value FROM settings WHERE key LIKE ?", (PREFIX + "%",)):
         key = row["key"].removeprefix(PREFIX)
         f = BY_KEY.get(key)
@@ -99,3 +110,11 @@ def iperf_server_address(values: dict | None = None) -> tuple[str, int] | None:
         return None
     host = values["iperf_host"] or urlparse(current_app.config["PUBLIC_URL"]).hostname or ""
     return (host, int(values["iperf_port"])) if host else None
+
+
+def rtp_server_address(values: dict | None = None) -> tuple[str, int] | None:
+    values = values or get()
+    if not values["rtp_enabled"]:
+        return None
+    host = values["rtp_host"] or urlparse(current_app.config["PUBLIC_URL"]).hostname or ""
+    return (host, int(values["rtp_port"])) if host else None

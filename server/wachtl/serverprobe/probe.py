@@ -14,7 +14,7 @@ from pathlib import Path
 from .. import __version__, repo
 from . import icmp, net
 from .api import Api, ApiError
-from .runners import BandwidthRunner, PathRunner, PingRunner, Runner, check_key
+from .runners import BandwidthRunner, PathRunner, PingRunner, RtpRunner, Runner, ScheduledRunner, check_key
 from .tray import PENDING_FILE, PendingReports, ReportRejected, TrayEndpoint, TrayService
 
 log = logging.getLogger("wachtl.serverprobe")
@@ -22,7 +22,7 @@ ENROLL_FILE = "enroll.json"     # legt der Server beim Start an (einmaliger Enro
 STATE_FILE = "probe.json"       # Probe-ID und Token nach der Registrierung
 MAX_BUFFER = 500_000            # Zeilen; der Server ist lokal, längere Ausfälle puffert niemand
 BATCH = 5000
-SUPPORTED = ("ping", "path", "iperf", "speedtest")
+SUPPORTED = ("ping", "path", "iperf", "speedtest", "rtp")
 
 
 def write_private(path: Path, data: dict) -> None:
@@ -50,10 +50,11 @@ def probe_hostname() -> str:
 class ServerProbe:
     def __init__(self, url: str, pin: str, state_dir: Path, iperf_exe: str | None = None,
                  stop_event: threading.Event | None = None, pinger=None, gateway=None, measure=None,
-                 tray_port: int | None = None, public_url: str = ""):
+                 tray_port: int | None = None, public_url: str = "", measure_rtp=None):
         self.url, self.pin, self.state_dir, self.iperf_exe = url, pin, Path(state_dir), iperf_exe
         self.measurement = {"pinger": pinger or icmp.ping, "gateway": gateway or net.gateway}
         self.measure = measure
+        self.measure_rtp = measure_rtp
         self.stop_event = stop_event or threading.Event()
         self.api: Api | None = None
         self.buffer: deque[str] = deque(maxlen=MAX_BUFFER)
@@ -155,6 +156,8 @@ class ServerProbe:
             return PathRunner(check, self.sink, self.report("path"), **self.measurement)
         if check["type"] in ("iperf", "speedtest"):
             return BandwidthRunner(check, self.report("bandwidth"), self.iperf_exe, self.measure)
+        if check["type"] == "rtp":
+            return RtpRunner(check, self.report("rtp"), self.measure_rtp)
         return PingRunner(check, self.sink, **self.measurement)
 
     def apply_config(self, config: dict) -> None:
@@ -242,7 +245,7 @@ class ServerProbe:
         for cmd in commands:
             with self.runner_lock:
                 runner = next((r for r in self.runners.values() if r.check["id"] == cmd.get("check_id")), None)
-            if cmd.get("type") == "run_check" and isinstance(runner, BandwidthRunner):
+            if cmd.get("type") == "run_check" and isinstance(runner, ScheduledRunner):
                 log.info("Auftrag vom Server: Check %s jetzt messen", cmd["check_id"])
                 runner.run_now()
             elif cmd.get("type") == "retrace" and isinstance(runner, PathRunner):

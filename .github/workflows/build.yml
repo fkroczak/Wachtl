@@ -10,7 +10,7 @@ on:
     types: [published]
 
 env:
-  WACHTL_VERSION: "0.8.4"
+  WACHTL_VERSION: "0.9.0"
 
 jobs:
   server:
@@ -142,6 +142,10 @@ jobs:
       - name: Tray-Symbol und Störungsmeldungen Ende-zu-Ende prüfen
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "E2E 0.5" -Command "./.github/scripts/test-v05.ps1"
+
+      - name: Sprachtest (RTP) Ende-zu-Ende prüfen
+        shell: pwsh
+        run: ./.github/scripts/run-logged.ps1 -Title "E2E 0.9" -Command "./.github/scripts/test-v09.ps1"
 
       - name: Probe deinstallieren (Abmeldung, Firewall, Token – nichts darf bleiben)
         shell: pwsh

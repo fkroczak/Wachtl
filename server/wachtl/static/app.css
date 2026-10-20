@@ -275,11 +275,13 @@ a.button.active { background: var(--accent); color: var(--bg); border-color: var
 .chart-small { height: 320px; }
 .c-down { stroke: var(--accent); fill: var(--accent); }
 .c-up { stroke: var(--ok); fill: var(--ok); }
+.c-mos { stroke: var(--accent); fill: var(--accent); }
 .c-bwline { fill: none !important; stroke-width: 1.4; stroke-opacity: 0.6; }
 .c-bwdot { stroke: var(--surface); stroke-width: 1; }
 .c-thr { stroke-width: 1; stroke-dasharray: 6 4; fill: none; stroke-opacity: 0.8; }
 .lg-down { background: var(--accent); }
 .lg-up { background: var(--ok); }
+.lg-mos { background: var(--accent); }
 .lg-thr { border-top: 2px dashed var(--text-muted); height: 0 !important; }
 
 .analysis { background: var(--surface); border: 1px solid var(--border); border-left: 6px solid var(--ok);

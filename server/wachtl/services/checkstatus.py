@@ -1,4 +1,4 @@
-"""Zustand aller Checks einer Probe – Ping, Pfad, iperf3 und WAN in einer gemeinsamen Bewertung.
+"""Zustand aller Checks einer Probe – Ping, Pfad, iperf3, WAN und Sprache in einer gemeinsamen Bewertung.
 
 Die Übersicht, die Standort- und die Probe-Seite zählen damit dieselben Zustände, und
 „Messungen mit Problemen“ listet jede Messung, die gerade nicht funktioniert:
@@ -6,8 +6,8 @@ Die Übersicht, die Standort- und die Probe-Seite zählen damit dieselben Zustä
 =========  ==========================================================================
 ok         Messung läuft und ist unauffällig
 warn       Messung läuft, aber auffällig (Verlust, Ziel im Traceroute nicht erreicht,
-           Bandbreite unter Schwellwert)
-down       Messung schlägt fehl (Ziel antwortet nicht, iperf3/Speedtest-Fehler)
+           Bandbreite oder MOS unter Schwellwert)
+down       Messung schlägt fehl (Ziel antwortet nicht, iperf3/Speedtest-/Sprachtest-Fehler)
 stale      Messung bleibt aus (keine aktuellen Werte, geplante Messung überfällig)
 waiting    noch kein Ergebnis, aber auch noch nicht fällig (neu angelegt, nur manuell)
 =========  ==========================================================================
@@ -22,7 +22,7 @@ from ..db import q
 
 STATE_LABELS = {"ok": "ok", "warn": "auffällig", "down": "gestört", "stale": "keine Daten", "waiting": "wartet"}
 PROBLEM_STATES = ("down", "warn", "stale")
-KIND_LABELS = {"ping": "Ping", "path": "Pfad", "iperf": "iperf3", "speedtest": "WAN"}
+KIND_LABELS = {"ping": "Ping", "path": "Pfad", "iperf": "iperf3", "speedtest": "WAN", "rtp": "Sprache"}
 # so lange darf ein Dauerping ohne Wert bleiben, bevor er als „keine Daten“ gilt
 PING_STALE_S = 180
 LOSS_WARN_PCT = 2
@@ -50,7 +50,10 @@ class CheckState:
 
 
 def latest_runs(probe_ids: list[int] | None = None) -> tuple[dict, dict]:
-    """Letzter Pfad je (Probe, Check) und letzte Bandbreitenmessung je (Probe, Check, Richtung)."""
+    """Letzter Pfad je (Probe, Check) und letzte Bandbreitenmessung je (Probe, Check, Richtung).
+
+    Der letzte Sprachtest steht mit Richtung ``rtp`` bei den Bandbreitenmessungen.
+    """
     where, params = "", ()
     if probe_ids is not None:
         if not probe_ids:
@@ -64,6 +67,9 @@ def latest_runs(probe_ids: list[int] | None = None) -> tuple[dict, dict]:
     for r in q("SELECT b.* FROM bandwidth_runs b JOIN (SELECT MAX(id) AS id FROM bandwidth_runs" + where +
                " GROUP BY probe_id, check_id, direction) m ON m.id = b.id", params):
         bandwidth[(r["probe_id"], r["check_id"], r["direction"])] = r
+    for r in q("SELECT r.* FROM rtp_runs r JOIN (SELECT MAX(id) AS id FROM rtp_runs" + where +
+               " GROUP BY probe_id, check_id) m ON m.id = r.id", params):
+        bandwidth[(r["probe_id"], r["check_id"], "rtp")] = r
     return paths, bandwidth
 
 
@@ -129,6 +135,27 @@ def _bandwidth_state(probe: dict, c: dict, runs: dict, now: int) -> CheckState:
     return CheckState(c, "ok", "", latest["ts"], vals)
 
 
+def _rtp_state(probe: dict, c: dict, run: dict | None, now: int) -> CheckState:
+    params = checktypes.merged("rtp", json.loads(c["params"] or "{}"))
+    params["offset_min"] = repo._schedule_offset(probe["id"], c["id"], params["schedule_min"], params["offset_min"])
+    vals = {"rtp": run}
+    overdue = schedule.overdue_since(params, run["ts"] if run else None, int(c.get("created_at") or 0), now)
+    if run is None:
+        if overdue:
+            return CheckState(c, "stale", "geplanter Sprachtest ist ausgeblieben", values=vals)
+        plan = "wartet auf den ersten geplanten Test" if params["schedule_min"] else "nur manuell, noch nicht gemessen"
+        return CheckState(c, "waiting", plan, values=vals)
+    if run["error"] or run["mos"] is None:
+        return CheckState(c, "down", run["error"] or "kein Ergebnis", run["ts"], vals)
+    detail = f"MOS {run['mos']:.2f}"
+    if overdue:
+        return CheckState(c, "stale", f"geplanter Test überfällig, letzter vor {(now - run['ts']) // 60} min",
+                          run["ts"], vals)
+    if params["min_mos"] and run["mos"] < params["min_mos"]:
+        return CheckState(c, "warn", f"{detail} unter {params['min_mos']:g}", run["ts"], vals)
+    return CheckState(c, "ok", detail, run["ts"], vals)
+
+
 def probe_states(probe: dict, checks: list[dict], live: dict, paths: dict, bandwidth: dict,
                  now: int | None = None) -> list[CheckState]:
     """Zustand je zugewiesenem Check einer Probe (``checks`` aus ``repo.checks_for_probe``)."""
@@ -139,7 +166,9 @@ def probe_states(probe: dict, checks: list[dict], live: dict, paths: dict, bandw
             out.append(_ping_state(c, live.get((str(probe["id"]), str(c["id"]))), now))
         elif c["type"] == "path":
             out.append(_path_state(c, paths.get((probe["id"], c["id"])), now))
-        elif c["type"] in checktypes.SCHEDULED_TYPES:
+        elif c["type"] == "rtp":
+            out.append(_rtp_state(probe, c, bandwidth.get((probe["id"], c["id"], "rtp")), now))
+        elif c["type"] in checktypes.BANDWIDTH_TYPES:
             runs = {d: bandwidth.get((probe["id"], c["id"], d)) for d in ("down", "up")}
             out.append(_bandwidth_state(probe, c, runs, now))
     return out

@@ -388,6 +388,56 @@ def result_bandwidth():
     return jsonify(stored=stored), 201
 
 
+RTP_METRICS = (("mos", "wachtl_rtp_mos"), ("rtt_ms", "wachtl_rtp_rtt_ms"), ("loss_pct", "wachtl_rtp_loss_pct"),
+               ("jitter_ms", "wachtl_rtp_jitter_ms"))
+
+
+@bp.post("/results/rtp")
+@probe_auth
+def result_rtp():
+    """Ergebnis eines Sprachtests (RTP), siehe wachtl/rtp/__init__.py."""
+    data = request.get_json(silent=True) or {}
+    check = _own_check(data.get("check_id"), ("rtp",))
+    ts = _result_ts(data.get("ts"))
+    trigger = "manual" if data.get("trigger") == "manual" else "schedule"
+    r = data.get("result") if isinstance(data.get("result"), dict) else None
+    if r is None:
+        return jsonify(error="result fehlt"), 400
+    error = str(r.get("error") or "")[:500] or None
+    mos = _num(r.get("mos"), 1, 5)
+    mode = r.get("mode") if r.get("mode") in ("wachtl", "echo") else None
+
+    def count(key: str) -> int | None:
+        v = _num(r.get(key), 0, 10**7)
+        return None if v is None else int(v)
+
+    values = {
+        "peer": str(r.get("peer") or "")[:200], "codec": str(r.get("codec") or "")[:10],
+        "ptime_ms": count("ptime_ms"), "duration_s": _num(r.get("duration_s"), 0, 3600), "mode": mode,
+        "sent": count("sent"), "received": count("received"),
+        "rtt_ms": _num(r.get("rtt_ms"), 0, 60000), "rtt_max_ms": _num(r.get("rtt_max_ms"), 0, 60000),
+        "loss_pct": _num(r.get("loss_pct"), 0, 100), "up_loss_pct": _num(r.get("up_loss_pct"), 0, 100),
+        "down_loss_pct": _num(r.get("down_loss_pct"), 0, 100), "jitter_ms": _num(r.get("jitter_ms"), 0, 60000),
+        "up_jitter_ms": _num(r.get("up_jitter_ms"), 0, 60000), "down_jitter_ms": _num(r.get("down_jitter_ms"), 0, 60000),
+        "out_of_order": count("out_of_order"), "r_factor": _num(r.get("r_factor"), -200, 200), "mos": mos,
+    }
+    cols = ", ".join(values)
+    ins(f"INSERT INTO rtp_runs (probe_id, check_id, ts, {cols}, trigger, error) "
+        f"VALUES (?, ?, ?, {', '.join('?' * len(values))}, ?, ?)",
+        (g.probe["id"], check["id"], ts, *values.values(), trigger, error))
+    ok = not error and mos is not None
+    lines = [ingest.server_lines("wachtl_rtp_ok", g.probe, check, 1 if ok else 0, ts, {})]
+    if ok:
+        for key, metric in RTP_METRICS:
+            if values[key] is not None:
+                lines.append(ingest.server_lines(metric, g.probe, check, values[key], ts, {}))
+    try:
+        vm.import_lines(lines)
+    except vm.VMError as exc:
+        log.warning("RTP-Metriken nicht gespeichert: %s", exc)
+    return jsonify(stored=1), 201
+
+
 # -- intern: Alertmanager-Webhook ------------------------------------------
 internal = Blueprint("api_internal", __name__, url_prefix="/api/internal")
 

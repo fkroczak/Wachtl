@@ -31,6 +31,7 @@ if ($Part -eq 'Probe') {
     Start-Sleep 3
     if (Get-Service Wachtl -ErrorAction SilentlyContinue) { $problems.Add('Dienst Wachtl') }
     if (Get-NetFirewallRule -DisplayName 'Wachtl Probe iperf3' -ErrorAction SilentlyContinue) { $problems.Add('Firewall-Regel Wachtl Probe iperf3') }
+    if (Get-NetFirewallRule -DisplayName 'Wachtl Probe RTP' -ErrorAction SilentlyContinue) { $problems.Add('Firewall-Regel Wachtl Probe RTP') }
     $byProgram = Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue | Where-Object Program -like "${env:ProgramFiles}\Wachtl\*"
     if ($byProgram) { $problems.Add("Firewall-Regeln für $(($byProgram.Program | Sort-Object -Unique) -join ', ')") }
     if (Test-Path C:\ProgramData\Wachtl\state.json) { $problems.Add('Token C:\ProgramData\Wachtl\state.json') }

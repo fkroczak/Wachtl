@@ -5,7 +5,7 @@
 #   sudo ./uninstall.sh --alles         zusätzlich Volumes (Datenbank, Messwerte), .env, Zertifikat, Sicherungen
 #   sudo ./uninstall.sh --alles --ja    ohne Rückfrage (z. B. per Skript)
 #
-# Entfernt wird nur, was setup.sh angelegt hat. Die Port-Freigaben (80, 443, iperf3) setzt Docker selbst als
+# Entfernt wird nur, was setup.sh angelegt hat. Die Port-Freigaben (80, 443, iperf3, RTP) setzt Docker selbst als
 # iptables-Regeln – sie verschwinden mit den Containern; das Skript prüft das am Ende.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -27,9 +27,12 @@ done
 command -v docker >/dev/null || fail "Docker fehlt – nichts zu entfernen?"
 
 IPERF_PORT=5201
+RTP_PORT=5004
 if [[ -f .env ]]; then
   IPERF_PORT="$(grep -E '^IPERF_PORT=' .env | cut -d= -f2 || true)"
   IPERF_PORT="${IPERF_PORT:-5201}"
+  RTP_PORT="$(grep -E '^RTP_PORT=' .env | cut -d= -f2 || true)"
+  RTP_PORT="${RTP_PORT:-5004}"
 fi
 
 if [[ $YES -eq 0 ]]; then
@@ -85,7 +88,7 @@ problems=()
 [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=wachtl")" ]] && problems+=("Container des Projekts wachtl")
 [[ -n "$(docker network ls -q --filter "label=com.docker.compose.project=wachtl")" ]] && problems+=("Docker-Netzwerke des Projekts wachtl")
 if command -v ss >/dev/null; then
-  for spec in "tcp:80" "tcp:443" "tcp:${IPERF_PORT}" "udp:${IPERF_PORT}"; do
+  for spec in "tcp:80" "tcp:443" "tcp:${IPERF_PORT}" "udp:${IPERF_PORT}" "udp:${RTP_PORT}"; do
     proto=${spec%%:*}; port=${spec##*:}
     flag=$([[ $proto == tcp ]] && echo "-ltnp" || echo "-lunp")
     if ss -H $flag "sport = :$port" 2>/dev/null | grep -q "docker-proxy"; then
@@ -93,8 +96,8 @@ if command -v ss >/dev/null; then
     fi
   done
 fi
-if command -v iptables >/dev/null && iptables -t nat -S DOCKER 2>/dev/null | grep -Eq -- "--dport (443|80|${IPERF_PORT}) "; then
-  problems+=("iptables-Weiterleitung für Port 80/443/${IPERF_PORT} (Docker) – 'systemctl restart docker' räumt sie auf")
+if command -v iptables >/dev/null && iptables -t nat -S DOCKER 2>/dev/null | grep -Eq -- "--dport (443|80|${IPERF_PORT}|${RTP_PORT}) "; then
+  problems+=("iptables-Weiterleitung für Port 80/443/${IPERF_PORT}/${RTP_PORT} (Docker) – 'systemctl restart docker' räumt sie auf")
 fi
 if [[ $ALL -eq 1 ]]; then
   [[ -e .env || -e certs/wachtl.key ]] && problems+=(".env oder privater Schlüssel liegt noch im Ordner")
