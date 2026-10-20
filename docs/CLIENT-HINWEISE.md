@@ -37,6 +37,11 @@ für dieselbe Karte erscheint frühestens nach 30 min erneut, außer er wird sch
 
 ## Sprechblase auf dem PC
 
+- Wachtl zeigt den Hinweis in einem eigenen kleinen Fenster unten rechts über der Uhr, nicht als
+  Windows-Benachrichtigung. So erscheint er auch unter Windows 11 bei „Nicht stören“, ausgeschalteten
+  App-Benachrichtigungen und in der ersten Stunde nach der Anmeldung. Das Fenster nimmt keinen Fokus, bleibt
+  stehen, solange die Maus darauf liegt, und schließt sich sonst nach 15 s. Bei Spielen im Vollbild und
+  Präsentationen wartet der Hinweis, bis sie beendet sind.
 - Rot für kritisch, Gelb für Warnung, Blau für die Entwarnung.
 - Text: eine Kurzfassung mit Problem und Lösungsvorschlag (passt in die 255 Zeichen, die Windows erlaubt). Ein Klick zeigt die ausführliche Fassung.
 - Im Menü des Symbols zeigt **Netzwerk-Hinweise …** alle aktiven Hinweise.
