@@ -87,23 +87,26 @@ h2 { font-size: 1.1rem; margin: 1.8rem 0 0.6rem; }
 .topbar nav { display: flex; gap: 0.3rem 1rem; flex: 1; flex-wrap: wrap; }
 .topbar nav a { color: var(--bar-muted); padding: 0.2rem 0; border-bottom: 2px solid transparent; }
 .topbar nav a.active, .topbar nav a:hover { color: var(--bar-text); border-color: var(--bar-text); text-decoration: none; }
-.who { display: flex; align-items: center; font-size: 0.9rem; }
+.who { display: flex; align-items: center; }
 /* Benutzermenü: Name in der Leiste, Dropdown mit Konto, Design und abgesetzt Abmelden */
 .usermenu { position: relative; }
-.usermenu > summary { list-style: none; cursor: pointer; color: var(--bar-muted); padding: 0.25rem 0.5rem; border-radius: 6px; }
+/* Name wie ein Navigationslink: gleiche Schrift, Unterstrich bei Hover, offen oder auf Konto/Design */
+.usermenu > summary { list-style: none; cursor: pointer; color: var(--bar-muted); padding: 0.2rem 0;
+  border-bottom: 2px solid transparent; white-space: nowrap; }
 .usermenu > summary::-webkit-details-marker { display: none; }
 .usermenu > summary::after { content: " ▾" / ""; }
-.usermenu > summary:hover, .usermenu[open] > summary { color: var(--bar-text); background: rgb(255 255 255 / 0.08); }
-.usermenu-panel { position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 20; min-width: 13rem; padding: 0.35rem 0;
+.usermenu > summary:hover, .usermenu[open] > summary, .usermenu > summary.active { color: var(--bar-text); border-color: var(--bar-text); }
+.usermenu-panel { position: absolute; right: 0; top: calc(100% + 0.5rem); z-index: 20; min-width: 13rem; padding: 0.35rem 0;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
+.usermenu-panel { text-align: right; }
 .usermenu-head { margin: 0; padding: 0.4rem 0.9rem 0.5rem; font-weight: 600; display: grid; overflow-wrap: anywhere; }
 .usermenu-head .muted { font-weight: 400; }
 .usermenu ul { list-style: none; margin: 0; padding: 0.3rem 0; border-block: 1px solid var(--border); }
-.usermenu-panel a, .usermenu-panel button { display: block; width: 100%; text-align: left; padding: 0.45rem 0.9rem;
+.usermenu-panel a, .usermenu-panel button { display: block; width: 100%; text-align: right; padding: 0.45rem 0.9rem;
   color: var(--text); background: none; border: 0; border-radius: 0; text-decoration: none; }
 .usermenu-panel a:hover, .usermenu-panel button:hover { background: var(--accent-soft); }
-.usermenu-panel a[aria-current] { font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.usermenu-panel a[aria-current] { font-weight: 600; box-shadow: inset -3px 0 0 var(--accent); }
 .usermenu-panel :focus-visible { outline-offset: -3px; }
 .usermenu-logout { margin: 0.3rem 0 0; }
 /* schmal: Logo und Konto oben, Navigation als eigene Zeile darunter statt untereinander */

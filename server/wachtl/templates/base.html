@@ -27,7 +27,7 @@
   </nav>
   <div class="who">
     <details class="usermenu" data-usermenu>
-      <summary><span class="sr-only">Benutzermenü </span>{{ user.username }}</summary>
+      <summary{% if request.endpoint in ('web.account', 'web.design') %} class="active"{% endif %}><span class="sr-only">Benutzermenü </span>{{ user.username }}</summary>
       <div class="usermenu-panel">
         <p class="usermenu-head">{{ user.username }}<span class="muted small">{{ ROLE_LABELS[user.role] }}</span></p>
         <ul>
