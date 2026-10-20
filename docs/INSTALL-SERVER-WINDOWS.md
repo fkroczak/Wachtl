@@ -15,7 +15,7 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 
 ## Installation mit dem Assistenten
 
-`WachtlSetup-0.8.4.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
+`WachtlSetup-0.8.5.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
 
 1. **Rolle** – „Wachtl-Server“ wählen (Standard ist Probe). Programmordner: `C:\Program Files\Wachtl Server`.
 2. **Server-Adresse** – DNS-Namen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). Die IP-Adressen des Servers ergänzt das Setup selbst – Probes weichen darauf aus, wenn ein Name am Standort nicht auflösbar ist. HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
@@ -43,7 +43,7 @@ daraus mit einem Klick ein vorbelegtes Setup für die PCs (alle Adressen, Pin un
 ## Unbeaufsichtigte Installation
 
 ```powershell
-.\WachtlSetup-0.8.4.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
+.\WachtlSetup-0.8.5.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
     /Hostnames="wachtl.kunde.local" /AdminPassword="…" `
     /HttpsPort=443 /HttpPort=80 /DataDir="D:\Wachtl" /RawDays=30 /AggMonths=13 `
     /EmailTo=it@kunde.de /EmailFrom=wachtl@kunde.de /SmtpHost=mail.kunde.de:587 /TeamsUrl=https://…

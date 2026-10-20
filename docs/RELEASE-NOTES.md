@@ -3,6 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.5
+
+- **Netzwerk-Hinweise auch unter Windows 11**: Das Wachtl-Symbol zeigt Hinweise (z. B. Kabel getrennt) jetzt in einem eigenen kleinen Fenster unten rechts statt als Windows-Benachrichtigung. Windows 11 hatte die Meldung bei „Nicht stören“, ausgeschalteten Benachrichtigungen oder kurz nach der Anmeldung still verworfen. Das Fenster nimmt keinen Fokus, bleibt unter der Maus stehen, schließt sich sonst nach 15 s; ein Klick zeigt Details und Lösung. Bei Spielen im Vollbild und Präsentationen wartet der Hinweis.
+
 ## Neu in 0.8.4
 
 - **Passwort vergessen?**: Die Anmeldeseite verlinkt eine Hilfe. Normale Benutzer bitten einen Admin; der setzt das Passwort unter Verwaltung › Benutzer › **Passwort zurücksetzen** neu (hebt auch eine Sperre auf, steht im Audit-Log). Für das Admin-Konto zeigt die Seite den Weg passend zum Server.
