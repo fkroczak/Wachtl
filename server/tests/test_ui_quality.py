@@ -209,7 +209,7 @@ class PageSemanticsTest(AppTestCase):
         pid = self.probe["probe_id"]
         return ["/", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
-                "/admin", "/admin/audit", "/account", "/meldungen", "/meldungen?status=all",
+                "/admin", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
                 f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
 
     def test_all_pages_pass_lint(self):
@@ -345,10 +345,35 @@ def _mix(fg: str, bg: str, share: float) -> str:
 class ContrastTest(AppTestCase):
     def themes(self) -> dict[str, dict[str, str]]:
         css = open(CSS, encoding="utf-8").read()
-        light = _tokens(re.search(r":root\s*\{(.*?)\}", css, re.S).group(1))
-        dark = {**light, **_tokens(re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{(.*?)\}", css, re.S)
-                                   .group(1))}
-        return {"hell": light, "dunkel": dark}
+
+        def block(selector: str) -> dict[str, str]:
+            return _tokens(re.search(re.escape(selector) + r"\s*\{(.*?)\}", css, re.S).group(1))
+
+        light = block(":root")
+        dark = {**light, **block(':root[data-theme="dark"]')}
+        high = {**light, **block(':root[data-contrast="high"]')}
+        high_dark = {**high, **block(':root[data-contrast="high"][data-theme="dark"]')}
+        return {"hell": light, "dunkel": dark, "hell, Kontrast erhöht": high, "dunkel, Kontrast erhöht": high_dark}
+
+    def test_dark_blocks_match(self):
+        """Dunkel per Auswahl und dunkel per System müssen dieselben Farben haben."""
+        css = open(CSS, encoding="utf-8").read()
+        for forced, system in ((':root[data-theme="dark"]', ':root:not([data-theme="light"])'),
+                               (':root[data-contrast="high"][data-theme="dark"]',
+                                ':root[data-contrast="high"]:not([data-theme="light"])')):
+            a = _tokens(re.search(re.escape(forced) + r"\s*\{(.*?)\}", css, re.S).group(1))
+            b = _tokens(re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*" + re.escape(system) + r"\s*\{(.*?)\}",
+                                  css, re.S).group(1))
+            self.assertTrue(a)
+            self.assertEqual(a, b, forced)
+
+    def test_high_contrast_text(self):
+        """Kontrast „Erhöht“: Fließtext und gedämpfter Text erreichen 7:1 (WCAG AAA)."""
+        for theme, t in self.themes().items():
+            if "Kontrast" in theme:
+                for fg in ("--text", "--text-muted"):
+                    for bg in ("--bg", "--surface"):
+                        self.assertGreaterEqual(contrast(t[fg], t[bg]), 7.0, f"{theme}: {fg} auf {bg}")
 
     def test_token_contrast(self):
         failures = []

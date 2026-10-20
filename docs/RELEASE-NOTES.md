@@ -3,6 +3,12 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.5
+
+- **Benutzermenü**: Oben rechts steht nur noch der Benutzername. Ein Klick öffnet das Menü mit **Konto** und **Design**, darunter abgesetzt **Abmelden**. Bedienbar auch per Tastatur (Escape schließt).
+- **Konto**: zeigt Benutzername, Rolle, Anlagedatum und letzte Anmeldung. Beim Passwortwechsel wird das neue Passwort zur Sicherheit zweimal eingegeben.
+- **Design**: Farbschema **Wie das System**, **Hell** oder **Dunkel** und Kontrast **Standard** oder **Erhöht** (Schrift mind. 7:1, kräftigere Ränder, alle Links unterstrichen). Die Auswahl wirkt sofort als Vorschau und gilt nach dem Speichern für das Konto auf jedem Gerät.
+
 ## Neu in 0.8.4
 
 - **Passwort vergessen?**: Die Anmeldeseite verlinkt eine Hilfe. Normale Benutzer bitten einen Admin; der setzt das Passwort unter Verwaltung › Benutzer › **Passwort zurücksetzen** neu (hebt auch eine Sperre auf, steht im Audit-Log). Für das Admin-Konto zeigt die Seite den Weg passend zum Server.

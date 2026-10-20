@@ -10,6 +10,29 @@
     if (btn && !window.confirm(btn.dataset.confirm)) ev.preventDefault();
   });
 
+  // Benutzermenü: schließt bei Klick daneben und mit Escape (Fokus zurück auf den Namen)
+  const userMenu = document.querySelector("[data-usermenu]");
+  if (userMenu) {
+    document.addEventListener("click", (ev) => {
+      if (userMenu.open && !userMenu.contains(ev.target)) userMenu.open = false;
+    });
+    userMenu.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && userMenu.open) {
+        userMenu.open = false;
+        userMenu.querySelector("summary").focus();
+      }
+    });
+  }
+
+  // Design-Seite: Auswahl sofort als Vorschau zeigen, gespeichert wird erst mit „Speichern“
+  const designForm = document.querySelector("[data-design-form]");
+  if (designForm) {
+    designForm.addEventListener("change", (ev) => {
+      if (ev.target.name === "theme") document.documentElement.dataset.theme = ev.target.value;
+      if (ev.target.name === "contrast") document.documentElement.dataset.contrast = ev.target.value;
+    });
+  }
+
   // Check-Zuweisung: Standort/Probe-Auswahl ein- und ausblenden
   const scopeSelect = document.querySelector("[data-scope-select]");
   if (scopeSelect) {

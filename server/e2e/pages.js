@@ -28,6 +28,7 @@ const PAGES = [
   ["Check-Formular iperf3", "/admin/checks/new/iperf"],
   ["Check-Formular WAN", "/admin/checks/new/speedtest"],
   ["Konto", "/account"],
+  ["Design", "/account/design"],
   ["Passwort vergessen", "/passwort-vergessen"],
   ["Audit-Log", "/admin/audit"],
 ];

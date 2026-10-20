@@ -1,11 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Konto{% endblock %}
 {% block content %}
-<h1>Konto {{ user.username }}</h1>
+<h1>Konto</h1>
+<section class="card narrow">
+  <h2 class="card-title">Kontodaten</h2>
+  <dl>
+    <dt>Benutzername</dt><dd>{{ account.username }}</dd>
+    <dt>Rolle</dt><dd>{{ ROLE_LABELS[account.role] }}</dd>
+    <dt>Angelegt</dt><dd>{{ account.created_at|dt }}</dd>
+    <dt>Letzte Anmeldung</dt><dd>{{ account.last_login|dt }}</dd>
+  </dl>
+</section>
+<h2>Passwort ändern</h2>
 <form method="post" class="stack narrow">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>Altes Passwort <input name="old_password" type="password" required autocomplete="current-password"></label>
   <label>Neues Passwort <input name="new_password" type="password" required autocomplete="new-password"></label>
+  <label>Neues Passwort wiederholen <input name="new_password2" type="password" required autocomplete="new-password"></label>
   <button class="primary">Passwort ändern</button>
 </form>
+<p class="muted small">Darstellung (hell, dunkel, Kontrast) stellen Sie unter <a href="{{ url_for('web.design') }}">Design</a> ein.</p>
 {% endblock %}

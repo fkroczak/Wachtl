@@ -110,3 +110,19 @@ test("Graph: Werte je Messpunkt per Tastatur, Ansage für Screenreader", async (
   await page.keyboard.press("Escape");
   await expect(page.locator(".chart-tip")).toBeHidden();
 });
+
+test("Benutzermenü: per Tastatur öffnen, Abmelden steht unten, Escape schließt", async ({ page }) => {
+  await page.goto("/");
+  const menu = page.locator("[data-usermenu]");
+  const summary = menu.locator("summary");
+  await summary.focus();
+  await page.keyboard.press("Enter");
+  await expect(menu).toHaveAttribute("open", "");
+  const items = menu.locator(".usermenu-panel a, .usermenu-panel button");
+  await expect(items).toHaveText(["Konto", "Design", "Abmelden"]);
+  await page.keyboard.press("Tab");
+  await expect(menu.getByRole("link", { name: "Konto" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toHaveAttribute("open", "");
+  await expect(summary).toBeFocused();
+});
