@@ -1,161 +1,60 @@
 :root {
-  /* Wachtl-Palette: neutrales Grau, ein gedämpftes Blau als einziger Akzent */
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --text: #1f2328;
-  --text-muted: #5b616b;
-  --border: #dde0e5;
-  --accent: #2f5d8a;      /* Links, Schaltflächen, aktive Navigation */
-  --accent-soft: #e7edf4;
-  --jitter: #6b7280;      /* Ursache Paketverlust (Ausfälle) */
-  --band: #c4c8cf;        /* Graph: Rauch, mittlere 50 % der Pings */
-  --band-soft: #e3e5e9;   /* Graph: Rauch, 80 % der Pings */
-  --loss-low: #1d6f8f;    /* Graph: Verlust unter der Warnschwelle (Median, Verluststreifen) */
-  --bar-bg: #26282c;      /* Kopfleiste */
-  --bar-text: #f4f5f7;
-  --bar-muted: #b4b9c1;
+  /* Wachtl-Palette: neutrales Grau, ein gedämpftes Blau als einziger Akzent. light-dark(hell, dunkel)
+     folgt color-scheme: System oder Design-Auswahl (data-theme) */
+  --bg: light-dark(#f4f5f7, #131417);
+  --surface: light-dark(#ffffff, #1c1e22);
+  --text: light-dark(#1f2328, #e8eaed);
+  --text-muted: light-dark(#5b616b, #a3a9b2);
+  --border: light-dark(#dde0e5, #33363c);
+  --accent: light-dark(#2f5d8a, #8fb3d9);      /* Links, Schaltflächen, aktive Navigation */
+  --accent-soft: light-dark(#e7edf4, #23303e);
+  --jitter: light-dark(#6b7280, #a3a9b2);      /* Ursache Paketverlust (Ausfälle) */
+  --band: light-dark(#c4c8cf, #3b3f47);        /* Graph: Rauch, mittlere 50 % der Pings */
+  --band-soft: light-dark(#e3e5e9, #2a2d33);   /* Graph: Rauch, 80 % der Pings */
+  --loss-low: light-dark(#1d6f8f, #6fb7d6);    /* Graph: Verlust unter der Warnschwelle (Median, Verluststreifen) */
+  --bar-bg: light-dark(#26282c, #1c1e22);      /* Kopfleiste */
+  --bar-text: light-dark(#f4f5f7, #e8eaed);
+  --bar-muted: light-dark(#b4b9c1, #a3a9b2);
   /* Statusfarben werden auch als Schrift genutzt: ≥ 4,5:1 auf --surface und --bg (WCAG 1.4.3) */
-  --ok: #2b6a4b;
-  --warn: #855b12;
-  --bad: #a8372c;
-  --off: #7a808a;
-  --field-border: #868c96;  /* Rand von Eingabefeldern: ≥ 3:1 (WCAG 1.4.11) */
-  --focus: #1d4ed8;         /* Fokusring, auf hellen und dunklen Flächen sichtbar */
-  --jitter-line: #b0457a;   /* Graph: Jitter-Linie – unterscheidbar von Median, Schwelle und Meldungen */
-  --report: #7a4a9e;        /* Störungsmeldungen: Markierung im Graph, Badge – unterscheidbar von Status und Jitter */
+  --ok: light-dark(#2b6a4b, #6bbd92);
+  --warn: light-dark(#855b12, #dcae5c);
+  --bad: light-dark(#a8372c, #ec7d71);
+  --off: light-dark(#7a808a, #6f747d);
+  --field-border: light-dark(#868c96, #6f747d);  /* Rand von Eingabefeldern: ≥ 3:1 (WCAG 1.4.11) */
+  --focus: light-dark(#1d4ed8, #93c5fd);         /* Fokusring, auf hellen und dunklen Flächen sichtbar */
+  --jitter-line: light-dark(#b0457a, #e58bb6);   /* Graph: Jitter-Linie – unterscheidbar von Median, Schwelle und Meldungen */
+  --report: light-dark(#7a4a9e, #c3a6e6);        /* Störungsmeldungen: Markierung im Graph, Badge – unterscheidbar von Status und Jitter */
   --radius: 8px;
   font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
   font-size: 15px;
   color-scheme: light dark;
 }
-/* Farbschema je Benutzer (Benutzermenü → Design): data-theme="light|dark" erzwingt, "system" folgt dem
-   Betriebssystem. Die beiden dunklen Blöcke müssen gleich sein (geprüft in tests/test_ui_quality.py). */
 :root[data-theme="light"] { color-scheme: light; }
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --bg: #131417;
-  --surface: #1c1e22;
-  --text: #e8eaed;
-  --text-muted: #a3a9b2;
-  --border: #33363c;
-  --accent: #8fb3d9;
-  --accent-soft: #23303e;
-  --jitter: #a3a9b2;
-  --jitter-line: #e58bb6;
-  --band: #3b3f47;
-  --band-soft: #2a2d33;
-  --loss-low: #6fb7d6;
-  --bar-bg: #1c1e22;
-  --bar-text: #e8eaed;
-  --bar-muted: #a3a9b2;
-  --ok: #6bbd92;
-  --warn: #dcae5c;
-  --bad: #ec7d71;
-  --off: #6f747d;
-  --field-border: #6f747d;
-  --focus: #93c5fd;
-  --report: #c3a6e6;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #131417;
-    --surface: #1c1e22;
-    --text: #e8eaed;
-    --text-muted: #a3a9b2;
-    --border: #33363c;
-    --accent: #8fb3d9;
-    --accent-soft: #23303e;
-    --jitter: #a3a9b2;
-    --jitter-line: #e58bb6;
-    --band: #3b3f47;
-    --band-soft: #2a2d33;
-    --loss-low: #6fb7d6;
-    --bar-bg: #1c1e22;
-    --bar-text: #e8eaed;
-    --bar-muted: #a3a9b2;
-    --ok: #6bbd92;
-    --warn: #dcae5c;
-    --bad: #ec7d71;
-    --off: #6f747d;
-    --field-border: #6f747d;
-    --focus: #93c5fd;
-    --report: #c3a6e6;
-  }
-}
-/* Erhöhter Kontrast: Text ≥ 7:1, kräftige Ränder (Design → Kontrast „Erhöht“) */
+:root[data-theme="dark"] { color-scheme: dark; }
+/* Erhöhter Kontrast (Design → Kontrast „Erhöht“): Text ≥ 7:1, kräftige Ränder */
 :root[data-contrast="high"] {
-  --bg: #f0f1f3;
-  --surface: #ffffff;
-  --text: #000000;
-  --text-muted: #2b2f36;
-  --border: #6b717b;
-  --accent: #0b3d6e;
-  --accent-soft: #e2e9f2;
-  --jitter: #3f444c;
-  --band: #c4c8cf;
-  --band-soft: #e3e5e9;
-  --loss-low: #135670;
+  --bg: light-dark(#f0f1f3, #000000);
+  --surface: light-dark(#ffffff, #0f1012);
+  --text: light-dark(#000000, #ffffff);
+  --text-muted: light-dark(#2b2f36, #d6dae0);
+  --border: light-dark(#6b717b, #8a9099);
+  --accent: light-dark(#0b3d6e, #b5d3f2);
+  --accent-soft: light-dark(#e2e9f2, #1a2633);
+  --jitter: light-dark(#3f444c, #c4c9d0);
+  --band: light-dark(#c4c8cf, #4a4f58);
+  --band-soft: light-dark(#e3e5e9, #2a2d33);
+  --loss-low: light-dark(#135670, #8fd0ec);
   --bar-bg: #000000;
   --bar-text: #ffffff;
-  --bar-muted: #e0e3e8;
-  --ok: #1d5238;
-  --warn: #5f4009;
-  --bad: #8a2219;
-  --off: #4f555e;
-  --field-border: #3f444c;
-  --focus: #1d4ed8;
-  --jitter-line: #8a2e5c;
-  --report: #5b2f80;
-}
-:root[data-contrast="high"][data-theme="dark"] {
-  --bg: #000000;
-  --surface: #0f1012;
-  --text: #ffffff;
-  --text-muted: #d6dae0;
-  --border: #8a9099;
-  --accent: #b5d3f2;
-  --accent-soft: #1a2633;
-  --jitter: #c4c9d0;
-  --band: #4a4f58;
-  --band-soft: #2a2d33;
-  --loss-low: #8fd0ec;
-  --bar-bg: #000000;
-  --bar-text: #ffffff;
-  --bar-muted: #d6dae0;
-  --ok: #8fd9b0;
-  --warn: #f0c674;
-  --bad: #ff9d92;
-  --off: #9aa0a9;
-  --field-border: #a3a9b2;
-  --focus: #bfdbfe;
-  --jitter-line: #f5a8cc;
-  --report: #dcc6f5;
-}
-@media (prefers-color-scheme: dark) {
-  :root[data-contrast="high"]:not([data-theme="light"]) {
-    --bg: #000000;
-    --surface: #0f1012;
-    --text: #ffffff;
-    --text-muted: #d6dae0;
-    --border: #8a9099;
-    --accent: #b5d3f2;
-    --accent-soft: #1a2633;
-    --jitter: #c4c9d0;
-    --band: #4a4f58;
-    --band-soft: #2a2d33;
-    --loss-low: #8fd0ec;
-    --bar-bg: #000000;
-    --bar-text: #ffffff;
-    --bar-muted: #d6dae0;
-    --ok: #8fd9b0;
-    --warn: #f0c674;
-    --bad: #ff9d92;
-    --off: #9aa0a9;
-    --field-border: #a3a9b2;
-    --focus: #bfdbfe;
-    --jitter-line: #f5a8cc;
-    --report: #dcc6f5;
-  }
+  --bar-muted: light-dark(#e0e3e8, #d6dae0);
+  --ok: light-dark(#1d5238, #8fd9b0);
+  --warn: light-dark(#5f4009, #f0c674);
+  --bad: light-dark(#8a2219, #ff9d92);
+  --off: light-dark(#4f555e, #9aa0a9);
+  --field-border: light-dark(#3f444c, #a3a9b2);
+  --focus: light-dark(#1d4ed8, #bfdbfe);
+  --jitter-line: light-dark(#8a2e5c, #f5a8cc);
+  --report: light-dark(#5b2f80, #dcc6f5);
 }
 :root[data-contrast="high"] main a:not(.button) { text-decoration: underline; text-underline-offset: 0.15em; }
 :root[data-contrast="high"] :focus-visible { outline-width: 4px; }
@@ -189,28 +88,24 @@ h2 { font-size: 1.1rem; margin: 1.8rem 0 0.6rem; }
 .topbar nav a { color: var(--bar-muted); padding: 0.2rem 0; border-bottom: 2px solid transparent; }
 .topbar nav a.active, .topbar nav a:hover { color: var(--bar-text); border-color: var(--bar-text); text-decoration: none; }
 .who { display: flex; align-items: center; font-size: 0.9rem; }
-/* Benutzermenü: nur der Name in der Leiste, Konto/Design und abgesetzt „Abmelden“ im Dropdown */
+/* Benutzermenü: Name in der Leiste, Dropdown mit Konto, Design und abgesetzt Abmelden */
 .usermenu { position: relative; }
-.usermenu > summary { list-style: none; cursor: pointer; color: var(--bar-muted); padding: 0.25rem 0.5rem;
-  border-radius: 6px; display: flex; align-items: center; gap: 0.35rem; }
+.usermenu > summary { list-style: none; cursor: pointer; color: var(--bar-muted); padding: 0.25rem 0.5rem; border-radius: 6px; }
 .usermenu > summary::-webkit-details-marker { display: none; }
-.usermenu > summary::after { content: ""; width: 0.4em; height: 0.4em; border: solid currentColor;
-  border-width: 0 2px 2px 0; transform: translateY(-0.15em) rotate(45deg); }
-.usermenu[open] > summary::after { transform: translateY(0.1em) rotate(-135deg); }
+.usermenu > summary::after { content: " ▾" / ""; }
 .usermenu > summary:hover, .usermenu[open] > summary { color: var(--bar-text); background: rgb(255 255 255 / 0.08); }
-.usermenu-panel { position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 20; min-width: 13rem;
+.usermenu-panel { position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 20; min-width: 13rem; padding: 0.35rem 0;
   background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius);
-  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); padding: 0.35rem 0; }
-.usermenu-head { margin: 0; padding: 0.4rem 0.9rem 0.5rem; font-weight: 600; display: flex; flex-direction: column;
-  border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
+.usermenu-head { margin: 0; padding: 0.4rem 0.9rem 0.5rem; font-weight: 600; display: grid; overflow-wrap: anywhere; }
 .usermenu-head .muted { font-weight: 400; }
-.usermenu ul { list-style: none; margin: 0; padding: 0.3rem 0; }
-.usermenu-panel a, .usermenu-logout button { display: block; width: 100%; text-align: left; padding: 0.45rem 0.9rem;
+.usermenu ul { list-style: none; margin: 0; padding: 0.3rem 0; border-block: 1px solid var(--border); }
+.usermenu-panel a, .usermenu-panel button { display: block; width: 100%; text-align: left; padding: 0.45rem 0.9rem;
   color: var(--text); background: none; border: 0; border-radius: 0; text-decoration: none; }
-.usermenu-panel a:hover, .usermenu-logout button:hover { background: var(--accent-soft); text-decoration: none; }
-.usermenu-panel a[aria-current="page"] { font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.usermenu-panel a:hover, .usermenu-panel button:hover { background: var(--accent-soft); }
+.usermenu-panel a[aria-current] { font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
 .usermenu-panel :focus-visible { outline-offset: -3px; }
-.usermenu-logout { margin: 0; padding-top: 0.3rem; border-top: 1px solid var(--border); }
+.usermenu-logout { margin: 0.3rem 0 0; }
 /* schmal: Logo und Konto oben, Navigation als eigene Zeile darunter statt untereinander */
 .topbar nav a { white-space: nowrap; }
 @media (max-width: 700px) {
@@ -475,8 +370,5 @@ details > summary h2 { display: inline; }
 details > summary { cursor: pointer; margin: 1.6rem 0 0.6rem; }
 .excluded { margin: 0.5rem 0 1rem; }
 
-/* Design-Seite: Auswahl als Optionsfelder */
-.design-form fieldset { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 0.5rem 1rem 0.8rem; margin: 0; display: flex; flex-direction: column; gap: 0.35rem; }
-.design-form legend { font-weight: 600; padding: 0 0.3rem; }
-.design-form label.choice { flex-direction: row; align-items: center; gap: 0.5rem; }
+label.choice { flex-direction: row !important; align-items: center; gap: 0.5rem; padding: 0.2rem 0; }
+label.choice input { width: 1.1rem; height: 1.1rem; margin: 0; }

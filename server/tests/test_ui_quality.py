@@ -322,8 +322,15 @@ PAIRS = [
 BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]
 
 
-def _tokens(block: str) -> dict[str, str]:
-    return dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", block))
+def _tokens(block: str, dark: bool = False) -> dict[str, str]:
+    """Farb-Tokens eines CSS-Blocks; bei light-dark(hell, dunkel) die gewünschte Seite."""
+    out = {}
+    for name, value in re.findall(r"(--[\w-]+):\s*([^;]+);", block):
+        if m := re.fullmatch(r"light-dark\((#[0-9a-fA-F]{6}),\s*(#[0-9a-fA-F]{6})\)", value.strip()):
+            out[name] = m.group(2 if dark else 1)
+        elif re.fullmatch(r"#[0-9a-fA-F]{6}", value.strip()):
+            out[name] = value.strip()
+    return out
 
 
 def _lum(hex_color: str) -> float:
@@ -345,27 +352,20 @@ def _mix(fg: str, bg: str, share: float) -> str:
 class ContrastTest(AppTestCase):
     def themes(self) -> dict[str, dict[str, str]]:
         css = open(CSS, encoding="utf-8").read()
+        root = re.search(r":root\s*\{(.*?)\}", css, re.S).group(1)
+        high = re.search(r':root\[data-contrast="high"\]\s*\{(.*?)\}', css, re.S).group(1)
+        themes = {}
+        for name, dark in (("hell", False), ("dunkel", True)):
+            themes[name] = _tokens(root, dark)
+            themes[f"{name}, Kontrast erhöht"] = {**themes[name], **_tokens(high, dark)}
+        return themes
 
-        def block(selector: str) -> dict[str, str]:
-            return _tokens(re.search(re.escape(selector) + r"\s*\{(.*?)\}", css, re.S).group(1))
-
-        light = block(":root")
-        dark = {**light, **block(':root[data-theme="dark"]')}
-        high = {**light, **block(':root[data-contrast="high"]')}
-        high_dark = {**high, **block(':root[data-contrast="high"][data-theme="dark"]')}
-        return {"hell": light, "dunkel": dark, "hell, Kontrast erhöht": high, "dunkel, Kontrast erhöht": high_dark}
-
-    def test_dark_blocks_match(self):
-        """Dunkel per Auswahl und dunkel per System müssen dieselben Farben haben."""
+    def test_every_color_token_has_dark_value(self):
+        """Jede Farbe braucht einen Wert für hell und dunkel (light-dark), sonst bleibt sie im Dunkelmodus hell."""
         css = open(CSS, encoding="utf-8").read()
-        for forced, system in ((':root[data-theme="dark"]', ':root:not([data-theme="light"])'),
-                               (':root[data-contrast="high"][data-theme="dark"]',
-                                ':root[data-contrast="high"]:not([data-theme="light"])')):
-            a = _tokens(re.search(re.escape(forced) + r"\s*\{(.*?)\}", css, re.S).group(1))
-            b = _tokens(re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*" + re.escape(system) + r"\s*\{(.*?)\}",
-                                  css, re.S).group(1))
-            self.assertTrue(a)
-            self.assertEqual(a, b, forced)
+        root = re.search(r":root\s*\{(.*?)\}", css, re.S).group(1)
+        plain = [n for n, v in re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", root)]
+        self.assertEqual(plain, [])
 
     def test_high_contrast_text(self):
         """Kontrast „Erhöht“: Fließtext und gedämpfter Text erreichen 7:1 (WCAG AAA)."""
