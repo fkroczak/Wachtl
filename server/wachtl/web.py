@@ -8,7 +8,7 @@ import time
 from collections import defaultdict
 from datetime import datetime
 
-from flask import (Blueprint, abort, current_app, flash, redirect, render_template, request,
+from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template, request,
                    session, url_for)
 
 from . import repo
@@ -210,21 +210,43 @@ def logout():
     return redirect(url_for("web.login"))
 
 
+THEMES = {"system": "Wie das System", "light": "Hell", "dark": "Dunkel"}
+CONTRASTS = {"normal": "Standard", "high": "Erhöht"}
+
+
 @bp.route("/account", methods=["GET", "POST"])
 @login_required()
 def account():
+    user = q1("SELECT id, username, role, created_at, last_login, password_hash FROM users WHERE id = ?",
+              (current_user()["id"],))
     if request.method == "POST":
-        user = q1("SELECT * FROM users WHERE id = ?", (current_user()["id"],))
         new = request.form.get("new_password", "")
         if not verify_password(user["password_hash"], request.form.get("old_password", "")):
             flash("Altes Passwort ist falsch.", "error")
+        elif new != request.form.get("new_password2", new):
+            flash("Die beiden neuen Passwörter stimmen nicht überein.", "error")
         elif problem := password_problem(new):
             flash(problem, "error")
         else:
             ex("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user["id"]))
             repo.audit(user["username"], "user.password")
             flash("Passwort geändert.", "ok")
-    return render_template("account.html")
+        return redirect(url_for("web.account"))
+    return render_template("account.html", account=user)
+
+
+@bp.route("/account/design", methods=["GET", "POST"])
+@login_required()
+def design():
+    if request.method == "POST":
+        theme, contrast = request.form.get("theme"), request.form.get("contrast")
+        if theme not in THEMES or contrast not in CONTRASTS:
+            abort(400)
+        ex("UPDATE users SET theme = ?, contrast = ? WHERE id = ?", (theme, contrast, current_user()["id"]))
+        g.pop("user_uid", None)  # zwischengespeicherten Benutzer verwerfen
+        flash("Design gespeichert.", "ok")
+        return redirect(url_for("web.design"))
+    return render_template("design.html", themes=THEMES, contrasts=CONTRASTS)
 
 
 # -- Dashboard ---------------------------------------------------------------

@@ -24,6 +24,43 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(self.client.get("/").status_code, 200)
 
+    def test_user_menu_and_design(self):
+        self.make_user()
+        self.login()
+        html = self.client.get("/").get_data(as_text=True)
+        menu = html[html.index("data-usermenu"):html.index("</details>")]
+        self.assertIn(">Konto<", menu)
+        self.assertIn(">Design<", menu)
+        # Abmelden steht abgesetzt ganz unten
+        self.assertGreater(menu.index("Abmelden"), menu.index(">Design<"))
+        self.assertIn('data-theme="system" data-contrast="normal"', html)
+
+        tok = self.session_csrf()
+        r = self.client.post("/account/design", data={"csrf_token": tok, "theme": "dark", "contrast": "high"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(q1("SELECT theme, contrast FROM users WHERE username = 'admin'"),
+                         {"theme": "dark", "contrast": "high"})
+        html = self.client.get("/account/design").get_data(as_text=True)
+        self.assertIn('data-theme="dark" data-contrast="high"', html)
+        self.assertRegex(html, r'value="dark" checked')
+        r = self.client.post("/account/design", data={"csrf_token": tok, "theme": "lila", "contrast": "high"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_account_password_change_needs_matching_repeat(self):
+        self.make_user()
+        self.login()
+        tok = self.session_csrf()
+        r = self.client.post("/account", data={"csrf_token": tok, "old_password": "sehr-geheimes-pw",
+                                               "new_password": "neues-passwort-1", "new_password2": "anderes-pw-2"},
+                             follow_redirects=True)
+        self.assertIn("stimmen nicht überein", r.get_data(as_text=True))
+        r = self.client.post("/account", data={"csrf_token": tok, "old_password": "sehr-geheimes-pw",
+                                               "new_password": "neues-passwort-1", "new_password2": "neues-passwort-1"},
+                             follow_redirects=True)
+        self.assertIn("Passwort geändert", r.get_data(as_text=True))
+        self.client.post("/logout", data={"csrf_token": tok})
+        self.assertEqual(self.login(password="neues-passwort-1").status_code, 302)
+
     def test_lockout_after_failed_logins(self):
         self.make_user()
         for _ in range(5):
@@ -108,7 +145,7 @@ class WebTest(AppTestCase):
         data = self.enroll()
         self.login()
         for url in ("/", "/sites/1", f"/probes/{data['probe_id']}", f"/probes/{data['probe_id']}/checks/1",
-                    "/alerts", "/admin", "/admin/audit", "/account"):
+                    "/alerts", "/admin", "/admin/audit", "/account", "/account/design"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
 
     def test_webhook_and_ack(self):
@@ -217,7 +254,7 @@ class PrefilledSetupTest(AppTestCase):
         os.makedirs(self.probe_dir)
         with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
             f.write(b"MZ-alt")
-        with open(os.path.join(self.probe_dir, "WachtlSetup-0.9.1.exe"), "wb") as f:
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.9.2.exe"), "wb") as f:
             f.write(b"MZ" + b"x" * 5000)
         self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
                                SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])

@@ -30,6 +30,7 @@ const PAGES = [
   ["Check-Formular WAN", "/admin/checks/new/speedtest"],
   ["Check-Formular Sprache", "/admin/checks/new/rtp"],
   ["Konto", "/account"],
+  ["Design", "/account/design"],
   ["Passwort vergessen", "/passwort-vergessen"],
   ["Audit-Log", "/admin/audit"],
 ];

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="de"{% if user %} data-theme="{{ user.theme }}" data-contrast="{{ user.contrast }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -26,12 +26,21 @@
     {% endfor %}
   </nav>
   <div class="who">
-    <a href="{{ url_for('web.account') }}" aria-label="Konto {{ user.username }} ({{ ROLE_LABELS[user.role] }})">{{ user.username }}</a>
-    <span class="muted" aria-hidden="true">{{ ROLE_LABELS[user.role] }}</span>
-    <form method="post" action="{{ url_for('web.logout') }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="link">Abmelden</button>
-    </form>
+    <details class="usermenu" data-usermenu>
+      <summary{% if request.endpoint in ('web.account', 'web.design') %} class="active"{% endif %}><span class="sr-only">Benutzermenü </span>{{ user.username }}</summary>
+      <div class="usermenu-panel">
+        <p class="usermenu-head">{{ user.username }}<span class="muted small">{{ ROLE_LABELS[user.role] }}</span></p>
+        <ul>
+          {% for endpoint, label in [('web.account', 'Konto'), ('web.design', 'Design')] %}
+          <li><a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ label }}</a></li>
+          {% endfor %}
+        </ul>
+        <form method="post" action="{{ url_for('web.logout') }}" class="usermenu-logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button>Abmelden</button>
+        </form>
+      </div>
+    </details>
   </div>
 </header>
 {% endif %}

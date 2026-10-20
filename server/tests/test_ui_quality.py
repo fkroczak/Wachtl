@@ -209,7 +209,7 @@ class PageSemanticsTest(AppTestCase):
         pid = self.probe["probe_id"]
         return ["/", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
-                "/admin", "/admin/audit", "/account", "/meldungen", "/meldungen?status=all",
+                "/admin", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
                 f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
 
     def test_all_pages_pass_lint(self):
@@ -322,8 +322,15 @@ PAIRS = [
 BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]
 
 
-def _tokens(block: str) -> dict[str, str]:
-    return dict(re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", block))
+def _tokens(block: str, dark: bool = False) -> dict[str, str]:
+    """Farb-Tokens eines CSS-Blocks; bei light-dark(hell, dunkel) die gewünschte Seite."""
+    out = {}
+    for name, value in re.findall(r"(--[\w-]+):\s*([^;]+);", block):
+        if m := re.fullmatch(r"light-dark\((#[0-9a-fA-F]{6}),\s*(#[0-9a-fA-F]{6})\)", value.strip()):
+            out[name] = m.group(2 if dark else 1)
+        elif re.fullmatch(r"#[0-9a-fA-F]{6}", value.strip()):
+            out[name] = value.strip()
+    return out
 
 
 def _lum(hex_color: str) -> float:
@@ -345,10 +352,28 @@ def _mix(fg: str, bg: str, share: float) -> str:
 class ContrastTest(AppTestCase):
     def themes(self) -> dict[str, dict[str, str]]:
         css = open(CSS, encoding="utf-8").read()
-        light = _tokens(re.search(r":root\s*\{(.*?)\}", css, re.S).group(1))
-        dark = {**light, **_tokens(re.search(r"prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{(.*?)\}", css, re.S)
-                                   .group(1))}
-        return {"hell": light, "dunkel": dark}
+        root = re.search(r":root\s*\{(.*?)\}", css, re.S).group(1)
+        high = re.search(r':root\[data-contrast="high"\]\s*\{(.*?)\}', css, re.S).group(1)
+        themes = {}
+        for name, dark in (("hell", False), ("dunkel", True)):
+            themes[name] = _tokens(root, dark)
+            themes[f"{name}, Kontrast erhöht"] = {**themes[name], **_tokens(high, dark)}
+        return themes
+
+    def test_every_color_token_has_dark_value(self):
+        """Jede Farbe braucht einen Wert für hell und dunkel (light-dark), sonst bleibt sie im Dunkelmodus hell."""
+        css = open(CSS, encoding="utf-8").read()
+        root = re.search(r":root\s*\{(.*?)\}", css, re.S).group(1)
+        plain = [n for n, v in re.findall(r"(--[\w-]+):\s*(#[0-9a-fA-F]{6})", root)]
+        self.assertEqual(plain, [])
+
+    def test_high_contrast_text(self):
+        """Kontrast „Erhöht“: Fließtext und gedämpfter Text erreichen 7:1 (WCAG AAA)."""
+        for theme, t in self.themes().items():
+            if "Kontrast" in theme:
+                for fg in ("--text", "--text-muted"):
+                    for bg in ("--bg", "--surface"):
+                        self.assertGreaterEqual(contrast(t[fg], t[bg]), 7.0, f"{theme}: {fg} auf {bg}")
 
     def test_token_contrast(self):
         failures = []

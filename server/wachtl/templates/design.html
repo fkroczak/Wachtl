@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Design{% endblock %}
+{% block content %}
+<h1>Design</h1>
+<p class="muted">Gilt für Ihr Konto auf jedem Gerät. Die Auswahl wird sofort als Vorschau angezeigt.</p>
+<form method="post" class="stack narrow settings-form" data-design-form>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>Farbschema</legend>
+    {% for value, label in themes.items() %}
+    <label class="choice"><input type="radio" name="theme" value="{{ value }}"{% if user.theme == value %} checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+  </fieldset>
+  <fieldset>
+    <legend>Kontrast</legend>
+    {% for value, label in contrasts.items() %}
+    <label class="choice"><input type="radio" name="contrast" value="{{ value }}"{% if user.contrast == value %} checked{% endif %}> {{ label }}</label>
+    {% endfor %}
+    <p class="field-help">„Erhöht“ verstärkt Schrift, Ränder und Linien und unterstreicht alle Links.</p>
+  </fieldset>
+  <button class="primary">Speichern</button>
+</form>
+{% endblock %}

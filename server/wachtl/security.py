@@ -75,7 +75,7 @@ def current_user() -> dict | None:
     if g.get("user_uid", "-") == uid:
         return g.user
     g.user_uid = uid
-    g.user = q1("SELECT id, username, role FROM users WHERE id = ?", (uid,)) if uid else None
+    g.user = q1("SELECT id, username, role, theme, contrast FROM users WHERE id = ?", (uid,)) if uid else None
     return g.user
 
 
