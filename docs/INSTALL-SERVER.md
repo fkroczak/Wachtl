@@ -90,6 +90,7 @@ sudo /opt/wachtl/deploy/passwort.sh
 | vmalert | Aggregate berechnen, Alarmregeln auswerten | nein |
 | alertmanager | Benachrichtigungen, Stummschaltungen | nein |
 | iperf3 | Gegenstelle für Bandbreitenmessungen der Probes (`IPERF_PORT`, TCP+UDP) | ja |
+| rtp | RTP-Reflektor für Sprachtests der Probes (`RTP_PORT`, UDP, Standard 5004) | ja |
 | serverprobe | Server-Probe: der Server misst selbst (Ping, Pfad, iperf3, WAN), im Host-Netz, nur ausgehend; `SERVER_PROBE=0` schaltet sie ab | nein (kein Port) |
 
 ## Deinstallieren

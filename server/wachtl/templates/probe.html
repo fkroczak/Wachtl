@@ -20,7 +20,7 @@
       <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
       <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
-      <dt>iperf3-Gegenstelle</dt><dd>{{ ('aktiv, Port %d'|format(probe.iperf_port)) if probe.iperf_server else 'aus' }}</dd>
+      <dt>Gegenstelle</dt><dd>{{ ('aktiv, iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server else 'aus' }}</dd>
       <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
       <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
       <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>
@@ -152,18 +152,44 @@
 </table>
 {% else %}<p class="muted">Keine Bandbreiten-Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='iperf') }}">iperf3-Check</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung</a> anlegen.{% endif %}</p>{% endif %}
 
+<h2 id="sprache">Sprache (RTP)</h2>
+{% if voice %}
+<table>
+  <thead><tr><th>Name</th><th>Gegenstelle</th><th>MOS</th><th>Laufzeit</th><th>Verlust ↑ / ↓</th><th>Letzter Test</th><th>Zeitplan</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+  <tbody>{% for c, r, pending, params in voice %}
+    <tr>
+      <td><a href="{{ url_for('web.rtp_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
+      <td>{{ check_target(c) }}</td>
+      {% if r and r.error %}<td colspan="3"><span class="badge critical">Fehler</span> <span class="small">{{ r.error }}</span></td>
+      {% elif r %}
+      <td><span class="{{ 'text-bad' if params.min_mos and r.mos is not none and r.mos < params.min_mos }}">{{ r.mos|mos }}</span></td>
+      <td>{{ r.rtt_ms|ms }}</td>
+      <td>{% if r.mode == 'wachtl' %}{{ r.up_loss_pct|pct }} / {{ r.down_loss_pct|pct }}{% else %}{{ r.loss_pct|pct }}{% endif %}</td>
+      {% else %}<td>–</td><td>–</td><td>–</td>{% endif %}
+      <td>{{ r.ts|ago if r else 'noch keiner' }}</td>
+      <td class="small">{{ ('alle %d min'|format(params.schedule_min)) if params.schedule_min else 'nur manuell' }}</td>
+      <td>{% if has_role(user, 'operator') %}
+        {% if pending %}<span class="muted small">beauftragt …</span>{% else %}
+        <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="{{ c.name }} jetzt testen">Jetzt testen</button></form>{% endif %}
+      {% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Keine Sprachtests zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='rtp') }}">Sprachtest anlegen</a>.{% endif %}</p>{% endif %}
+
 {% if has_role(user, 'admin') %}
 <h2 id="einstellungen">Einstellungen dieser Probe</h2>
 <form method="post" action="{{ url_for('web.probe_settings', probe_id=probe.id) }}" class="settings-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset>
-    <legend>iperf3-Gegenstelle</legend>
+    <legend>Gegenstelle für andere Probes (iperf3 und Sprachtest)</legend>
     <div class="grid-form">
-      {% call(attrs) field("iperf_server", "Diese Probe nimmt iperf3-Messungen anderer Probes an", check=True,
-                           help="Startet iperf3 als Server auf der Probe. Das Probe-Setup hat dafür eine Firewall-Regel angelegt.") %}
+      {% call(attrs) field("iperf_server", "Diese Probe nimmt iperf3-Messungen und Sprachtests anderer Probes an", check=True,
+                           help="Startet iperf3 als Server und den RTP-Reflektor (UDP " ~ default_rtp_port ~ ") auf der Probe. Das Probe-Setup hat dafür Firewall-Regeln angelegt.") %}
         <input type="checkbox" name="iperf_server" {{ 'checked' if probe.iperf_server }} {{ attrs }}>
       {% endcall %}
-      {% call(attrs) field("iperf_port", "Port") %}
+      {% call(attrs) field("iperf_port", "iperf3-Port") %}
         <input name="iperf_port" type="number" min="1" max="65535" value="{{ probe.iperf_port or default_iperf_port }}" {{ attrs }}>
       {% endcall %}
       {% call(attrs) field("iperf_address", "Adresse für andere Probes",

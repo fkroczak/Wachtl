@@ -200,6 +200,25 @@ def build_rules() -> dict:
                     {"direction": direction},
                 )
 
+    # Sprachqualität: MOS-Schwelle je Check; "N Tests in Folge darunter" wie bei der Bandbreite
+    if "voip_quality" in rules:
+        n = max(int(rules["voip_quality"]["threshold"]), 1)
+        for c in q("SELECT id, params FROM checks WHERE enabled = TRUE AND type = 'rtp'"):
+            p = checktypes.merged("rtp", json.loads(c["params"] or "{}"))
+            minimum = float(p.get("min_mos") or 0)
+            if not p["schedule_min"] or minimum <= 0:
+                continue
+            window = _fmt_s(p["schedule_min"] * 60 * n + p["schedule_min"] * 30 + p["duration_s"] + 60)
+            sel = f'check_id="{c["id"]}"'
+            add(
+                "WachtlVoipQuality",
+                "voip_quality",
+                f"(max by ({BY_TARGET}) (max_over_time(wachtl_rtp_mos{{{sel}}}[{window}])) < {minimum:g})"
+                f" and (sum by ({BY_TARGET}) (count_over_time(wachtl_rtp_mos{{{sel}}}[{window}])) >= {n})",
+                f"Sprachqualität MOS {{{{ $value | printf \"%.2f\" }}}} von {{{{ $labels.probe_name }}}} "
+                f"({{{{ $labels.site_name }}}}) zu {{{{ $labels.target }}}} unter {minimum:g}",
+            )
+
     return {
         "groups": [
             {

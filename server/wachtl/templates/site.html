@@ -97,7 +97,7 @@
 {% if probes %}
 <details id="alle-messungen">
 <summary><h2>Alle Messungen je Probe</h2></summary>
-<p class="muted">Bei Pings Latenz der letzten Minute und Verlust der letzten 5 Minuten, bei Pfaden die Hops, bei Bandbreiten die letzte Messung. Rot umrandet = keine aktuellen Daten.</p>
+<p class="muted">Bei Pings Latenz der letzten Minute und Verlust der letzten 5 Minuten, bei Pfaden die Hops, bei Bandbreiten die letzte Messung, bei Sprache MOS und Verlust des letzten Tests. Rot umrandet = keine aktuellen Daten.</p>
 <div class="scroll">
 <table class="matrix">
   <thead>
@@ -119,6 +119,7 @@
             <a href="{{ check_url(p, c) }}">
               {% if c.type == 'ping' %}{{ st.values.rtt|ms }}<br><span class="small">{{ st.values.loss|pct }}</span>
               {% elif c.type == 'path' %}{{ (st.values.hops ~ ' Hops') if st.values else '–' }}<br><span class="small">{{ st.label }}</span>
+              {% elif c.type == 'rtp' %}{% set r = st.values.rtp %}MOS {{ (r.mos if r else None)|mos }}<br><span class="small">{{ (r.loss_pct if r else None)|pct }}</span>
               {% else %}↓ {{ (st.values.down.mbps if st.values.down else None)|mbps }}<br><span class="small">↑ {{ (st.values.up.mbps if st.values.up else None)|mbps }}</span>{% endif %}
             </a>
           </td>

@@ -71,6 +71,14 @@ def bandwidth(probe_id: int):
                      (probe_id, since)))
 
 
+@bp.get("/probes/<int:probe_id>/rtp")
+@login_required(api=True)
+def rtp_runs(probe_id: int):
+    since = int(request.args.get("since", repo.now() - 30 * 86400) or 0)
+    return jsonify(q("SELECT * FROM rtp_runs WHERE probe_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 5000",
+                     (probe_id, since)))
+
+
 @bp.get("/probes/<int:probe_id>/paths")
 @login_required(api=True)
 def paths(probe_id: int):
@@ -87,8 +95,8 @@ def run_check(probe_id: int, check_id: int):
     if probe is None:
         return jsonify(error="Probe nicht gefunden"), 404
     check = repo.check_map_for_probe({**probe, "site_id": probe["site_id"]}).get(str(check_id))
-    if check is None or check["type"] not in ("iperf", "speedtest", "path"):
-        return jsonify(error="Check gehört nicht zur Probe oder ist kein Bandbreiten-/Pfad-Check"), 404
+    if check is None or check["type"] not in ("iperf", "speedtest", "rtp", "path"):
+        return jsonify(error="Check gehört nicht zur Probe oder ist kein Bandbreiten-, Sprach- oder Pfad-Check"), 404
     ctype = "retrace" if check["type"] == "path" else "run_check"
     cid = repo.queue_command(probe_id, ctype, check_id, current_user()["username"])
     repo.audit(current_user()["username"], f"probe.{ctype}", f"probe:{probe_id}", check["name"])

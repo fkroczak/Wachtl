@@ -25,6 +25,7 @@ den Server selbst entfällt.
 | **Pfad (Traceroute + Hop-Pings)** | Wo auf dem Weg ins Internet entstehen Verluste oder Verzögerungen? | Hop-Tabelle mit Bewertung, Pfadverlauf |
 | **Bandbreite intern (iperf3)** | Durchsatz zwischen Probe und Wachtl-Server oder zwischen zwei Probes | Messungen mit Download/Upload, Verlauf |
 | **Bandbreite WAN** | Durchsatz ins Internet (HTTP oder iperf3-Server im Internet) | wie oben, plus Latenz |
+| **Sprache (RTP/VoIP)** | Klingt ein Telefonat gut? Simuliertes Gespräch zu einer Gegenstelle | MOS, Laufzeit, Jitter und Verlust je Richtung, Verlauf |
 
 ## Ping
 
@@ -95,6 +96,59 @@ Gegenstelle ist wahlweise:
 
 Eigene Server (z. B. ein Webserver im Rechenzentrum) lassen sich genauso eintragen.
 
+## Sprache (RTP/VoIP)
+
+Die Probe simuliert ein Telefonat: Sie sendet einen echten RTP-Sprachstrom wie ein SIP-Telefon (Standard G.711, alle
+20 ms ein Paket, 30 s lang) an eine Gegenstelle. Die Gegenstelle schickt jedes Paket sofort zurück und vermerkt, wann
+es ankam. Daraus misst Wachtl **getrennt je Richtung** (↑ Probe → Gegenstelle, ↓ zurück) Paketverlust und Jitter,
+dazu die Laufzeit hin und zurück. Die Uhren beider Seiten müssen dafür nicht synchron sein.
+
+Daraus schätzt Wachtl die **Sprachqualität als MOS** (Mean Opinion Score, 1–5) nach dem E-Modell (ITU-T G.107):
+Laufzeit, Jitterpuffer (2 × Jitter), Paketierung und Verlust der schlechteren Richtung, mit den Werten des Codecs.
+
+| MOS | Bewertung | Bedeutung |
+|---|---|---|
+| ab 4.3 | sehr gut | höchster Wert mit G.711 ist etwa 4.4 |
+| ab 4.0 | gut | Höchstwert mit G.729 (etwa 4.1) |
+| ab 3.6 | ausreichend | einzelne Gesprächspartner merken Störungen |
+| ab 3.1 | mangelhaft | viele hören Knacken, Aussetzer oder Verzögerung |
+| darunter | schlecht | kaum verständlich |
+
+Faustregeln für Sprache: Verlust unter 1 %, Jitter unter 30 ms, Laufzeit einfach unter 150 ms.
+
+Gegenstelle ist wahlweise:
+
+- **der Wachtl-Server**: Er bringt einen RTP-Reflektor mit (UDP-Port 5004, bei der Installation änderbar). Adresse und
+  Port, die die Probes verwenden, stehen unter **Verwaltung › Messung › RTP-Reflektor**, etwa bei NAT.
+- **eine andere Probe**: Auf deren Seite unter **Einstellungen dieser Probe** die Option **Gegenstelle für andere
+  Probes** einschalten (dieselbe Option startet auch iperf3). Die Probe lauscht dann auf UDP 5004 (Verwaltung › Messung
+  › „UDP-Port des RTP-Reflektors auf Probes“); das Probe-Setup hat dafür die Firewall-Regel „Wachtl Probe RTP“ angelegt.
+  Gut für Telefonie über die Zentrale: Gegenstelle ist eine Probe nahe der Telefonanlage.
+- **eine eigene Gegenstelle**: ein anderer Wachtl-Server, ein Reflektor (`python -m wachtl.rtp 5004` aus dem
+  Server-Paket) oder ein einfacher UDP-Echo-Dienst. Beim Echo gibt es nur Werte für Hin- und Rückweg zusammen.
+
+| Einstellung | Standard | Bedeutung |
+|---|---|---|
+| Codec | G.711 | G.711 (64 kbit/s, Standard bei SIP-Telefonen) oder G.729 (8 kbit/s, verträgt Verlust schlechter) |
+| Paketabstand | 20 ms | Sprache je Paket; manche Telefone senden alle 30 ms |
+| Testdauer | 30 s | 5–300 s |
+| DSCP-Markierung | 46 (EF) | Windows setzt sie nur mit QoS-Richtlinie (GPO) für `wachtl-probe.exe`; 0 = keine |
+| Automatisch testen alle | 15 min | 0 = nur auf Knopfdruck „Jetzt testen“; Zeitfenster und Wochentage wie bei der Bandbreite |
+| Alarm, wenn MOS unter | 3.6 | Alarm „Sprachqualität“, wenn so viele Tests in Folge darunter liegen, wie unter Alarmregeln eingestellt (Standard 2); 0 = aus |
+
+Ein Test belastet die Leitung kaum (G.711: etwa 90 kbit/s je Richtung). Er läuft unabhängig von Bandbreitenmessungen –
+fällt der MOS nur während eines Speedtests, priorisiert die Leitung Sprache nicht (QoS am Router).
+Die Server-Probe führt keinen Sprachtest gegen den Wachtl-Server selbst aus.
+
+**Typische Befunde**
+
+| Befund | Ursache und Lösung |
+|---|---|
+| Verlust oder Jitter nur ↑ | Upload voll (Datensicherung, Cloud-Sync): Sprache am Router priorisieren, Upload begrenzen |
+| Verlust oder Jitter nur ↓ | Download voll oder Provider: QoS/Traffic-Shaping, beim Provider melden |
+| Schlecht schon gegen eine Probe im selben LAN | WLAN, Kabel oder Switch: Telefone per Kabel, Voice-VLAN |
+| „keine Antwort von der Gegenstelle“ | UDP-Port der Gegenstelle gesperrt oder Reflektor aus (Firewall, NAT) |
+
 ## Zeitplan und Schwellwerte (beide Bandbreiten-Arten)
 
 | Einstellung | Standard | Bedeutung |
@@ -113,13 +167,13 @@ Bandbreitentests belasten die Leitung. Bei vielen PCs an einem Standort genügt 
 
 Übersicht, Standort und Probe bewerten jede Messung gleich:
 
-| Zustand | Ping | Pfad | Bandbreite (iperf3, WAN) |
-|---|---|---|---|
-| **ok** | Ziel antwortet, Verlust ≤ 2 % | Ziel im Traceroute erreicht | letzte Messung ohne Fehler, über den Schwellwerten |
-| **auffällig** | Verlust > 2 % (5 min) | Ziel im Traceroute nicht erreicht | unter dem Schwellwert des Checks |
-| **gestört** | Ziel antwortet nicht | – | Fehler der letzten Messung (z. B. „Connection refused“, „HTTP 403“) |
-| **keine Daten** | seit über 3 min kein Wert | kein Traceroute seit 3 × Intervall | geplante Messung überfällig (laut Zeitplan) |
-| wartet | Check neu | erster Traceroute läuft | noch nicht fällig oder nur manuell |
+| Zustand | Ping | Pfad | Bandbreite (iperf3, WAN) | Sprache (RTP) |
+|---|---|---|---|---|
+| **ok** | Ziel antwortet, Verlust ≤ 2 % | Ziel im Traceroute erreicht | letzte Messung ohne Fehler, über den Schwellwerten | MOS über dem Schwellwert |
+| **auffällig** | Verlust > 2 % (5 min) | Ziel im Traceroute nicht erreicht | unter dem Schwellwert des Checks | MOS unter dem Schwellwert |
+| **gestört** | Ziel antwortet nicht | – | Fehler der letzten Messung (z. B. „Connection refused“, „HTTP 403“) | Fehler des letzten Tests (z. B. keine Antwort) |
+| **keine Daten** | seit über 3 min kein Wert | kein Traceroute seit 3 × Intervall | geplante Messung überfällig (laut Zeitplan) | geplanter Test überfällig |
+| wartet | Check neu | erster Traceroute läuft | noch nicht fällig oder nur manuell | noch nicht fällig oder nur manuell |
 
 Alles außer „ok“ und „wartet“ steht auf der Übersicht unter **Messungen mit Problemen** – mit Grund und Link zur
 Detailseite. Ist eine Probe offline, steht sie dort einmal als „offline“ statt mit jeder einzelnen Messung.
@@ -148,10 +202,12 @@ Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispi
 | Einstellung | Standard |
 |---|---|
 | iperf3-Gegenstelle auf dem Wachtl-Server an/aus, Adresse und Port für Probes | an, Server-URL, 5201 |
+| RTP-Reflektor auf dem Wachtl-Server an/aus, Adresse und UDP-Port für Probes | an, Server-URL, 5004 |
 | Messwerte hochladen alle | 10 s |
 | Heartbeat alle | 30 s |
 | Konfiguration spätestens abrufen alle | 300 s |
 | Standard-Port der iperf3-Gegenstelle auf Probes | 5201 |
+| UDP-Port des RTP-Reflektors auf Probes | 5004 |
 | Pfad- und Bandbreitenverlauf aufbewahren | 400 Tage |
 | Ausfälle anzeigen ab | 0 s |
 | Netzwerkkarte und Kabel auf den PCs überwachen (Client-Hinweise, [CLIENT-HINWEISE.md](CLIENT-HINWEISE.md)) | an |
@@ -165,5 +221,7 @@ Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispi
 | Server-Probe | nur ausgehend wie eine Probe, kein eigener Port |
 | Probe → Wachtl-Server (iperf3) | TCP **und** UDP 5201 |
 | Probe → Probe (iperf3) | TCP und UDP 5201 bzw. der Port der Gegenstelle |
+| Probe → Wachtl-Server (Sprachtest) | UDP 5004 |
+| Probe → Probe (Sprachtest) | UDP 5004 bzw. der eingestellte Port |
 | Probe → Internet (WAN-Messung) | TCP 443 zu den eingetragenen URLs |
 | Pfad-Check | ICMP Echo ausgehend, „Time Exceeded“ zurück (unter Windows erlaubt) |

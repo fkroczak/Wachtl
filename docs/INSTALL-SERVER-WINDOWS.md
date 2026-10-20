@@ -15,7 +15,7 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 
 ## Installation mit dem Assistenten
 
-`WachtlSetup-0.8.5.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
+`WachtlSetup-0.9.1.exe` als Administrator starten – dasselbe Setup wie für die Probes – und den Seiten folgen:
 
 1. **Rolle** – „Wachtl-Server“ wählen (Standard ist Probe). Programmordner: `C:\Program Files\Wachtl Server`.
 2. **Server-Adresse** – DNS-Namen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). Die IP-Adressen des Servers ergänzt das Setup selbst – Probes weichen darauf aus, wenn ein Name am Standort nicht auflösbar ist. HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
@@ -31,7 +31,8 @@ Das Setup erledigt anschließend:
 - Datenbank anlegen, Standard-Checks (Gateway, 8.8.8.8, 1.1.1.1) und Standard-Alarme einrichten, Admin anlegen
 - Dienst „Wachtl Server“ unter dem virtuellen Konto `NT SERVICE\WachtlServer` (verzögerter Autostart, Neustart nach Absturz)
 - Datenordner auf SYSTEM, Administratoren und das Dienstkonto beschränken
-- Firewall-Regeln für HTTPS/HTTP (alle Netzwerkprofile, nur diese Ports)
+- Firewall-Regeln für HTTPS/HTTP (alle Netzwerkprofile, nur diese Ports), iperf3 (TCP+UDP 5201) und den
+  RTP-Reflektor für Sprachtests (UDP 5004; unbeaufsichtigt `/RtpPort=…`, 0 = aus)
 - Geplante Aufgabe „Wachtl Server Backup“ täglich 02:15 Uhr
 - Dienst starten und warten, bis er antwortet
 
@@ -43,7 +44,7 @@ daraus mit einem Klick ein vorbelegtes Setup für die PCs (alle Adressen, Pin un
 ## Unbeaufsichtigte Installation
 
 ```powershell
-.\WachtlSetup-0.8.5.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
+.\WachtlSetup-0.9.1.exe /VERYSILENT /SUPPRESSMSGBOXES /LOG=C:\Temp\wachtl-setup.log /Role=Server `
     /Hostnames="wachtl.kunde.local" /AdminPassword="…" `
     /HttpsPort=443 /HttpPort=80 /DataDir="D:\Wachtl" /RawDays=30 /AggMonths=13 `
     /EmailTo=it@kunde.de /EmailFrom=wachtl@kunde.de /SmtpHost=mail.kunde.de:587 /TeamsUrl=https://…

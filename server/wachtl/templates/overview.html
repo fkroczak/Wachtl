@@ -17,7 +17,7 @@
 
 <h2 id="probleme">Messungen mit Problemen</h2>
 {% if problems or offline %}
-<p class="muted">Alle Messungen, die gerade fehlschlagen, auffällig sind oder ausbleiben – Ping, Pfad, iperf3 und WAN.</p>
+<p class="muted">Alle Messungen, die gerade fehlschlagen, auffällig sind oder ausbleiben – Ping, Pfad, iperf3, WAN und Sprache.</p>
 <table>
   <thead><tr><th>Zustand</th><th>Probe</th><th>Art</th><th>Check</th><th>Problem</th><th>Letztes Ergebnis</th></tr></thead>
   <tbody>
@@ -134,4 +134,25 @@
   </tbody>
 </table>
 {% else %}<p class="muted">Keine Bandbreiten-Checks. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung anlegen</a>.{% endif %}</p>{% endif %}
+
+{% if voice %}
+<h2 id="sprache">Sprachqualität</h2>
+<table>
+  <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>MOS</th><th>Laufzeit</th><th>Verlust</th><th>Jitter</th><th>Letzter Test</th></tr></thead>
+  <tbody>
+  {% for p, st in voice %}
+    {% set r = st.values.rtp %}
+    <tr>
+      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
+      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
+      {% if r and r.error %}<td colspan="4"><span class="badge critical">Fehler</span> <span class="small">{{ r.error }}</span></td>
+      {% elif r %}<td>{{ r.mos|mos }}</td><td>{{ r.rtt_ms|ms }}</td><td>{{ r.loss_pct|pct }}</td><td>{{ r.jitter_ms|ms }}</td>
+      {% else %}<td>–</td><td>–</td><td>–</td><td>–</td>{% endif %}
+      <td>{{ st.ts|ago if st.ts else st.detail }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
 {% endblock %}

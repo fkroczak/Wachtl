@@ -5,7 +5,7 @@ const path = require("path");
 const seedFile = path.join(__dirname, ".seed.json");
 const ids = fs.existsSync(seedFile)
   ? JSON.parse(fs.readFileSync(seedFile, "utf8"))
-  : { probe: 1, site: 1, ping_check: 2, path_check: 4, wan_check: 5 };
+  : { probe: 1, site: 1, ping_check: 2, path_check: 4, wan_check: 5, rtp_check: 6 };
 
 const BASE = process.env.WACHTL_BASE_URL || "http://127.0.0.1:5000";
 const PASSWORD = process.env.WACHTL_E2E_PASSWORD || "e2e-admin-passwort";
@@ -19,6 +19,7 @@ const PAGES = [
   ["Pfad", `/probes/${ids.probe}/path/${ids.path_check}`],
   ["Hop", `/probes/${ids.probe}/path/${ids.path_check}/hop/1`],
   ["Bandbreite", `/probes/${ids.probe}/bandwidth/${ids.wan_check}`],
+  ["Sprache (RTP)", `/probes/${ids.probe}/rtp/${ids.rtp_check}`],
   ["Alarme", "/alerts"],
   ["Ausfälle", "/outages"],
   ["Meldungen", "/meldungen?status=all"],
@@ -27,6 +28,7 @@ const PAGES = [
   ["Check-Formular Ping", "/admin/checks/new/ping"],
   ["Check-Formular iperf3", "/admin/checks/new/iperf"],
   ["Check-Formular WAN", "/admin/checks/new/speedtest"],
+  ["Check-Formular Sprache", "/admin/checks/new/rtp"],
   ["Konto", "/account"],
   ["Design", "/account/design"],
   ["Passwort vergessen", "/passwort-vergessen"],

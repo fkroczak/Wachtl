@@ -15,13 +15,13 @@
 ;   Tray-Symbol (Problem melden, Über, Beenden) startet bei jeder Anmeldung; /NoTray lässt es weg (wird gemerkt),
 ;   /Tray schaltet es wieder ein.
 ;   Server: WachtlSetup-x.y.z.exe /VERYSILENT /SUPPRESSMSGBOXES /Role=Server /Hostnames="wachtl.kunde.local"
-;           /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/IperfPort=5201] [/DataDir="D:\Wachtl"]
+;           /AdminPassword="…" [/HttpsPort=443] [/HttpPort=80] [/IperfPort=5201] [/RtpPort=5004] [/DataDir="D:\Wachtl"]
 ;           [/RawDays=30] [/AggMonths=13] [/EmailTo=… /EmailFrom=… /SmtpHost=mail:587 /SmtpUser=… /SmtpPassword=…] [/TeamsUrl=…]
 ; Exit-Code 0 = läuft (Probe: angemeldet oder Anmeldung folgt automatisch, sobald der Server erreichbar ist),
 ; 10 = installiert, aber nicht betriebsbereit (Grund im /LOG). /SUPPRESSMSGBOXES ist unbeaufsichtigt Pflicht.
 
 #ifndef AppVersion
-  #define AppVersion "0.8.5"
+  #define AppVersion "0.9.1"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build\server"
@@ -131,6 +131,7 @@ Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntil
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"; Check: IsClient
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe,wachtl-tray -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"; Check: IsClient
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule ""name=Wachtl Probe iperf3"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewall"; Check: IsClient
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule ""name=Wachtl Probe RTP"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallRtp"; Check: IsClient
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\iperf3\iperf3.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallIperf"; Check: IsClient
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\wachtl-probe.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallProbe"; Check: IsClient
 ; ---- Server: Dienst (samt Server-Probe), Firewall-Regeln und geplante Sicherung entfernen, Ports prüfen ----
@@ -1143,6 +1144,10 @@ begin
   RunHidden(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule "name=Wachtl Probe iperf3"');
   RunHidden(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall add rule "name=Wachtl Probe iperf3" dir=in action=allow ' +
             '"program=' + ExpandConstant('{app}\iperf3\iperf3.exe') + '" enable=yes profile=any');
+  // RTP-Reflektor (Sprachtests anderer Probes): nur der Wachtl-Dienst, nur UDP; ob er läuft, entscheidet das Web-UI
+  RunHidden(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule "name=Wachtl Probe RTP"');
+  RunHidden(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall add rule "name=Wachtl Probe RTP" dir=in action=allow ' +
+            'protocol=UDP "program=' + ExpandConstant('{app}\wachtl-probe.exe') + '" enable=yes profile=any');
   // Neu registriert: alte, noch nicht gesendete Messwerte gehören zur alten Registrierung
   if ClientEnrolled and EnrollDone then
   begin
@@ -1198,7 +1203,9 @@ begin
   L[1] := JsonPair('hostnames', AddressPage.Values[0], False);
   L[2] := '  "https_port": ' + Trim(AddressPage.Values[1]) + ',';
   L[3] := '  "http_port": ' + Trim(AddressPage.Values[2]) + ',';
-  L[4] := '  "iperf_port": ' + Trim(AddressPage.Values[3]) + ',';
+  // RTP-Reflektor (Sprachtest, UDP) ohne eigene Seite im Assistenten: Standard 5004, unbeaufsichtigt /RtpPort=
+  L[4] := '  "iperf_port": ' + Trim(AddressPage.Values[3]) + ',' + #13#10 +
+          '  "rtp_port": ' + IntToStr(StrToIntDef(GetParam('RtpPort', '5004'), 5004)) + ',';
   L[5] := JsonPair('data_dir', GetDataDir(''), False);
   L[6] := JsonPair('install_dir', ExpandConstant('{app}'), False);
   L[7] := JsonPair('admin_password', AdminPage.Values[0], False);
@@ -1327,6 +1334,9 @@ begin
   if Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall show rule "name=Wachtl Probe iperf3"', '', SW_HIDE,
           ewWaitUntilTerminated, Code) and (Code = 0) then
     Result := Result + '- Firewall-Regel „Wachtl Probe iperf3“ ist noch vorhanden' + #13#10;
+  if Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall show rule "name=Wachtl Probe RTP"', '', SW_HIDE,
+          ewWaitUntilTerminated, Code) and (Code = 0) then
+    Result := Result + '- Firewall-Regel „Wachtl Probe RTP“ ist noch vorhanden' + #13#10;
 end;
 
 procedure UninstallClientDone();
