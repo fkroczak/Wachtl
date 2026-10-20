@@ -31,6 +31,7 @@
     {% if lw and lb %}{{ item('lg-l c-l2', 'bis ' ~ pct(lb)) }}{% endif %}
     {% if lw or lb %}{{ item('lg-l c-l3' if lb else 'lg-l c-l2', 'über ' ~ pct(lb or lw)) }}{% endif %}
     {{ item('lg-smoke', 'Streuung: 80 % und mittlere 50 % der Pings') }}
+    {{ item('lg-jitter', 'Jitter') }}
     {% if thr.lat_warn_ms %}{{ item('lg-thrlat', 'Latenzschwelle %g ms' % thr.lat_warn_ms) }}{% endif %}
     {% if lw or lb or thr.lat_warn_ms %}{{ item('lg-over', 'über Alarmschwelle') }}{% endif %}
     {% if chart_reports %}{{ item('lg-report', 'Störungsmeldung') }}{% endif %}</div>

@@ -90,7 +90,7 @@ QUANTILES = ("0.1", "0.25", "0.5", "0.75", "0.9")
 
 def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = None,
                 at: int | None = None) -> dict:
-    """Smokeping-Graph der Ziel- bzw. Hop-Detailseite: Quantile p10/p25/p50/p75/p90 und Paketverlust je Schritt.
+    """Smokeping-Graph der Ziel- bzw. Hop-Detailseite: Quantile p10/p25/p50/p75/p90, Paketverlust und Jitter je Schritt.
 
     ``at`` (Unix-Sekunden) legt das Fenster mittig um diesen Zeitpunkt, z. B. eine Störungsmeldung;
     ohne ``at`` endet es jetzt.
@@ -114,12 +114,15 @@ def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = 
             "q": f"avg by (phi) (avg_over_time({m['q_1m']}{{{sel}}}[{w}]))",
             "p50": hops(f"avg_over_time({m['p50_1m']}{{{sel}}}[{w}])"),
             "loss": hops(f"avg_over_time({m['loss_1m']}{{{sel}}}[{w}]) * 100"),
+            "jitter": hops(f"avg_over_time({m['jitter_1m']}{{{sel}}}[{w}])"),
         }
         base = _cfg("VM_AGG_URL")
     else:
         queries = {
             "q": f'avg by (phi) (quantiles_over_time("phi", {", ".join(QUANTILES)}, {m["rtt"]}{{{sel}}}[{w}]))',
             "loss": hops(f"(1 - avg_over_time({m['up']}{{{sel}}}[{w}])) * 100"),
+            # Jitter kommt nur einmal je Jitter-Fenster (meist 60 s): kürzere Schritte auf 2 min aufweiten
+            "jitter": hops(f"avg_over_time({m['jitter']}{{{sel}}}[{max(step, 120)}s])"),
         }
         base = _cfg("VM_RAW_URL")
     series = {f"p{round(float(phi) * 100)}": [] for phi in QUANTILES}
@@ -128,6 +131,7 @@ def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = 
             name = f"p{round(float(item['metric']['phi']) * 100)}" if key == "q" else key
             series[name] = [[int(ts) * 1000, _num(v)] for ts, v in item["values"]]
     series.setdefault("loss", [])
+    series.setdefault("jitter", [])
     return {"range": range_key, "step_s": step, "source": "agg" if use_agg else "raw", "series": series,
             "start": start, "end": end}
 
