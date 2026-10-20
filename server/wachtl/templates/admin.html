@@ -177,7 +177,7 @@
           <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="{{ r.name }}: aktiv"></td>
           <th scope="row">{{ r.name }}</th>
           <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num" aria-label="{{ r.name }}: Schwellwert"></td>
-          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
+          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low', 'voip_quality') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
               {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num" aria-label="{{ r.name }}: Fenster in Sekunden">{% endif %}</td>
           <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num" aria-label="{{ r.name }}: Dauer bis Alarm in Sekunden"></td>
           <td><select name="severity_{{ r.kind }}" aria-label="{{ r.name }}: Stufe">{% for sv in ('info','warning','critical') %}<option value="{{ sv }}" {{ 'selected' if sv == r.severity }}>{{ sv|severity }}</option>{% endfor %}</select></td>

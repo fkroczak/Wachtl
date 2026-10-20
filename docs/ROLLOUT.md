@@ -11,7 +11,7 @@ mit einem fertigen Paket installiert. Rechne mit etwa 30 Minuten für den Server
 
 | Variante | Was tun |
 |---|---|
-| Windows Server | `WachtlSetup-0.8.3.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
+| Windows Server | `WachtlSetup-0.9.0.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
 | Linux-VM mit Docker | `sudo ./setup.sh wachtl.kunde.local` im Ordner `deploy`. Details: [INSTALL-SERVER.md](INSTALL-SERVER.md) |
 
 Am Ende zeigt das Setup die Adresse, den Admin-Zugang und den **SPKI-Pin**. Zugangsdaten sofort im
@@ -74,6 +74,7 @@ Typische Gründe, wenn etwas nicht grün wird:
 | Ping „Ziel antwortet nicht“ für alle Internet-Ziele | Firewall blockiert ICMP ausgehend | ICMP Echo ausgehend erlauben |
 | Pfad „Ziel im Traceroute nicht erreicht“ | Ein Router filtert ICMP mit TTL | meist harmlos, die Hop-Pings laufen trotzdem |
 | iperf3 „Connection refused“ / „Zeitlimit“ | Port 5201 TCP+UDP zum Server zu | Firewall-Regel Standort → Server, Port 5201 |
+| Sprache „keine Antwort von der Gegenstelle“ | UDP 5004 zum Server bzw. zur Gegenstellen-Probe zu | Firewall-Regel Standort → Gegenstelle, UDP 5004 |
 | Speedtest „HTTP 403“ oder Proxy-Fehler | Proxy oder Webfilter | im Check „Proxy der Probe verwenden“ anhaken oder eigene URL eintragen |
 | „keine Daten“ | Probe offline oder Check neu | Probe-Seite prüfen, Dienst „Wachtl“ auf dem PC |
 

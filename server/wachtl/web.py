@@ -15,7 +15,7 @@ from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
-from . import checktypes, standardpaket
+from . import checktypes, rtp, standardpaket
 from . import findings as finding_service
 from . import reports as report_service
 from .services import alertgen
@@ -49,7 +49,9 @@ def check_url(probe: dict, check: dict) -> str:
     """Detailseite eines Checks auf einer Probe – je nach Art Ziel, Pfad oder Bandbreite."""
     if check["type"] == "path":
         return url_for("web.path_view", probe_id=probe["id"], check_id=check["id"])
-    if check["type"] in checktypes.SCHEDULED_TYPES:
+    if check["type"] == "rtp":
+        return url_for("web.rtp_view", probe_id=probe["id"], check_id=check["id"])
+    if check["type"] in checktypes.BANDWIDTH_TYPES:
         return url_for("web.bandwidth_view", probe_id=probe["id"], check_id=check["id"])
     return url_for("web.target", probe_id=probe["id"], check_id=check["id"])
 
@@ -65,7 +67,7 @@ def alert_refs(a: dict, with_probe: bool = True) -> list[tuple[str, str, str, st
     if site.isdigit():
         refs.append(("Standort", lb.get("site_name") or site, url_for("web.site", site_id=int(site)), ""))
     if probe.isdigit() and check.isdigit():
-        ctype = {"route_change": "path", "bandwidth_low": "iperf"}.get(lb.get("kind"), "ping")
+        ctype = {"route_change": "path", "bandwidth_low": "iperf", "voip_quality": "rtp"}.get(lb.get("kind"), "ping")
         name = lb.get("target") or check
         refs.append(("Ziel", name, check_url({"id": int(probe)}, {"id": int(check), "type": ctype}),
                      f"{name} von {probe_name}"))
@@ -114,6 +116,11 @@ def fmt_ms(v):
 @bp.app_template_filter("pct")
 def fmt_pct(v):
     return "–" if _missing(v) else f"{v:.1f} %"
+
+
+@bp.app_template_filter("mos")
+def fmt_mos(v):
+    return "–" if _missing(v) else f"{v:.2f}"
 
 
 @bp.app_template_filter("mbps")
@@ -229,6 +236,7 @@ def overview():
     problems = []      # (Probe, CheckState) – jede Messung, die gerade nicht funktioniert
     offline = []       # Probes ohne Heartbeat: ihre Checks liefern zwangsläufig nichts
     bandwidth = []     # (Probe, CheckState) aller Bandbreiten-Checks
+    voice = []         # (Probe, CheckState) aller Sprachtests
     for p in probes:
         site_stats[p["site_id"]]["probes"] += 1
         if p["status"] != "active":
@@ -241,7 +249,8 @@ def overview():
         else:
             offline.append(p)
         site_stats[p["site_id"]]["problems"] += sum(1 for st in states[p["id"]] if st.problem)
-        bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.SCHEDULED_TYPES]
+        bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.BANDWIDTH_TYPES]
+        voice += [(p, st) for st in states[p["id"]] if st.kind == "rtp"]
     problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
     since = repo.now() - 7 * 86400
@@ -250,7 +259,7 @@ def overview():
     return render_template(
         "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
         client_findings=client_findings,
-        alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth,
+        alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth, voice=voice,
         KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
         recent_reports_total=report_service.count("open", since=since) if recent_reports else 0,
     )
@@ -320,7 +329,7 @@ def site(site_id: int):
             internet += [st for st in pings if st.check["role"] == "reference"]
         issues += [f"Alarm: {a['summary'] or a['alertname']}" for a in p_alerts]
         if active:
-            bandwidth += [(p, st) for st in sts if st.kind in checktypes.SCHEDULED_TYPES and st.ts]
+            bandwidth += [(p, st) for st in sts if st.kind in checktypes.BANDWIDTH_TYPES and st.ts]
         bad = (active and not online) or any(st.state == "down" for st in sts) or \
             any(a["severity"] == "critical" for a in p_alerts)
         level = "inactive" if not active else "bad" if bad else "warn" if issues else "ok"
@@ -347,7 +356,7 @@ def site(site_id: int):
         for st in states[p["id"]]:
             all_checks.setdefault(st.check["id"], st.check)
             matrix[(st.check["id"], p["id"])] = st
-    order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3}
+    order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3, "rtp": 4}
     active = [p for p in probes if p["status"] == "active"]
     return render_template(
         "site.html", site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
@@ -385,8 +394,14 @@ def probe(probe_id: int):
         run = q1("SELECT * FROM path_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
                  (probe_id, c["id"]))
         paths.append((c, run, json.loads(run["hops"]) if run else []))
-    bandwidth = []
-    for c in (c for c in checks if c["type"] in checktypes.SCHEDULED_TYPES):
+    bandwidth, voice = [], []
+    for c in (c for c in checks if c["type"] == "rtp"):
+        last = q1("SELECT * FROM rtp_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC LIMIT 1",
+                  (probe_id, c["id"]))
+        pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
+                     (probe_id, c["id"]))
+        voice.append((c, last, pending, checktypes.merged("rtp", json.loads(c["params"] or "{}"))))
+    for c in (c for c in checks if c["type"] in checktypes.BANDWIDTH_TYPES):
         last = {d: q1("SELECT * FROM bandwidth_runs WHERE probe_id = ? AND check_id = ? AND direction = ? "
                       "ORDER BY ts DESC, id DESC LIMIT 1", (probe_id, c["id"], d)) for d in ("down", "up")}
         pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
@@ -401,10 +416,10 @@ def probe(probe_id: int):
     latest_paths, latest_bw = checkstatus.latest_runs([probe_id])
     states = checkstatus.probe_states(p, checks, live, latest_paths, latest_bw)
     return render_template(
-        "probe.html", probe=p, rows=rows, paths=paths, bandwidth=bandwidth, cell_state=_cell_state,
+        "probe.html", probe=p, rows=rows, paths=paths, bandwidth=bandwidth, voice=voice, cell_state=_cell_state,
         states=states, state_counts=checkstatus.counts(states), KIND_LABELS=checkstatus.KIND_LABELS,
         live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
-        default_iperf_port=measure["probe_iperf_port"],
+        default_iperf_port=measure["probe_iperf_port"], default_rtp_port=measure["probe_rtp_port"],
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
         reports=report_service.search(probe_id=probe_id, limit=10),
         client_findings=finding_service.search(probe_id=probe_id, since=repo.now() - 30 * 86400, limit=20),
@@ -461,7 +476,7 @@ def probe_settings(probe_id: int):
         ex("UPDATE probes SET iperf_server = ?, iperf_port = ?, iperf_address = ? WHERE id = ?",
            (enabled, port, address or None, probe_id))
         repo.audit(current_user()["username"], "probe.settings", f"probe:{probe_id}",
-                   f"iperf3-Gegenstelle {'an' if enabled else 'aus'}, Port {port}, Adresse {address or 'automatisch'}")
+                   f"Gegenstelle {'an' if enabled else 'aus'}, iperf3-Port {port}, Adresse {address or 'automatisch'}")
         flash(f"Einstellungen für {p['hostname']} gespeichert – die Probe übernimmt sie mit dem nächsten Heartbeat.", "ok")
     return redirect(url_for("web.probe", probe_id=probe_id) + "#einstellungen")
 
@@ -470,7 +485,7 @@ def probe_settings(probe_id: int):
 @login_required("operator")
 def check_run(probe_id: int, check_id: int):
     p = _probe_or_404(probe_id)
-    c = _probe_check_or_404(p, check_id, ("iperf", "speedtest", "path"))
+    c = _probe_check_or_404(p, check_id, checktypes.SCHEDULED_TYPES + ("path",))
     if str(check_id) not in repo.check_map_for_probe(p):
         abort(404)
     ctype = "retrace" if c["type"] == "path" else "run_check"
@@ -541,7 +556,7 @@ BW_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400
 @login_required()
 def bandwidth_view(probe_id: int, check_id: int):
     p = _probe_or_404(probe_id)
-    c = _probe_check_or_404(p, check_id, checktypes.SCHEDULED_TYPES)
+    c = _probe_check_or_404(p, check_id, checktypes.BANDWIDTH_TYPES)
     range_key = request.args.get("range", "30d")
     if range_key not in BW_RANGES:
         range_key = "30d"
@@ -567,6 +582,41 @@ def bandwidth_view(probe_id: int, check_id: int):
     return render_template("bandwidth.html", probe=p, check=c, runs=runs[:50], stats=stats, chart=chart,
                            params=params, range_key=range_key, ranges=list(BW_RANGES), pending=pending,
                            summary=checktypes.summary(c, params))
+
+
+@bp.get("/probes/<int:probe_id>/rtp/<int:check_id>")
+@login_required()
+def rtp_view(probe_id: int, check_id: int):
+    """Sprachtest: MOS-Verlauf, Werte je Richtung und die letzten Tests."""
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, ("rtp",))
+    range_key = request.args.get("range", "7d")
+    if range_key not in BW_RANGES:
+        range_key = "7d"
+    since = repo.now() - BW_RANGES[range_key]
+    runs = q("SELECT * FROM rtp_runs WHERE probe_id = ? AND check_id = ? AND ts >= ? ORDER BY ts DESC, id DESC "
+             "LIMIT 5000", (probe_id, check_id, since))
+    params = checktypes.merged("rtp", json.loads(c["params"] or "{}"))
+    good = [r for r in runs if not r["error"] and r["mos"] is not None]
+    stats = {}
+    for key in ("mos", "rtt_ms", "jitter_ms", "loss_pct"):
+        values = sorted(r[key] for r in good if r[key] is not None)
+        if values:
+            stats[key] = {"min": values[0], "max": values[-1], "avg": sum(values) / len(values),
+                          "median": values[len(values) // 2]}
+    stats["count"], stats["errors"] = len(good), len(runs) - len(good)
+    stats["below"] = sum(1 for r in good if params["min_mos"] and r["mos"] < params["min_mos"])
+    chart = {
+        "mos": [[r["ts"] * 1000, r["mos"]] for r in reversed(good)],
+        "min_mos": params["min_mos"] or 0, "start": since * 1000, "end": repo.now() * 1000,
+        "reports": report_service.for_chart(since, repo.now(), probe_id),
+    }
+    pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? AND delivered_at IS NULL",
+                 (probe_id, check_id))
+    return render_template("rtp.html", probe=p, check=c, runs=runs[:50], last=runs[0] if runs else None,
+                           stats=stats, chart=chart, params=params, range_key=range_key, ranges=list(BW_RANGES),
+                           pending=pending, summary=checktypes.summary(c, params), mos_label=rtp.mos_label,
+                           codec=rtp.CODECS.get(params["codec"]))
 
 
 OUTAGE_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
@@ -1155,8 +1205,9 @@ def check_create():
     elif not errors:
         target = checktypes.target_for(ctype, params, names)
         interval = params["schedule_min"] * 60 if params["schedule_min"] else 3600
-        timeout = params["timeout_s"] * 1000
-        if ctype == "iperf" and params["peer"] == "probe" and scope == "probe" and scope_id == params["peer_probe_id"]:
+        timeout = checktypes.timeout_ms(ctype, params)
+        if ctype in checktypes.PEER_TYPES and params["peer"] == "probe" and scope == "probe" \
+                and scope_id == params["peer_probe_id"]:
             errors.append(FieldError("Eine Probe kann nicht gegen sich selbst messen.", "peer_probe_id"))
 
     if errors:

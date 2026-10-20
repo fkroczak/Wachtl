@@ -48,6 +48,7 @@ services:
       WACHTL_TRUST_PROXY: "1"
       WACHTL_PROBE_DIR: /probe
       WACHTL_IPERF_PORT: ${IPERF_PORT:-5201}
+      WACHTL_RTP_PORT: ${RTP_PORT:-5004}
       WACHTL_SERVER_PROBE: ${SERVER_PROBE:-1}
       WACHTL_SERVER_PROBE_DIR: /serverprobe
     volumes:
@@ -151,6 +152,21 @@ services:
     ports:
       - "${IPERF_PORT:-5201}:5201/tcp"
       - "${IPERF_PORT:-5201}:5201/udp"
+    networks: [edge]
+    logging: *logging
+
+  # RTP-Reflektor für Sprachtests der Probes; Port in .env (RTP_PORT, UDP), im Web-UI unter Verwaltung › Messung abschaltbar
+  rtp:
+    build: ../server
+    image: wachtl-app:local
+    restart: unless-stopped
+    entrypoint: ["python", "-m", "wachtl.rtp", "5004"]
+    ports:
+      - "${RTP_PORT:-5004}:5004/udp"
+    cap_drop: [ALL]
+    read_only: true
+    healthcheck:
+      disable: true
     networks: [edge]
     logging: *logging
 

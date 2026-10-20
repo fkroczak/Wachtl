@@ -91,6 +91,10 @@ def build_specs(layout: Layout) -> list[ProcSpec]:
         # Gegenstelle für iperf3-Messungen der Probes (Check „Bandbreite intern“, Gegenstelle Wachtl-Server)
         specs.append(ProcSpec("iperf3", [str(layout.iperf_exe), "-s", "-p", str(layout.port("IPERF"))],
                               cwd=str(layout.iperf_exe.parent)))
+    if layout.port("RTP"):
+        # Gegenstelle für Sprachtests der Probes (Check „Sprache (RTP)“, Gegenstelle Wachtl-Server)
+        specs.append(ProcSpec("rtp", [py, "-m", "wachtl.rtp", str(layout.port("RTP"))],
+                              env={"PYTHONUTF8": "1"}, cwd=str(layout.install_dir)))
     if layout.env.get("SERVER_PROBE", "1") != "0":
         # Server misst selbst – dieselben Checks wie die Probes (wachtl.serverprobe)
         specs.append(ProcSpec("serverprobe", [py, "-m", "wachtl.serverprobe"], env=server_probe_env(layout),

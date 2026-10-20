@@ -288,7 +288,9 @@ class HostSpecTest(InstallBase):
         self.do_install()
         layout = Layout.load(self.data, self.inst)
         specs = {s.name: s for s in host.build_specs(layout)}
-        self.assertEqual(list(specs), ["vm-raw", "vm-agg", "alertmanager", "web", "vmalert", "serverprobe"])
+        self.assertEqual(list(specs), ["vm-raw", "vm-agg", "alertmanager", "web", "vmalert", "rtp", "serverprobe"])
+        self.assertEqual(specs["rtp"].args[1:], ["-m", "wachtl.rtp", "5004"])
+        self.assertEqual(specs["web"].env["WACHTL_RTP_PORT"], "5004")
         probe_env = specs["serverprobe"].env
         self.assertEqual(probe_env["WACHTL_SERVER_PROBE_URL"], "https://127.0.0.1:8443")
         self.assertEqual(probe_env["WACHTL_SPKI_PIN"], layout.env["WACHTL_SPKI_PIN"])
@@ -317,3 +319,16 @@ class HostSpecTest(InstallBase):
         self.assertNotIn("iperf3", {s.name for s in host.build_specs(Layout.load(self.data, self.inst))})
         with self.assertRaises(installer.SetupError):
             installer.parse_input({**INPUT, "data_dir": "D:\\x", "iperf_port": 8443})
+
+    def test_rtp_reflector_process_and_firewall(self):
+        _, run = self.do_install(rtp_port=5104)
+        flat = [" ".join(c) for c in run.calls]
+        self.assertTrue(any("name=Wachtl Server RTP" in c and "protocol=UDP" in c and "localport=5104" in c
+                            for c in flat))
+        self.assertEqual({s.name: s for s in host.build_specs(Layout.load(self.data, self.inst))}["rtp"].args[-1],
+                         "5104")
+        _, run = self.do_install(rtp_port=0)
+        self.assertFalse(any("Wachtl Server RTP" in " ".join(c) and "add" in c for c in run.calls))
+        self.assertNotIn("rtp", {s.name for s in host.build_specs(Layout.load(self.data, self.inst))})
+        with self.assertRaises(installer.SetupError):
+            installer.parse_input({**INPUT, "data_dir": "D:\\x", "rtp_port": 5201})

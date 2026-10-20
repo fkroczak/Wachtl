@@ -40,6 +40,7 @@ Authentifizierung über die Web-Sitzung; ändernde Aufrufe brauchen den Header `
 | GET | `/sites` | Nur lesen | Standorte |
 | GET | `/probes` | Nur lesen | Probes inkl. `online`, `kind` (`probe` oder `server` = Server-Probe), `deregistered_at` |
 | GET | `/checks` | Nur lesen | Checks |
+| GET | `/probes/<id>/rtp?since=<unix>` | Nur lesen | Sprachtests der Probe (Standard: 30 Tage): MOS, `rtt_ms`, `loss_pct`, `up_`/`down_loss_pct`, `up_`/`down_jitter_ms`, `mode` (`wachtl` = je Richtung, `echo` = nur zusammen), `error` |
 | GET | `/check-status` | Nur lesen | `[{"probe_id", "hostname", "online", "check_id", "name", "type", "state", "detail", "ts"}]` – Zustand jeder Messung aller aktiven Probes; `state` = `ok`, `warn`, `down`, `stale` (keine Daten/überfällig) oder `waiting` |
 | GET | `/status` | Nur lesen | `[{"probe", "check_id", "up", "rtt", "loss"}]` – letzter Zustand aller Ziele |
 | GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d[&at=<unix>]` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "start", "end", "series": {"avg", "min", "max", "loss": [[ts_ms, wert], …]}}` – `at` legt das Fenster mittig um diesen Zeitpunkt (z. B. eine Störungsmeldung), ohne `at` endet es jetzt |

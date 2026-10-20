@@ -66,9 +66,24 @@
     update();
   }
 
-  // Bandbreiten-Seite
+  // Bandbreiten-Graph (Standard) bzw. MOS-Verlauf des Sprachtests: Reihen, Schwellen, Achse
+  const BW_CHART = {
+    series: [["down", "Download", "min_down"], ["up", "Upload", "min_up"]],
+    unit: " Mbit/s", lineClass: "c-bwline", dotClass: "c-bwdot",
+    aria: "Graph: Download und Upload im Zeitverlauf. Einzelwerte stehen in der Tabelle Messungen.",
+    value: (v) => `${v.toFixed(1)} Mbit/s`,
+  };
+  const MOS_CHART = {
+    series: [["mos", "MOS", "min_mos"]], unit: "", bottom: 1, top: 5, lineClass: "c-bwline", dotClass: "c-bwdot",
+    aria: "Graph: Sprachqualität (MOS, 1 bis 5) im Zeitverlauf. Einzelwerte stehen in der Tabelle Tests.",
+    value: (v) => `MOS ${v.toFixed(2)}`, tick: (v) => v.toFixed(0),
+  };
+
+  // Bandbreiten-Seite und Sprachtest-Seite
   const bwData = document.getElementById("bw-data");
   if (bwData) renderBandwidth(JSON.parse(bwData.textContent), document.getElementById("bw-chart"));
+  const mosData = document.getElementById("mos-data");
+  if (mosData) renderBandwidth(JSON.parse(mosData.textContent), document.getElementById("mos-chart"), MOS_CHART);
 
   // Ziel-Detailseite: Graph und Statistik
   const panel = document.getElementById("chart-panel");
@@ -449,7 +464,7 @@
   }
 
   // Bandbreiten-Graph: Punkte und Linien für Download/Upload, Schwellwerte gestrichelt
-  function renderBandwidth(data, host) {
+  function renderBandwidth(data, host, opts = BW_CHART) {
     const NS = "http://www.w3.org/2000/svg";
     const mk = (name, attrs, parent) => {
       const n = document.createElementNS(NS, name);
@@ -461,27 +476,30 @@
       host.querySelector("svg")?.remove();
       const W = host.clientWidth || 800, H = host.clientHeight || 320;
       const pad = { l: 64, r: 16, t: 16, b: 28 };
-      const svg = mk("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
-        "aria-label": "Graph: Download und Upload im Zeitverlauf. Einzelwerte stehen in der Tabelle Messungen." });
+      const svg = mk("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opts.aria });
       host.appendChild(svg);
-      const all = data.down.concat(data.up);
+      const all = opts.series.flatMap(([key]) => data[key]);
       if (!all.length) {
         mk("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "c-muted" }, svg).textContent =
           "Noch keine Messungen im gewählten Zeitraum";
         return;
       }
       const t0 = data.start, t1 = data.end, span = Math.max(t1 - t0, 1);
-      let top = Math.max(...all.map((p) => p[1]), data.min_down || 0, data.min_up || 0) * 1.1;
-      const p10 = Math.pow(10, Math.floor(Math.log10(top || 1)));
-      top = [1, 2, 2.5, 5, 10].map((m) => m * p10).find((v) => v >= top) || 10 * p10;
+      const bottom = opts.bottom || 0;
+      let top = opts.top;
+      if (!top) {
+        top = Math.max(...all.map((p) => p[1]), ...opts.series.map(([, , thr]) => data[thr] || 0)) * 1.1;
+        const p10 = Math.pow(10, Math.floor(Math.log10(top || 1)));
+        top = [1, 2, 2.5, 5, 10].map((m) => m * p10).find((v) => v >= top) || 10 * p10;
+      }
       const x = (t) => pad.l + ((t - t0) / span) * (W - pad.l - pad.r);
-      const y = (v) => pad.t + (H - pad.t - pad.b) * (1 - v / top);
+      const y = (v) => pad.t + (H - pad.t - pad.b) * (1 - (Math.max(v, bottom) - bottom) / (top - bottom));
       const grid = mk("g", { class: "c-grid" }, svg);
       for (let i = 0; i <= 4; i++) {
-        const v = (top / 4) * i;
+        const v = bottom + ((top - bottom) / 4) * i;
         mk("line", { x1: pad.l, x2: W - pad.r, y1: y(v), y2: y(v) }, grid);
         mk("text", { x: pad.l - 6, y: y(v) + 4, "text-anchor": "end", class: "c-axis" }, svg).textContent =
-          (top < 10 ? v.toFixed(1) : Math.round(v)) + (i === 4 ? " Mbit/s" : "");
+          (opts.tick ? opts.tick(v) : top < 10 ? v.toFixed(1) : Math.round(v)) + (i === 4 ? opts.unit : "");
       }
       const ticks = Math.max(2, Math.floor((W - pad.l - pad.r) / 120));
       for (let i = 0; i <= ticks; i++) {
@@ -501,13 +519,14 @@
         shown++;
       }
       if (shown) svg.setAttribute("aria-label", svg.getAttribute("aria-label") + reportAria(shown));
-      for (const [key, min] of [["down", data.min_down], ["up", data.min_up]]) {
+      for (const [key, label, thr] of opts.series) {
+        const min = data[thr];
         if (min > 0) mk("line", { x1: pad.l, x2: W - pad.r, y1: y(min), y2: y(min), class: `c-thr c-${key}` }, svg);
         const pts = data[key];
-        if (pts.length > 1) mk("polyline", { points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" "), class: `c-bwline c-${key}` }, svg);
+        if (pts.length > 1) mk("polyline", { points: pts.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(" "), class: `${opts.lineClass} c-${key}` }, svg);
         for (const p of pts) {
-          const c = mk("circle", { cx: x(p[0]), cy: y(p[1]), r: 3, class: `c-bwdot c-${key}` }, svg);
-          mk("title", {}, c).textContent = `${key === "down" ? "Download" : "Upload"} ${p[1].toFixed(1)} Mbit/s – ${new Date(p[0]).toLocaleString("de-DE")}`;
+          const c = mk("circle", { cx: x(p[0]), cy: y(p[1]), r: 3, class: `${opts.dotClass} c-${key}` }, svg);
+          mk("title", {}, c).textContent = `${label === "MOS" ? "" : label + " "}${opts.value(p[1])} – ${new Date(p[0]).toLocaleString("de-DE")}`;
         }
       }
     };

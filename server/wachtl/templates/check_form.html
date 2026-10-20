@@ -20,7 +20,7 @@
     <div class="grid-form">
       {% call(attrs) field("name", "Name", error=fe.name) %}
         <input name="name" required maxlength="100" value="{{ fv.name or (check.name if check else '') }}" {{ attrs }}
-          placeholder="{{ {'ping': 'z. B. Fileserver', 'path': 'z. B. Pfad zu Cloudflare', 'iperf': 'z. B. iperf zum Server', 'speedtest': 'z. B. Internet-Speedtest'}[ctype.key] }}">
+          placeholder="{{ {'ping': 'z. B. Fileserver', 'path': 'z. B. Pfad zu Cloudflare', 'iperf': 'z. B. iperf zum Server', 'speedtest': 'z. B. Internet-Speedtest', 'rtp': 'z. B. Sprache zur Zentrale'}[ctype.key] }}">
       {% endcall %}
       {% if ctype.key in ('ping', 'path') %}
         {% call(attrs) field("target", ctype.target_label, help=ctype.target_help, error=fe.target) %}
@@ -78,8 +78,11 @@
       {% endcall %}
     {% endfor %}
     </div>
-    {% if group == 'Gegenstelle' and ctype.key == 'iperf' %}
-      <p class="muted small">Eine Probe wird zur Gegenstelle unter Probe › Einstellungen „iperf3-Gegenstelle“. Der Wachtl-Server ist unter Verwaltung › Messung einstellbar.</p>
+    {% if group == 'Gegenstelle' and ctype.key in ('iperf', 'rtp') %}
+      <p class="muted small">Eine Probe wird zur Gegenstelle unter Probe › Einstellungen „Gegenstelle für andere Probes“. Der Wachtl-Server ist unter Verwaltung › Messung einstellbar.</p>
+    {% endif %}
+    {% if group == 'Gegenstelle' and ctype.key == 'rtp' %}
+      <p class="muted small">Tipp: Für Telefonie über die Zentrale eine Probe nahe der Telefonanlage als Gegenstelle wählen. Firewall: UDP zum Port der Gegenstelle (Standard 5004) freigeben.</p>
     {% endif %}
   </fieldset>
   {% endfor %}
