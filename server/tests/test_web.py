@@ -128,7 +128,7 @@ class WebTest(AppTestCase):
             r = self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=7d")
         body = r.get_json()
         self.assertEqual(body["source"], "agg")
-        self.assertEqual(sorted(body["series"]), ["loss", "p10", "p25", "p50", "p75", "p90"])
+        self.assertEqual(sorted(body["series"]), ["jitter", "loss", "p10", "p25", "p50", "p75", "p90"])
         self.assertEqual(body["series"]["p25"], [[1700000000000, 1.5], [1700000001000, None]])
         self.assertEqual(body["series"]["p50"], body["series"]["p25"])
         self.assertIn("wachtl:ping_rtt_ms:quantiles_1m", get.call_args_list[0].kwargs["params"]["query"])
