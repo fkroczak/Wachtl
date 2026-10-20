@@ -51,7 +51,7 @@ function Wait-RtpRun([string]$ProbeId, [string]$CheckId, [string]$Label) {
     if ($run.mode -ne 'wachtl') { throw "$($Label): Reflektor antwortet nicht als Wachtl-Reflektor ($($run.mode))" }
     if (-not ($run.mos -gt 4.0)) { throw "$($Label): MOS $($run.mos) zu niedrig für Loopback/LAN" }
     if ($run.received -lt 200) { throw "$($Label): nur $($run.received) von $($run.sent) Paketen zurück" }
-    if ($run.trigger -ne 'manual') { throw "$($Label): Auslöser nicht „manual“" }
+    if ($run.trigger -ne 'manual') { throw "$($Label): Auslöser nicht manual, sondern $($run.trigger)" }
     $run
 }
 
