@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -192,7 +193,8 @@ def login():
 
 @bp.get("/passwort-vergessen")
 def password_forgot():
-    return render_template("password_forgot.html")
+    # Windows-Server läuft ohne Docker direkt unter Windows, Linux-Server im Container
+    return render_template("password_forgot.html", windows=os.name == "nt")
 
 
 @bp.post("/logout")

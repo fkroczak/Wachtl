@@ -90,6 +90,7 @@ Source: "{#BuildDir}\bin\*"; DestDir: "{app}\bin"; Flags: recursesubdirs ignorev
 Source: "{#BuildDir}\service\WachtlServer.exe"; DestDir: "{app}\service"; Flags: ignoreversion; Check: IsServer
 Source: "{#BuildDir}\wachtl-server.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: IsServer
 Source: "wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: IsServer
+Source: "wachtl-passwort.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: IsServer
 Source: "{#BuildDir}\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs ignoreversion; Check: IsServer
 ; Das Setup selbst: daraus erzeugt das Web-UI die vorbelegten Setups für die Probes
 Source: "{srcexe}"; DestDir: "{app}\probe"; DestName: "WachtlSetup-{#AppVersion}.exe"; Flags: external ignoreversion; Check: IsServer
@@ -102,6 +103,7 @@ Name: "{group}\Wachtl Status"; Filename: "{app}\wachtl-status.cmd"; WorkingDir: 
 Name: "{group}\Logdateien"; Filename: "{code:LogDir}"
 Name: "{group}\Wachtl – Problem melden"; Filename: "{app}\wachtl-tray.exe"; Parameters: "--report"
 Name: "{group}\Zugangsdaten (setup-info.txt)"; Filename: "{code:GetDataDir}\setup-info.txt"; Check: IsServer
+Name: "{group}\Admin-Passwort zurücksetzen"; Filename: "{app}\wachtl-passwort.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\wachtl.ico"; Check: IsServer
 Name: "{group}\Setups für die Probes"; Filename: "{app}\probe"; Check: IsServer
 
 [Registry]
@@ -663,7 +665,7 @@ begin
 
   AdminPage := CreateInputQueryPage(AddressPage.ID,
     'Administrator', 'Passwort für die Anmeldung als „admin“ im Web-UI',
-    'Mindestens 12 Zeichen. Weitere Benutzer legen Sie später im Web-UI an.');
+    'Weitere Benutzer legen Sie später im Web-UI an.');
   AdminPage.Add('Passwort:', True);
   AdminPage.Add('Passwort wiederholen:', True);
   AdminPage.Values[0] := GetParam('AdminPassword', '');
@@ -859,9 +861,9 @@ begin
   end
   else if CurPageID = AdminPage.ID then
   begin
-    if Length(AdminPage.Values[0]) < 12 then
+    if AdminPage.Values[0] = '' then
     begin
-      MsgBox('Das Passwort muss mindestens 12 Zeichen lang sein.', mbError, MB_OK);
+      MsgBox('Bitte ein Passwort eingeben.', mbError, MB_OK);
       Result := False;
     end
     else if AdminPage.Values[0] <> AdminPage.Values[1] then

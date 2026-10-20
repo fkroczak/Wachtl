@@ -36,7 +36,11 @@ class WebTest(AppTestCase):
         self.assertIn("/passwort-vergessen", self.client.get("/login").get_data(as_text=True))
         r = self.client.get("/passwort-vergessen")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("create-user admin", r.get_data(as_text=True))
+        self.assertIn("passwort.sh", r.get_data(as_text=True))
+        with mock.patch("wachtl.web.os.name", "nt"):
+            html = self.client.get("/passwort-vergessen").get_data(as_text=True)
+        self.assertIn("Startmenü", html)
+        self.assertNotIn("passwort.sh", html)
 
     def test_admin_resets_password_and_unlocks(self):
         self.make_user()
@@ -46,13 +50,13 @@ class WebTest(AppTestCase):
         self.login()
         tok = self.session_csrf()
         uid = q1("SELECT id FROM users WHERE username = 'leser'")["id"]
-        r = self.client.post(f"/admin/users/{uid}/password", data={"password": "kurz", "csrf_token": tok},
+        r = self.client.post(f"/admin/users/{uid}/password", data={"password": "", "csrf_token": tok},
                              follow_redirects=True)
-        self.assertIn("mindestens 12", r.get_data(as_text=True))
-        self.client.post(f"/admin/users/{uid}/password", data={"password": "neues-passwort-123", "csrf_token": tok})
+        self.assertIn("Bitte ein Passwort", r.get_data(as_text=True))
+        self.client.post(f"/admin/users/{uid}/password", data={"password": "1234", "csrf_token": tok})
         self.assertIsNotNone(q1("SELECT id FROM audit_log WHERE action = 'user.password_reset'"))
         self.client.post("/logout", data={"csrf_token": tok})
-        self.login("leser", password="neues-passwort-123")
+        self.login("leser", password="1234")
         self.assertEqual(self.client.get("/").status_code, 200)
 
     def test_operator_cannot_reset_password(self):

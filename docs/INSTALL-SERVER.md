@@ -75,7 +75,7 @@ Die Anmeldeseite verweist mit **Passwort vergessen?** hierher. Andere Benutzer s
 für das Admin-Konto selbst:
 
 ```bash
-sudo docker compose exec app flask --app wachtl create-user admin --role admin
+sudo /opt/wachtl/deploy/passwort.sh
 ```
 
 ## Ports und Dienste im Stack

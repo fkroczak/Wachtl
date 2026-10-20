@@ -100,9 +100,9 @@ class InstallerTest(InstallBase):
     def test_parse_input_errors(self):
         with self.assertRaises(installer.SetupError) as ctx:
             installer.parse_input({"hostnames": "https://x:443", "https_port": 80, "http_port": 80,
-                                   "admin_password": "kurz", "data_dir": ""})
+                                   "admin_password": "", "data_dir": ""})
         msg = str(ctx.exception)
-        for part in ("Ungültiger Servername", "verschieden", "12 Zeichen", "Datenordner"):
+        for part in ("Ungültiger Servername", "verschieden", "Administrator-Passwort", "Datenordner"):
             self.assertIn(part, msg)
         cfg = installer.parse_input({**INPUT, "data_dir": "D:\\Daten", "hostnames": "fe80::1;srv"})
         self.assertEqual(cfg["hostnames"], ["fe80::1", "srv"])
@@ -188,10 +188,10 @@ class InstallerTest(InstallBase):
     def test_cli_writes_result_file_on_error(self):
         inp = self.tmp / "in.json"
         out = self.tmp / "out.json"
-        inp.write_text(json.dumps({**INPUT, "admin_password": "x", "data_dir": str(self.data)}), encoding="utf-8")
+        inp.write_text(json.dumps({**INPUT, "admin_password": "", "data_dir": str(self.data)}), encoding="utf-8")
         code = installer.main(["install", "--input", str(inp), "--result", str(out), "--dry-run", "--no-start"])
         self.assertEqual(code, 1)
-        self.assertIn("12 Zeichen", json.loads(out.read_text(encoding="utf-8"))["error"])
+        self.assertIn("Administrator-Passwort", json.loads(out.read_text(encoding="utf-8"))["error"])
 
 
 class BackupRestoreTest(InstallBase):
