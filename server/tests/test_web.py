@@ -32,6 +32,42 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 200)  # Formular erneut, nicht angemeldet
         self.assertIn("gesperrt", r.get_data(as_text=True))
 
+    def test_password_forgot_page_public_and_linked(self):
+        self.assertIn("/passwort-vergessen", self.client.get("/login").get_data(as_text=True))
+        r = self.client.get("/passwort-vergessen")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("passwort.sh", r.get_data(as_text=True))
+        with mock.patch("wachtl.web.os.name", "nt"):
+            html = self.client.get("/passwort-vergessen").get_data(as_text=True)
+        self.assertIn("Startmenü", html)
+        self.assertNotIn("passwort.sh", html)
+
+    def test_admin_resets_password_and_unlocks(self):
+        self.make_user()
+        self.make_user("leser", "readonly")
+        for _ in range(5):
+            self.login("leser", password="falsch-falsch-falsch")
+        self.login()
+        tok = self.session_csrf()
+        uid = q1("SELECT id FROM users WHERE username = 'leser'")["id"]
+        r = self.client.post(f"/admin/users/{uid}/password", data={"password": "", "csrf_token": tok},
+                             follow_redirects=True)
+        self.assertIn("Bitte ein Passwort", r.get_data(as_text=True))
+        self.client.post(f"/admin/users/{uid}/password", data={"password": "1234", "csrf_token": tok})
+        self.assertIsNotNone(q1("SELECT id FROM audit_log WHERE action = 'user.password_reset'"))
+        self.client.post("/logout", data={"csrf_token": tok})
+        self.login("leser", password="1234")
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_operator_cannot_reset_password(self):
+        self.make_user()
+        self.make_user("op", "operator")
+        self.login("op")
+        uid = q1("SELECT id FROM users WHERE username = 'admin'")["id"]
+        r = self.client.post(f"/admin/users/{uid}/password",
+                             data={"password": "neues-passwort-123", "csrf_token": self.session_csrf()})
+        self.assertEqual(r.status_code, 403)
+
     def test_readonly_cannot_open_admin(self):
         self.make_user("leser", "readonly")
         self.login("leser")
@@ -128,7 +164,7 @@ class WebTest(AppTestCase):
             r = self.client.get(f"/api/v1/probes/{data['probe_id']}/checks/1/series?range=7d")
         body = r.get_json()
         self.assertEqual(body["source"], "agg")
-        self.assertEqual(sorted(body["series"]), ["loss", "p10", "p25", "p50", "p75", "p90"])
+        self.assertEqual(sorted(body["series"]), ["jitter", "loss", "p10", "p25", "p50", "p75", "p90"])
         self.assertEqual(body["series"]["p25"], [[1700000000000, 1.5], [1700000001000, None]])
         self.assertEqual(body["series"]["p50"], body["series"]["p25"])
         self.assertIn("wachtl:ping_rtt_ms:quantiles_1m", get.call_args_list[0].kwargs["params"]["query"])
@@ -181,7 +217,7 @@ class PrefilledSetupTest(AppTestCase):
         os.makedirs(self.probe_dir)
         with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
             f.write(b"MZ-alt")
-        with open(os.path.join(self.probe_dir, "WachtlSetup-0.8.3.exe"), "wb") as f:
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.8.4.exe"), "wb") as f:
             f.write(b"MZ" + b"x" * 5000)
         self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
                                SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])

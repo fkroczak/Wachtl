@@ -19,7 +19,7 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 
 1. **Rolle** – „Wachtl-Server“ wählen (Standard ist Probe). Programmordner: `C:\Program Files\Wachtl Server`.
 2. **Server-Adresse** – DNS-Namen, unter denen Probes und Browser den Server erreichen (mit Komma getrennt; der erste wird die Adresse im Browser). Die IP-Adressen des Servers ergänzt das Setup selbst – Probes weichen darauf aus, wenn ein Name am Standort nicht auflösbar ist. HTTPS-Port (Standard 443) und HTTP-Port für die Umleitung (Standard 80, 0 = aus). Der Assistent prüft, ob die Ports frei sind.
-3. **Administrator** – Passwort für die Anmeldung als `admin` (mindestens 12 Zeichen).
+3. **Administrator** – Passwort für die Anmeldung als `admin`.
 4. **Benachrichtigungen** (optional) – E-Mail über SMTP und/oder Microsoft-Teams-Webhook. Später im Web-UI änderbar.
 5. **Daten und Aufbewahrung** – Datenordner (Standard `C:\ProgramData\Wachtl Server`, für größere Installationen gern eine eigene Platte), Aufbewahrung der Rohdaten (Tage) und des Verlaufs (Monate).
 6. **Bereit** – Zusammenfassung, dann **Installieren**.
@@ -69,6 +69,7 @@ $w = "C:\Program Files\Wachtl Server\wachtl-server.cmd"
 & $w backup                     # Sicherung nach <Daten>\backups (14 Tage aufbewahrt)
 & $w restore D:\wachtl-20261016-021500.zip    # stoppt den Dienst, spielt zurück, startet
 & $w create-user admin          # Passwort zurücksetzen / Benutzer anlegen
+                                # (dasselbe: Startmenü › Wachtl › Admin-Passwort zurücksetzen)
 & $w create-token --site Zentrale --uses 20   # Enrollment-Token ohne Web-UI
 & $w probes                     # registrierte Probes und ob sie online sind
 & $w logs                       # Logordner öffnen

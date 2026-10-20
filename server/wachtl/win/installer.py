@@ -78,8 +78,8 @@ def parse_input(data: dict) -> dict:
     raw_days = num("raw_days", 30, 1, 365, "Aufbewahrung Rohdaten (Tage)")
     agg_months = num("agg_months", 13, 1, 120, "Aufbewahrung Verlauf (Monate)")
     password = str(data.get("admin_password", ""))
-    if data.get("require_password", True) and len(password) < 12:
-        errors.append("Das Administrator-Passwort muss mindestens 12 Zeichen lang sein.")
+    if data.get("require_password", True) and not password:
+        errors.append("Bitte ein Administrator-Passwort eingeben.")
     data_dir = str(data.get("data_dir", "")).strip().rstrip("\\/")
     if len(data_dir) <= 2 and data_dir.endswith(":"):
         errors.append("Bitte einen Unterordner wählen, nicht die Wurzel eines Laufwerks (z. B. D:\\Wachtl).")
@@ -183,6 +183,7 @@ def write_setup_info(layout: Layout) -> Path:
 
 Adresse:        {layout.env['WACHTL_PUBLIC_URL']}
 Anmeldung:      admin (Passwort wie im Setup festgelegt)
+Passwort vergessen: Startmenü > Wachtl > Admin-Passwort zurücksetzen
 SPKI-Pin:       {layout.env['WACHTL_SPKI_PIN']}
 Zertifikat:     {layout.cert_file}
 Datenordner:    {layout.data_dir}

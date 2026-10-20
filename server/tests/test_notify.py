@@ -60,7 +60,7 @@ class NotifyTest(AppTestCase):
         self.assertEqual(notify.get_settings()["teams_webhook_url"], "https://t.example/h")
         self.assertTrue(os.path.exists(self.app.config["AM_CONFIG"]))
         with self.assertRaises(ValueError):
-            bootstrap.set_user("x", "kurz", "admin")
+            bootstrap.set_user("x", "", "admin")
 
     def test_web_form_keeps_password_and_audits(self):
         self.make_user()

@@ -43,7 +43,7 @@ Authentifizierung über die Web-Sitzung; ändernde Aufrufe brauchen den Header `
 | GET | `/probes/<id>/rtp?since=<unix>` | Nur lesen | Sprachtests der Probe (Standard: 30 Tage): MOS, `rtt_ms`, `loss_pct`, `up_`/`down_loss_pct`, `up_`/`down_jitter_ms`, `mode` (`wachtl` = je Richtung, `echo` = nur zusammen), `error` |
 | GET | `/check-status` | Nur lesen | `[{"probe_id", "hostname", "online", "check_id", "name", "type", "state", "detail", "ts"}]` – Zustand jeder Messung aller aktiven Probes; `state` = `ok`, `warn`, `down`, `stale` (keine Daten/überfällig) oder `waiting` |
 | GET | `/status` | Nur lesen | `[{"probe", "check_id", "up", "rtt", "loss"}]` – letzter Zustand aller Ziele |
-| GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d[&at=<unix>]` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "start", "end", "series": {"avg", "min", "max", "loss": [[ts_ms, wert], …]}}` – `at` legt das Fenster mittig um diesen Zeitpunkt (z. B. eine Störungsmeldung), ohne `at` endet es jetzt |
+| GET | `/probes/{id}/checks/{id}/series?range=1h\|6h\|24h\|7d\|30d[&at=<unix>]` | Nur lesen | `{"source": "raw"\|"agg", "step_s", "start", "end", "series": {"p10", "p25", "p50", "p75", "p90", "loss", "jitter": [[ts_ms, wert], …]}}` (Latenz und Jitter in ms, Verlust in %) – `at` legt das Fenster mittig um diesen Zeitpunkt (z. B. eine Störungsmeldung), ohne `at` endet es jetzt |
 | GET | `/probes/{id}/checks/{id}/stats` | Nur lesen | `{"1m"\|"5m"\|"15m"\|"1h"\|"24h": {"min", "median", "avg", "max", "jitter", "loss"}}` |
 | GET | `/client-findings?days=7[&probe=<id>]` | Nur lesen | Client-Hinweise der Probes: aktive immer, behobene der letzten `days` Tage (1–400), aktive und schwere zuerst |
 | GET | `/alerts?status=firing\|resolved` | Nur lesen | Alarme |

@@ -77,4 +77,5 @@ if [[ $FIRST_RUN -eq 1 ]]; then
   echo "    Anmeldung:  admin / ${ADMIN_PW}"
   echo "    Bitte das Passwort nach der ersten Anmeldung ändern und sicher ablegen."
 fi
+echo "    Passwort vergessen: sudo $(pwd)/passwort.sh"
 echo "    Zertifikat für Browser: $(pwd)/certs/wachtl.crt"

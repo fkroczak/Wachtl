@@ -73,7 +73,7 @@ Automatische, signierte Updates sind für Phase 4 geplant (Ed25519-signiertes Ma
 | Datenintegrität | Labels wie Probe, Standort und Ziel setzt der Server; eine Probe kann keine Daten für andere Probes oder fremde Checks einliefern |
 | Windows-Server | Dienst unter `NT SERVICE\WachtlServer` statt SYSTEM; Datenordner nur für SYSTEM, Administratoren und Dienstkonto; Firewall-Regeln nur für die nötigen Ports |
 | Probe auf dem PC | Virtuelles Dienstkonto statt SYSTEM, ICMP ohne Adminrechte, Datenordner nur für SYSTEM/Administratoren/Dienst, keine eingehenden Ports |
-| Web-UI | Rollen Admin/Operator/Nur lesen, Passwörter mit scrypt, mindestens 12 Zeichen, Sperre nach 5 Fehlversuchen für 15 min, CSRF-Schutz, Secure/HttpOnly-Cookies, Content-Security-Policy ohne externe Skripte |
+| Web-UI | Rollen Admin/Operator/Nur lesen, Passwörter mit scrypt (Länge frei wählbar), Sperre nach 5 Fehlversuchen für 15 min, CSRF-Schutz, Secure/HttpOnly-Cookies, Content-Security-Policy ohne externe Skripte |
 | Nachvollziehbarkeit | Audit-Log für Anmeldungen, Enrollment und jede Änderung (24 Monate) |
 | Geheimnisse | `.env` und `certs/wachtl.key` nur root-lesbar; Backups enthalten sie und müssen geschützt abgelegt werden |
 

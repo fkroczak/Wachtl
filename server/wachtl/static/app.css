@@ -21,6 +21,7 @@
   --off: #7a808a;
   --field-border: #868c96;  /* Rand von Eingabefeldern: ≥ 3:1 (WCAG 1.4.11) */
   --focus: #1d4ed8;         /* Fokusring, auf hellen und dunklen Flächen sichtbar */
+  --jitter-line: #b0457a;   /* Graph: Jitter-Linie – unterscheidbar von Median, Schwelle und Meldungen */
   --report: #7a4a9e;        /* Störungsmeldungen: Markierung im Graph, Badge – unterscheidbar von Status und Jitter */
   --radius: 8px;
   font-family: Inter, "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
@@ -37,6 +38,7 @@
     --accent: #8fb3d9;
     --accent-soft: #23303e;
     --jitter: #a3a9b2;
+    --jitter-line: #e58bb6;
     --band: #3b3f47;
     --band-soft: #2a2d33;
     --loss-low: #6fb7d6;
@@ -179,6 +181,10 @@ section { margin-bottom: 1.5rem; }
   border-radius: var(--radius); padding: 1.8rem; border-top: 6px solid var(--accent); }
 .login .wordmark { display: block; width: 230px; height: auto; margin: 0 auto 0.2rem; }
 .login .tagline { text-align: center; margin: 0 0 1.4rem; color: var(--text-muted); }
+.login .forgot { text-align: center; margin: 1rem 0 0; font-size: 0.9rem; }
+.login pre { white-space: pre-wrap; word-break: break-all; font-size: 0.82rem; }
+details.pw-reset { display: inline-block; margin-right: 0.8rem; }
+details.pw-reset summary { cursor: pointer; color: var(--accent); }
 .wordmark-dark { display: none !important; }
 @media (prefers-color-scheme: dark) { .wordmark-light { display: none !important; } .wordmark-dark { display: block !important; } }
 
@@ -196,6 +202,8 @@ section { margin-bottom: 1.5rem; }
 .c-lossbox, .lg-l { fill: var(--c); background: var(--c); }
 .c-over-warn { fill: var(--warn); fill-opacity: 0.13; }
 .c-over-bad { fill: var(--bad); fill-opacity: 0.13; }
+.c-jitter { fill: none; stroke: var(--jitter-line); stroke-width: 1.5; stroke-dasharray: 2 2; stroke-linejoin: round; }
+.lg-jitter { border-top: 2px dotted var(--jitter-line); height: 0 !important; }
 .c-thr-lat { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 6 4; }
 .c-sel { fill: var(--accent); fill-opacity: 0.18; }
 .c-hit { fill: transparent; cursor: crosshair; }

@@ -151,16 +151,16 @@
       }
       return out;
     };
-    const [p10, p25, med, p75, p90, loss] = ["p10", "p25", "p50", "p75", "p90", "loss"].map(slots);
+    const [p10, p25, med, p75, p90, loss, jit] = ["p10", "p25", "p50", "p75", "p90", "loss", "jitter"].map(slots);
     const W = chartEl.clientWidth || 800;
     const H = chartEl.clientHeight || 420;
     const pad = { l: 52, r: 16, t: 16, b: 44 };
     const PH = H - pad.t - pad.b, bottom = pad.t + PH, PW = W - pad.l - pad.r;
     const svg = el("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, role: "img",
-      "aria-label": "Graph: Latenz (Median und Streuung) und Paketverlust im gewählten Zeitraum. Zahlenwerte stehen in der Tabelle Statistik." });
+      "aria-label": "Graph: Latenz (Median und Streuung), Jitter und Paketverlust im gewählten Zeitraum. Zahlenwerte stehen in der Tabelle Statistik." });
     chartEl.insertBefore(svg, tip);
 
-    if (![med, p90, loss].some((arr) => arr.some((v) => v !== null))) {
+    if (![med, p90, loss, jit].some((arr) => arr.some((v) => v !== null))) {
       el("text", { x: W / 2, y: H / 2, "text-anchor": "middle", class: "c-muted" }, svg).textContent =
         "Keine Messdaten im gewählten Zeitraum";
       sourceLabel.textContent = "";
@@ -172,7 +172,7 @@
     const tOf = (i) => (base + i) * step * 1000;
     const bw = PW / span;
     const shown = (arr) => arr.slice(a, b + 1).filter((v) => v !== null);
-    const vals = shown(p90).concat(shown(med)).sort((u, v) => u - v);
+    const vals = shown(p90).concat(shown(med), shown(jit)).sort((u, v) => u - v);
     let top = (vals[Math.floor(vals.length * 0.98)] || 1) * 1.15;   // einzelne Ausreißer kappen statt alles zu stauchen
     const lw = thr.lat_warn_ms, warn = thr.loss_warn_pct, bad = thr.loss_bad_pct;
     if (lw && lw < top * 1.3) top = Math.max(top, lw * 1.08);
@@ -251,6 +251,14 @@
     }
     flushRun();
 
+    // Jitter: eigene Linie auf derselben ms-Achse, Lücken bleiben Lücken
+    let jd = "";
+    for (let i = a; i <= b; i++) {
+      if (jit[i] === null) continue;
+      jd += (i > a && jit[i - 1] !== null ? "L" : "M") + `${x(i).toFixed(1)},${y(jit[i]).toFixed(1)}`;
+    }
+    if (jd) el("path", { d: jd, class: "c-jitter" }, svg);
+
     // Verluststreifen unter der Zeitachse: ein Kästchen je Punkt mit Verlust
     for (let i = a; i <= b; i++) {
       const c = lossCls(loss[i]);
@@ -278,7 +286,7 @@
         lossCls(lossW[i]) >= 2 && "Verlust " + fmtPct(lossW[i]) + mins(thr.loss_window_s)];
       const lines = [new Date(tOf(i)).toLocaleString("de-DE"), "Median: " + fmtMs(med[i]),
         `Mittlere 50 %: ${fmtMs(p25[i])} – ${fmtMs(p75[i])}`, `80 %: ${fmtMs(p10[i])} – ${fmtMs(p90[i])}`,
-        "Verlust: " + fmtPct(loss[i])];
+        "Jitter: " + fmtMs(jit[i]), "Verlust: " + fmtPct(loss[i])];
       if (level(i)) lines.push("Über Schwelle: " + why.filter(Boolean).join(", "));
       return lines;
     };

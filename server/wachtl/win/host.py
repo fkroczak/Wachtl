@@ -191,7 +191,7 @@ def cmd_logs(layout: Layout, _args) -> int:
 
 
 def cmd_create_user(layout: Layout, args) -> int:
-    password = os.environ.get("WACHTL_NEW_PASSWORD") or getpass.getpass("Neues Passwort (min. 12 Zeichen): ")
+    password = os.environ.get("WACHTL_NEW_PASSWORD") or getpass.getpass("Neues Passwort: ")
     if not os.environ.get("WACHTL_NEW_PASSWORD") and getpass.getpass("Wiederholen: ") != password:
         print("Passwörter stimmen nicht überein.")
         return 1
