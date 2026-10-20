@@ -454,7 +454,78 @@ public class FindingEvaluatorTests
     public void DisabledDeviceIsNoDriverError()
     {
         var disabled = new AdapterState { Id = "nic1", Name = "Ethernet 2", WmiPhysical = true, Status = LinkStatus.Disabled, PnpErrorCode = 22 };
-        Assert.Empty(PollFor(TimeSpan.FromMinutes(1), disabled));
+        Assert.DoesNotContain(PollFor(TimeSpan.FromMinutes(1), disabled), f => f.Kind == FindingKinds.DriverError);
+    }
+
+    [Fact]
+    public void DisablingTheOnlyAdapterIsCriticalAndResolvesWhenEnabled()
+    {
+        PollFor(TimeSpan.FromSeconds(20), Eth());
+        // deaktiviert: Windows führt die Karte nicht mehr als Schnittstelle, WMI meldet sie als deaktiviert
+        var disabled = new AdapterState
+        {
+            Id = "eth0", Name = "Ethernet", Description = "Intel(R) Ethernet Connection I219-V", WmiPhysical = true,
+            Status = LinkStatus.Disabled, PnpErrorCode = 22,
+        };
+        Assert.Empty(Poll(disabled)); // erst nach zwei Abfragen
+        var fired = Assert.Single(Poll(disabled));
+        Assert.Equal(FindingKinds.AdapterDisabled, fired.Kind);
+        Assert.Equal("critical", fired.Severity);
+        Assert.Equal("Netzwerkkarte ausgeschaltet", fired.Title);
+        Assert.Contains("keine Netzwerkverbindung", fired.Message);
+        Assert.Contains("Aktivieren", fired.Solution);
+        Assert.Contains("\nLösung: ", fired.Balloon);
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(2), disabled));
+
+        var resolved = Assert.Single(Poll(Eth()), f => f.Kind == FindingKinds.AdapterDisabled);
+        Assert.Equal("resolved", resolved.State);
+        Assert.Equal(fired.FindingId, resolved.FindingId);
+        Assert.Equal("Netzwerkkarte wieder eingeschaltet", resolved.Title);
+        Assert.Contains("„Ethernet“", resolved.Message);
+    }
+
+    [Fact]
+    public void DisablingWifiWhileCableWorksIsOnlyInfo()
+    {
+        PollFor(TimeSpan.FromSeconds(10), Eth(), Wifi());
+        var fired = Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(), Wifi(LinkStatus.Disabled)));
+        Assert.Equal(FindingKinds.AdapterDisabled, fired.Kind);
+        Assert.Equal("info", fired.Severity); // keine Sprechblase
+        Assert.Equal("WLAN ausgeschaltet", fired.Title);
+        Assert.Contains("über „Ethernet“", fired.Message);
+
+        // jetzt fällt auch das Kabel weg: kritisch, gleiche ID
+        var changes = PollFor(TimeSpan.FromSeconds(25), Eth(LinkStatus.Down), Wifi(LinkStatus.Disabled));
+        var escalated = Assert.Single(changes, c => c.Kind == FindingKinds.AdapterDisabled);
+        Assert.Equal(fired.FindingId, escalated.FindingId);
+        Assert.Equal("critical", escalated.Severity);
+    }
+
+    [Fact]
+    public void UnusedDisabledSecondAdapterStaysSilent()
+    {
+        var spare = Eth(LinkStatus.Disabled, id: "eth1", name: "Ethernet 2");
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(2), Eth(), spare));
+        // auch wenn das Kabel der genutzten Karte gezogen wird: nur „Kabel getrennt“, nichts zur Zweitkarte
+        Assert.DoesNotContain(PollFor(TimeSpan.FromMinutes(1), Eth(LinkStatus.Down), spare), f => f.Kind == FindingKinds.AdapterDisabled);
+    }
+
+    [Fact]
+    public void PcStartingWithAllAdaptersDisabledIsReported()
+    {
+        var fired = Assert.Single(PollFor(TimeSpan.FromSeconds(15), Eth(LinkStatus.Disabled)));
+        Assert.Equal(FindingKinds.AdapterDisabled, fired.Kind);
+        Assert.Equal("critical", fired.Severity);
+    }
+
+    [Fact]
+    public void DisabledAdapterRemovedResolves()
+    {
+        PollFor(TimeSpan.FromSeconds(10), Eth());
+        var fired = Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(LinkStatus.Disabled)));
+        var gone = Assert.Single(Poll(), f => f.Kind == FindingKinds.AdapterDisabled);
+        Assert.Equal(fired.FindingId, gone.FindingId);
+        Assert.Equal("resolved", gone.State);
     }
 
     [Fact]
@@ -687,6 +758,7 @@ public sealed class ClientFindingsTransportTests : IDisposable
             FindingTexts.SpeedChanged(a, 1_000_000_000, 100_000_000), FindingTexts.SpeedLow(a, 10_000_000),
             FindingTexts.Flapping(a, 12), FindingTexts.NicReset(name, 9), FindingTexts.Apipa(a),
             FindingTexts.NoGateway(a), FindingTexts.NicErrors(a, 123456, 12.5),
+            FindingTexts.AdapterDisabled(a, null), FindingTexts.AdapterDisabled(a, name),
         };
         texts.AddRange(new[] { 1, 3, 10, 12, 14, 18, 19, 28, 31, 39, 43, 48, 52, 99 }.Select(code => FindingTexts.DriverError(a, code)));
         foreach (var t in texts)

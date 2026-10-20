@@ -24,6 +24,7 @@ WAN-Miniport, Bluetooth, Npcap) werden ignoriert.
 | **Langsame Netzwerkverbindung** | Info (100 Mbit/s, keine Sprechblase), unter 100 Mbit/s kritisch | LAN-Karte seit 30 s unter 1 Gbit/s verbunden. 100 Mbit/s ist an Telefonen und USB-Adaptern üblich, daher nur im Web-UI |
 | **Netzwerkverbindung bricht wiederholt ab** | Warnung | mindestens 3 Abbrüche in 10 min |
 | **Problem mit der Netzwerkkarte oder ihrem Treiber** | kritisch | Geräte-Manager meldet einen Fehlercode (z. B. 10, 28, 31, 43). „Deaktiviert“ zählt nicht |
+| **Netzwerkkarte ausgeschaltet** (0.8.4) | kritisch, Info wenn eine andere Verbindung übernimmt | Eine Karte, die verbunden war, ist in Windows deaktiviert – oder keine Karte ist mehr eingeschaltet. Eine nie genutzte, deaktivierte Zweitkarte neben einer eingeschalteten zählt nicht |
 | **Treiber setzt die Netzwerkkarte wiederholt zurück** | Warnung | mindestens 2 Ereignisse NDIS 10400 in 15 min |
 | **Keine IP-Adresse vom DHCP-Server** | kritisch | Karte verbunden, aber nur 169.254.x.x |
 | **Kein Standard-Gateway** | Warnung | IP-Adresse vorhanden, aber kein Gateway |
@@ -71,7 +72,7 @@ Wachtl-Symbol (Setup ohne `/NoTray`).
 ```
 
 - `kind`: `cable_unplugged`, `wifi_disconnected`, `link_speed_changed`, `link_speed_low`, `link_flapping`,
-  `driver_error`, `nic_reset`, `apipa`, `no_gateway`, `nic_errors`. Unbekannte Arten nimmt der Server an.
+  `driver_error`, `nic_reset`, `apipa`, `no_gateway`, `nic_errors`, `adapter_disabled` (ab 0.8.4). Unbekannte Arten nimmt der Server an.
 - `finding_id` bleibt für ein Vorkommen gleich: aktiv senden, später behoben mit derselben ID. Der Server
   aktualisiert. Ein behobener Hinweis wird durch eine verspätete Nachlieferung nicht wieder aktiv.
 - Beim Beheben schickt die Probe den Entwarnungstext als `title`/`message` und das ursprüngliche Problem in

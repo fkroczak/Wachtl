@@ -150,6 +150,20 @@ public static class FindingTexts
         "Datenpakete wieder fehlerfrei",
         $"Die Netzwerkkarte „{name}“ zählt keine auffälligen Paketfehler mehr.");
 
+    public static FindingText AdapterDisabled(AdapterState a, string? fallback) => new(
+        a.IsWifi ? "WLAN ausgeschaltet" : "Netzwerkkarte ausgeschaltet",
+        $"Die Netzwerkkarte „{a.Name}“ wurde in Windows deaktiviert."
+        + (fallback is null ? " Ohne sie hat der PC keine Netzwerkverbindung." : $" Die Verbindung läuft vorerst über „{fallback}“ weiter."),
+        $"Windows-Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen öffnen und bei „{a.Name}“ auf „Aktivieren“ klicken "
+        + "(oder Systemsteuerung › Netzwerkverbindungen, Rechtsklick auf die Karte › Aktivieren). Fehlen dafür die Rechte, die IT informieren.",
+        $"Die Netzwerkkarte „{a.Name}“ ist ausgeschaltet"
+        + (fallback is null ? ", das Netzwerk ist nicht erreichbar.\n" : ".\n")
+        + "Lösung: Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen › „Aktivieren“.");
+
+    public static FindingText AdapterEnabled(string name, TimeSpan downtime) => new(
+        "Netzwerkkarte wieder eingeschaltet",
+        $"Die Netzwerkkarte „{name}“ ist wieder eingeschaltet (war {Duration(downtime)} aus).");
+
     public static FindingText AdapterGone(string name) => new(
         "Netzwerkkarte deaktiviert oder entfernt",
         $"Die Netzwerkkarte „{name}“ wurde deaktiviert oder entfernt, der Hinweis ist damit erledigt.");

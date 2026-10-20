@@ -3,6 +3,11 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.4
+
+- **Hinweis „Netzwerkkarte ausgeschaltet“**: Wird die Netzwerkkarte oder das WLAN in Windows deaktiviert und hat der PC dadurch kein Netzwerk mehr, erscheint neben der Uhr sofort eine Sprechblase mit Lösungsvorschlag (Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen › „Aktivieren“). Nach dem Einschalten meldet Wachtl „Netzwerkkarte wieder eingeschaltet“. Übernimmt eine andere Verbindung, geht der Hinweis nur als Info an den Server. Eine stillgelegte Zweitkarte bleibt still.
+- **Schneller erkannt**: Verschwindet eine Netzwerkkarte oder taucht sie wieder auf, liest die Probe den Geräte-Manager sofort neu statt nach bis zu 30 s.
+
 ## Neu in 0.8.3
 
 - **Messungen ab Werk**: Eine neue Installation legt für alle Probes Ping auf Gateway, Cloudflare, Google und Quad9 (1 s), Ping auf den Wachtl-Server (5 s), Traceroute ins Internet und zum Server und einen Speedtest alle 6 Stunden an. iperf3 bleibt im Standardpaket wählbar. Bestehende Installationen behalten ihre Checks.

@@ -28,6 +28,8 @@ public sealed partial class AdapterReader
     private DateTimeOffset _resetsAt = DateTimeOffset.MinValue;
     private bool _eventsLogged;
     private bool _nicLogged;
+    private HashSet<string>? _nicIds;
+    private bool _wmiRecheck;
 
     public AdapterReader(ILogger logger)
     {
@@ -39,21 +41,12 @@ public sealed partial class AdapterReader
     /// <param name="refreshDevices">nach einem Netzwerkereignis: Geräte-Manager sofort neu lesen</param>
     public AdapterSnapshot Read(DateTimeOffset now, bool refreshDevices)
     {
-        if (OperatingSystem.IsWindows() && (refreshDevices || now - _wmiAt >= WmiInterval))
-        {
-            _wmi = ReadWmi();
-            _wmiAt = now;
-        }
-
         if (OperatingSystem.IsWindows() && now - _resetsAt >= EventInterval)
         {
             _resets = ReadResets(now);
             _resetsAt = now;
         }
 
-        var wmi = _wmi;
-        var adapters = new List<AdapterState>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         NetworkInterface[] nics;
         try
         {
@@ -70,6 +63,23 @@ public sealed partial class AdapterReader
             nics = Array.Empty<NetworkInterface>();
         }
 
+        // Karte verschwunden oder wieder da (deaktiviert, aktiviert, USB-Adapter): Geräte-Manager sofort und bei der
+        // nächsten Abfrage noch einmal lesen – im ersten Moment meldet WMI oft noch den alten Stand. Sonst gälte bis zu
+        // 30 s „deaktiviert“ bzw. die Karte wäre gar nicht sichtbar.
+        var ids = new HashSet<string>(nics.Select(n => NormalizeGuid(n.Id)), StringComparer.OrdinalIgnoreCase);
+        var changed = _nicIds is not null && !_nicIds.SetEquals(ids);
+        _nicIds = ids;
+        if (OperatingSystem.IsWindows() && (refreshDevices || changed || _wmiRecheck || now - _wmiAt >= WmiInterval))
+        {
+            _wmi = ReadWmi();
+            _wmiAt = now;
+        }
+
+        _wmiRecheck = changed;
+
+        var wmi = _wmi;
+        var adapters = new List<AdapterState>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var nic in nics)
         {
             if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)

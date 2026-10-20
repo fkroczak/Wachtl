@@ -66,6 +66,9 @@ public sealed class FindingEvaluator
     private readonly Dictionary<string, Track> _tracks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AdapterTrack> _adapters = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Karten, die seit dem Start des Dienstes einmal verbunden waren – bleibt beim Deaktivieren erhalten.</summary>
+    private readonly HashSet<string> _everUp = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Standby-Zeiträume (Beginn bis Ende der Schonfrist nach dem Aufwachen), für NDIS-Ereignisse.</summary>
     private readonly List<(DateTimeOffset From, DateTimeOffset To)> _sleeps = new();
     private DateTimeOffset? _lastAt;
@@ -122,6 +125,7 @@ public sealed class FindingEvaluator
     {
         _tracks.Clear();
         _adapters.Clear();
+        _everUp.Clear();
         _sleeps.Clear();
         _lastAt = null;
         _graceUntil = DateTimeOffset.MinValue;
@@ -181,6 +185,7 @@ public sealed class FindingEvaluator
             _adapters.Remove(id);
         }
 
+        EvaluateDisabled(physical, linked, now, output);
         EvaluateDrivers(physical, now, output);
         EvaluateGateway(snapshot, linked, now, output);
         EvaluateResets(snapshot, physical, now, output);
@@ -201,6 +206,7 @@ public sealed class FindingEvaluator
         if (up)
         {
             at.EverUp = true;
+            _everUp.Add(a.Id);
         }
         else if (at.LastStatus == LinkStatus.Up && !InResumeGrace(now))
         {
@@ -403,6 +409,40 @@ public sealed class FindingEvaluator
             () => new Candidate(FindingSeverity.Warning, a.Name, a.Description, FindingTexts.NicErrors(a, delta, Math.Min(100, ratio * 100)),
                 new() { ["errors_per_min"] = Str(delta), ["error_pct"] = (Math.Min(100, ratio * 100)).ToString("0.00", CultureInfo.InvariantCulture) }),
             now, _o.DebouncePolls, 1, _ => FindingTexts.NicErrorsResolved(a.Name), output);
+    }
+
+    // -- Deaktivierte Karte --------------------------------------------------
+
+    /// <summary>
+    /// „Netzwerkkarte ausgeschaltet“: eine Karte, die verbunden war, ist jetzt deaktiviert – oder keine Karte ist mehr
+    /// eingeschaltet (PC startet mit deaktivierter Karte). Eine stillgelegte Zweitkarte neben einer eingeschalteten bleibt still.
+    /// Läuft die Verbindung über eine andere Karte weiter, nur „info“ (keine Sprechblase).
+    /// </summary>
+    private void EvaluateDisabled(List<AdapterState> physical, List<AdapterState> linked, DateTimeOffset now, List<ClientFinding> output)
+    {
+        var fallback = linked.FirstOrDefault(o => o.Status == LinkStatus.Up && o.HasRoutableIpv4 && o.HasGateway)?.Name;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var a in physical)
+        {
+            seen.Add(a.Id);
+            var cond = a.Status != LinkStatus.Disabled ? Cond.Absent
+                : _everUp.Contains(a.Id) || linked.Count == 0 ? Cond.Present
+                : Cond.Unknown;
+            Step(FindingKinds.AdapterDisabled, a.Id, cond,
+                () => new Candidate(fallback is null ? FindingSeverity.Critical : FindingSeverity.Info, a.Name, a.Description,
+                    FindingTexts.AdapterDisabled(a, fallback), new()),
+                now, _o.DebouncePolls, 1, f => FindingTexts.AdapterEnabled(a.Name, Since(f, now)), output);
+        }
+
+        // Gerät ganz entfernt (z. B. USB-Adapter abgezogen): erledigt
+        var prefix = FindingKinds.AdapterDisabled + "|";
+        foreach (var (key, t) in _tracks.Where(p => p.Key.StartsWith(prefix, StringComparison.Ordinal)).ToList())
+        {
+            if (!seen.Contains(key[prefix.Length..]) && t.Active is not null)
+            {
+                Resolve(t, now, FindingTexts.AdapterGone(t.Active.Adapter), output);
+            }
+        }
     }
 
     // -- Geräte-Manager, Gateway, Ereignisprotokoll -------------------------
