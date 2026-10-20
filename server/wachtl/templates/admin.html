@@ -1,18 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Verwaltung{% endblock %}
+{% block title %}{{ sections[bereich][0] }} · Einstellungen{% endblock %}
 {% from "_forms.html" import field %}
 {% from "_links.html" import check_target with context %}
 {% block content %}
-<h1>Verwaltung</h1>
-<p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
-  <span class="muted small">Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten – mit Standards vorbelegt.</span></p>
-<nav class="subnav" aria-label="Abschnitte der Verwaltung">
-  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#standardpaket">Standardpaket</a><a href="#checks">Checks</a><a href="#messung">Messung</a>
-  <a href="#alarme">Alarmregeln</a><a href="#benachrichtigungen">Benachrichtigungen</a><a href="#benutzer">Benutzer</a><a href="{{ url_for('web.audit') }}">Audit-Log</a>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Einstellungen</a> / {{ sections[bereich][0] }}</nav>
+<h1>{{ sections[bereich][0] }}</h1>
+<nav class="subnav" aria-label="Bereiche der Einstellungen">
+  <a href="{{ url_for('web.setup_wizard') }}">PCs hinzufügen</a><a href="{{ url_for('web.assignment_matrix') }}">Messungen zuordnen</a>
+  {% for key, sec in sections.items() %}<a href="{{ url_for('web.admin', bereich=key) }}"{% if key == bereich %} aria-current="page"{% endif %}>{{ sec[0] }}</a>{% endfor %}
 </nav>
 
+{% if bereich == 'standorte' %}
 <section id="standorte">
-  <h2>Standorte</h2>
+  <h2>Alle Standorte</h2>
   <table>
     <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>
@@ -32,9 +32,11 @@
     <button class="primary">Standort anlegen</button>
   </form>
 </section>
+{% endif %}
 
+{% if bereich == 'pcs' %}
 <section id="enrollment">
-  <h2>Probes registrieren</h2>
+  <h2>Setup-Datei herunterladen</h2>
   <p class="muted">Standort wählen und <strong>Setup herunterladen</strong>: Die Datei enthält alle Adressen dieses Servers (Name und IP),
     den Pin und einen Token für den Standort. Auf dem PC starten und nur noch <em>Installieren</em> klicken – auch per Softwareverteilung mit <code>/VERYSILENT</code>.
     Ein Token gilt für die eingestellte Anzahl PCs und Tage.
@@ -64,9 +66,43 @@
     <button name="action" value="token" {{ 'disabled' if not sites }}>Nur Token anzeigen</button>
   </form>
 </section>
+{% endif %}
 
+{% if bereich == 'messungen' %}
+<section id="checks">
+  <h2>Alle Messungen</h2>
+  <p class="muted">Was die PCs messen. Ziel <code>gateway</code> steht für den Router des Standorts, den jeder PC selbst ermittelt.
+    Änderungen erreichen die PCs innerhalb weniger Minuten. Welcher PC was misst, stellen Sie am einfachsten unter
+    <a href="{{ url_for('web.assignment_matrix') }}">Messungen zuordnen</a> ein.</p>
+  <div class="actions">
+    {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+    <tbody>{% for c in checks %}
+      <tr class="{{ '' if c.enabled else 'disabled' }}">
+        <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
+        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
+        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
+        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
+        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
+        <td>{{ 'aktiv' if c.enabled else 'pausiert' }}</td>
+        <td class="nowrap">
+          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}">Bearbeiten</a>
+          <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Pausieren' if c.enabled else 'Aktivieren' }}</button></form>
+          <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?">Löschen</button></form>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if bereich == 'messungen' %}
 <section id="standardpaket">
-  <h2>Standardpaket</h2>
+  <h2>Standardmessungen anlegen</h2>
   <p class="muted">Fertige Checks für einen neuen Kunden: anhaken, Zuweisung wählen, anlegen – fertig. Danach nur noch die Probes installieren.
     Vorhandene Checks mit gleichem Ziel werden nicht doppelt angelegt; alles lässt sich später unter Checks ändern.</p>
   <form method="post" action="{{ url_for('web.standard_package') }}" class="settings-form" data-check-form>
@@ -112,38 +148,11 @@
     <button class="primary">Standardpaket anlegen</button>
   </form>
 </section>
+{% endif %}
 
-<section id="checks">
-  <h2>Checks</h2>
-  <p class="muted">Was die Probes messen. Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt.
-    Änderungen erreichen die Probes mit dem nächsten Heartbeat.</p>
-  <div class="actions">
-    {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
-  </div>
-  <table>
-    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
-    <tbody>{% for c in checks %}
-      <tr class="{{ '' if c.enabled else 'disabled' }}">
-        <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
-        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
-        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
-        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
-        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
-        <td>{{ 'aktiv' if c.enabled else 'pausiert' }}</td>
-        <td class="nowrap">
-          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}">Bearbeiten</a>
-          <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Pausieren' if c.enabled else 'Aktivieren' }}</button></form>
-          <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?">Löschen</button></form>
-        </td>
-      </tr>
-    {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
-  </table>
-</section>
-
+{% if bereich == 'erweitert' %}
 <section id="messung">
-  <h2>Messung</h2>
+  <h2>Allgemein</h2>
   <p class="muted">Allgemeine Einstellungen für alle Probes. Was gemessen wird, steht in den Checks; ob eine Probe iperf3-Gegenstelle ist, auf der Seite der Probe.</p>
   <form method="post" action="{{ url_for('web.measure_update') }}" class="settings-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -165,31 +174,11 @@
     <button class="primary">Messeinstellungen speichern</button>
   </form>
 </section>
+{% endif %}
 
-<section id="alarme">
-  <h2>Alarmregeln</h2>
-  <form method="post" action="{{ url_for('web.rules_update') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <table>
-      <thead><tr><th>Aktiv</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
-      <tbody>{% for r in rules %}
-        <tr>
-          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="{{ r.name }}: aktiv"></td>
-          <th scope="row">{{ r.name }}</th>
-          <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num" aria-label="{{ r.name }}: Schwellwert"></td>
-          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
-              {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num" aria-label="{{ r.name }}: Fenster in Sekunden">{% endif %}</td>
-          <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num" aria-label="{{ r.name }}: Dauer bis Alarm in Sekunden"></td>
-          <td><select name="severity_{{ r.kind }}" aria-label="{{ r.name }}: Stufe">{% for sv in ('info','warning','critical') %}<option value="{{ sv }}" {{ 'selected' if sv == r.severity }}>{{ sv|severity }}</option>{% endfor %}</select></td>
-        </tr>
-      {% endfor %}</tbody>
-    </table>
-    <button class="primary">Alarmregeln speichern</button>
-  </form>
-</section>
-
+{% if bereich == 'alarme' %}
 <section id="benachrichtigungen">
-  <h2>Benachrichtigungen</h2>
+  <h2>Wer benachrichtigt wird</h2>
   {% if not notify_enabled %}<div class="flash error">Alertmanager-Datei ist nicht konfiguriert (WACHTL_AM_CONFIG).</div>{% endif %}
   <p class="muted">Alarme gehen an alle eingetragenen Empfänger. Leere Felder schalten den Kanal ab. Mehrere E-Mail-Empfänger mit Komma trennen.</p>
   {% set n = notify_settings %}
@@ -212,9 +201,35 @@
     <button {{ 'disabled' if not (n.email_to or n.teams_webhook_url) }}>Testnachricht senden</button>
   </form>
 </section>
+{% endif %}
 
+{% if bereich == 'alarme' %}
+<section id="alarme">
+  <h2>Ab wann ein Alarm kommt</h2>
+  <form method="post" action="{{ url_for('web.rules_update') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <table>
+      <thead><tr><th>Aktiv</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
+      <tbody>{% for r in rules %}
+        <tr>
+          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="{{ r.name }}: aktiv"></td>
+          <th scope="row">{{ r.name }}</th>
+          <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num" aria-label="{{ r.name }}: Schwellwert"></td>
+          <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">
+              {% else %}<input name="window_{{ r.kind }}" type="number" min="0" value="{{ r.window_s }}" class="num" aria-label="{{ r.name }}: Fenster in Sekunden">{% endif %}</td>
+          <td><input name="for_{{ r.kind }}" type="number" min="0" value="{{ r.for_s }}" class="num" aria-label="{{ r.name }}: Dauer bis Alarm in Sekunden"></td>
+          <td><select name="severity_{{ r.kind }}" aria-label="{{ r.name }}: Stufe">{% for sv in ('info','warning','critical') %}<option value="{{ sv }}" {{ 'selected' if sv == r.severity }}>{{ sv|severity }}</option>{% endfor %}</select></td>
+        </tr>
+      {% endfor %}</tbody>
+    </table>
+    <button class="primary">Alarmregeln speichern</button>
+  </form>
+</section>
+{% endif %}
+
+{% if bereich == 'benutzer' %}
 <section id="benutzer">
-  <h2>Benutzer</h2>
+  <h2>Alle Benutzer</h2>
   <table>
     <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for u in users %}
@@ -231,4 +246,5 @@
     <button class="primary">Benutzer anlegen</button>
   </form>
 </section>
+{% endif %}
 {% endblock %}

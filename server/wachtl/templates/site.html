@@ -11,7 +11,7 @@
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
 
 <section class="cards stats" aria-label="Kennzahlen des Standorts">
-  <a class="card stat {{ 'bad' if kpi.online < kpi.active }}" href="#probes"><span class="num">{{ kpi.online }} / {{ kpi.active }}</span><span>Probes online</span></a>
+  <a class="card stat {{ 'bad' if kpi.online < kpi.active }}" href="#probes"><span class="num">{{ kpi.online }} / {{ kpi.active }}</span><span>PCs online</span></a>
   <a class="card stat {{ 'bad' if kpi.problems }}" href="#probes"><span class="num">{{ kpi.problems }}</span><span>Messungen mit Problemen</span></a>
   <a class="card stat {{ 'bad' if alerts }}" href="#alarme"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
   <a class="card stat" href="{{ url_for('web.reports_view', site=site.id) }}"><span class="num">{{ kpi.reports }}</span><span>Offene Meldungen</span></a>
@@ -23,9 +23,9 @@
   {% endif %}
 </section>
 
-<h2 id="probes">Probes</h2>
+<h2 id="probes">PCs</h2>
 {% if widgets %}
-<p class="muted">Probes mit Problemen stehen oben. Werte zur Internet-Referenz: Latenz der letzten Minute, Verlust und Jitter der letzten 5 Minuten. Der Mini-Graph zeigt den Latenz-Median der letzten Stunde, rote Balken zeigen Paketverlust.</p>
+<p class="muted">PCs mit Problemen stehen oben. Die Werte zeigen die Verbindung ins Internet: Antwortzeit (Latenz), verlorene Pakete (Verlust) und Schwankung (Jitter). Der kleine Graph zeigt die letzte Stunde, rote Balken bedeuten verlorene Pakete.</p>
 <ul class="cards widgets">
   {% for w in widgets %}{% set p = w.probe %}
   <li class="card pw {{ w.level }}">
@@ -61,7 +61,7 @@
   </li>
   {% endfor %}
 </ul>
-{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
+{% else %}<p class="muted">An diesem Standort ist noch kein PC eingerichtet.</p>{% endif %}
 
 <h2 id="alarme">Aktive Alarme</h2>
 {% if alerts %}
@@ -84,7 +84,7 @@
 
 <h2 id="hinweise">Hinweise von PCs</h2>
 {% if client_findings %}
-<p class="muted">Was die Probes an diesem Standort auf ihrem PC erkannt haben – aktive und die der letzten 7 Tage.</p>
+<p class="muted">Was Wachtl auf den PCs an diesem Standort selbst erkannt hat – aktive und die der letzten 7 Tage.</p>
 {{ findings_table(client_findings) }}
 {% else %}<p class="muted">Keine Hinweise von PCs an diesem Standort in den letzten 7 Tagen.</p>{% endif %}
 
@@ -96,7 +96,7 @@
 
 {% if probes %}
 <details id="alle-messungen">
-<summary><h2>Alle Messungen je Probe</h2></summary>
+<summary><h2>Alle Messungen je PC</h2></summary>
 <p class="muted">Bei Pings Latenz der letzten Minute und Verlust der letzten 5 Minuten, bei Pfaden die Hops, bei Bandbreiten die letzte Messung. Rot umrandet = keine aktuellen Daten.</p>
 <div class="scroll">
 <table class="matrix">

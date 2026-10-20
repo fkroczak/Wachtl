@@ -4,11 +4,62 @@
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links, check_target with context %}
 {% from "_findings.html" import findings_table with context %}
+{% from "_measure.html" import measure_tiles with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / PC</nav>
 <h1>{{ probe.hostname }}{% if probe.kind == 'server' %} <span class="badge info">Wachtl-Server</span>{% endif %}</h1>
 
+{% set online = probe_online(probe) %}
+{% set active_findings = client_findings|selectattr('state', 'equalto', 'active')|rejectattr('severity', 'equalto', 'info')|list %}
+{% set problems = states|selectattr('problem')|list %}
+{% if probe.deregistered_at or probe.status != 'active' %}
+<p class="verdict none">{{ 'Wachtl wurde auf diesem PC deinstalliert.' if probe.deregistered_at else 'Dieser PC ist deaktiviert und misst nicht.' }}</p>
+{% elif not online %}
+<p class="verdict bad"><strong>{% if probe.last_seen %}Der PC meldet sich nicht mehr (letzter Kontakt {{ probe.last_seen|ago }}).{% else %}Der PC hat sich noch nie gemeldet.{% endif %}</strong>
+  Er ist ausgeschaltet, hat kein Netzwerk oder der Wachtl-Dienst läuft nicht.{% if active_findings %} Letzter Hinweis vom PC: {{ active_findings[0].title }}.{% endif %}</p>
+{% elif problems or active_findings %}
+<div class="verdict {{ 'bad' if problems|selectattr('state', 'equalto', 'down')|list or active_findings|selectattr('severity', 'equalto', 'critical')|list else 'warn' }}">
+  {% set n = problems|length + active_findings|length %}<strong>{{ n }} {{ 'Problem' if n == 1 else 'Probleme' }} – das ist zu tun:</strong>
+  <ul class="notes">
+    {% for f in active_findings %}<li>{{ f.title }}{% if f.solution %} – <span class="muted">{{ f.solution }}</span>{% endif %}</li>{% endfor %}
+    {% for st in problems %}<li><a href="{{ check_url(probe, st.check) }}">{{ st.check.name }}</a>: {{ st.detail or st.label }}</li>{% endfor %}
+  </ul>
+</div>
+{% else %}
+<p class="verdict"><strong>Alles in Ordnung.</strong> {% if states %}Alle {{ states|length }} Messungen laufen ohne Auffälligkeiten.{% else %}Diesem PC sind noch keine Messungen zugeordnet.{% endif %}</p>
+{% endif %}
+
+<h2 id="messungen">Messungen</h2>
+{% if states %}
+<p class="muted">Klicken Sie auf eine Messung, um ihren Verlauf als Graph zu sehen.{% if has_role(user, 'admin') %}
+  Was dieser PC misst, ändern Sie unter <a href="{{ url_for('web.assignment_matrix') }}">Messungen zuordnen</a>.{% endif %}</p>
+{{ measure_tiles(probe, states) }}
+{% else %}<p class="muted">Diesem PC sind keine Messungen zugeordnet. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.assignment_matrix') }}">Messungen zuordnen</a>{% endif %}</p>{% endif %}
+{% if excluded_checks %}
+<div class="muted excluded">Für diesen PC entfernt:
+  {% for c in excluded_checks %}{{ ', ' if not loop.first }}{{ c.name }}{% if has_role(user, 'admin') %}
+  <form method="post" action="{{ url_for('web.probe_check_restore', probe_id=probe.id, check_id=c.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="link" aria-label="Messung {{ c.name }} bei {{ probe.hostname }} wieder aufnehmen">wieder aufnehmen</button>
+  </form>{% endif %}{% endfor %}</div>
+{% endif %}
+
+<h2 id="hinweise">Hinweise dieses PCs</h2>
+{% if client_findings %}
+<p class="muted">Was Wachtl auf diesem PC selbst erkannt hat – der Benutzer sieht dasselbe als Sprechblase neben der Uhr. Aktive und die der letzten 30 Tage.</p>
+{{ findings_table(client_findings, show_probe=False) }}
+{% else %}<p class="muted">An Netzwerkkarte, Kabel und Treiber dieses PCs ist nichts Auffälliges aufgefallen.</p>{% endif %}
+
+<h2 id="meldungen">Störungsmeldungen</h2>
+{% if reports %}
+<p class="muted">Was Benutzer an diesem PC gemeldet haben. <a href="{{ url_for('web.reports_view', status='all', probe=probe.id) }}">Alle Meldungen dieses PCs</a></p>
+{{ report_table(reports, show_probe=False) }}
+{% else %}<p class="muted">Von diesem PC gibt es keine Meldungen.</p>{% endif %}
+
+<details class="more" id="technik">
+<summary>Technische Details, Aktionen und Einstellungen</summary>
+<h2>Steckbrief</h2>
 <section class="cards">
   <div class="card kv">
     <dl>
@@ -35,26 +86,25 @@
   <form method="post" action="{{ url_for('web.probe_status', probe_id=probe.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if probe.status == 'active' %}
-      <button name="action" value="disable" data-confirm="Probe deaktivieren? Ihr Token wird sofort abgelehnt.">Deaktivieren</button>
+      <button name="action" value="disable" data-confirm="PC deaktivieren? Er misst danach nicht mehr, bis Sie ihn wieder aktivieren.">Deaktivieren</button>
     {% else %}
       <button name="action" value="enable">Aktivieren</button>
     {% endif %}
   </form>
   <form method="post" action="{{ url_for('web.probe_delete', probe_id=probe.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger" data-confirm="Probe {{ probe.hostname }} endgültig löschen?">Löschen</button>
+    <button class="danger" data-confirm="PC {{ probe.hostname }} endgültig aus Wachtl löschen?">Löschen</button>
   </form>
 </div>
 {% endif %}
 
-<h2 id="messungen">Alle Messungen</h2>
-{% if not probe_online(probe) and probe.status == 'active' %}<div class="flash error">Die Probe ist offline – ihre Messungen laufen gerade nicht.</div>{% endif %}
+<h2 id="alle-messungen">Alle Messungen</h2>
 {% if states %}
 <p class="muted"><span class="ok-t">{{ state_counts.ok }} ok</span> · <span class="warn-t">{{ state_counts.warn }} auffällig</span> ·
   <span class="down-t">{{ state_counts.down }} gestört</span> · <span class="stale-t">{{ state_counts.stale }} ohne aktuelle Daten</span>
   {% if state_counts.waiting %} · {{ state_counts.waiting }} warten auf die erste Messung{% endif %}</p>
 <table>
-  <thead><tr><th>Zustand</th><th>Art</th><th>Check</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th>{% if has_role(user, 'admin') %}<th><span class="sr-only">Aktionen</span></th>{% endif %}</tr></thead>
+  <thead><tr><th>Zustand</th><th>Art</th><th>Messung</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
   <tbody>{% for st in states %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
@@ -63,97 +113,26 @@
       <td>{{ check_target(st.check) }}</td>
       <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}</td>
       <td>{{ st.ts|ago if st.ts else '–' }}</td>
-      {% if has_role(user, 'admin') %}<td class="nowrap">
+      <td class="nowrap">
+        {%- if has_role(user, 'operator') and st.kind != 'ping' %}
+          {% if st.check.id in pending %}<span class="muted small">beauftragt …</span>{% else %}
+          <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=st.check.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="link" aria-label="{{ st.check.name }} bei {{ probe.hostname }} {{ 'neu ermitteln' if st.kind == 'path' else 'jetzt messen' }}">{{ 'Neu ermitteln' if st.kind == 'path' else 'Jetzt messen' }}</button></form>{% endif %}
+        {%- endif %}
+        {%- if has_role(user, 'admin') %}
         <form method="post" action="{{ url_for('web.probe_check_remove', probe_id=probe.id, check_id=st.check.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="link danger" aria-label="Messung {{ st.check.name }} bei {{ probe.hostname }} entfernen"
-            data-confirm="Messung „{{ st.check.name }}“ bei {{ probe.hostname }} entfernen? Gilt sie auch für andere Probes, messen diese weiter.">Entfernen</button>
-        </form>
-      </td>{% endif %}
+            data-confirm="Messung „{{ st.check.name }}“ bei {{ probe.hostname }} entfernen? Andere PCs messen weiter.">Entfernen</button>
+        </form>{% endif %}
+      </td>
     </tr>
   {% endfor %}</tbody>
 </table>
-{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
-
-{% if excluded_checks %}
-<div class="muted excluded">Für diese Probe entfernt:
-  {% for c in excluded_checks %}{{ ', ' if not loop.first }}{{ c.name }}{% if has_role(user, 'admin') %}
-  <form method="post" action="{{ url_for('web.probe_check_restore', probe_id=probe.id, check_id=c.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="link" aria-label="Messung {{ c.name }} bei {{ probe.hostname }} wieder aufnehmen">wieder aufnehmen</button>
-  </form>{% endif %}{% endfor %}</div>
 {% endif %}
-
-<h2>Dauerpings</h2>
-{% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
-<table>
-  <thead><tr><th>Status</th><th>Name</th><th>Ziel</th><th>Rolle</th><th>Intervall</th><th>Latenz 1 min</th><th>Verlust 5 min</th></tr></thead>
-  <tbody>
-  {% for c, v in rows %}
-    <tr>
-      {% set st = cell_state(v) %}
-      <td><span class="dot {{ st }}"></span> {{ {'ok': 'ok', 'warn': 'Verlust', 'down': 'gestört', 'unknown': 'keine Daten'}[st] }}</td>
-      <td><a href="{{ url_for('web.target', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
-      <td>{{ c.target }}</td>
-      <td>{{ CHECK_ROLES[c.role] }}</td>
-      <td>{{ c.interval_s }} s</td>
-      <td>{{ (v.rtt if v else None)|ms }}</td>
-      <td>{{ (v.loss if v else None)|pct }}</td>
-    </tr>
-  {% else %}
-    <tr><td colspan="7" class="muted">Keine Checks zugewiesen.</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-
-<h2>Pfade</h2>
-{% if paths %}
-<table>
-  <thead><tr><th>Name</th><th>Ziel</th><th>Hops</th><th>Ziel erreicht</th><th>Pfad seit</th><th>Zuletzt ermittelt</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
-  <tbody>{% for c, run, hops in paths %}
-    <tr>
-      <td><a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
-      <td>{{ c.target }}</td>
-      <td>{{ hops|length if run else '–' }}</td>
-      <td>{% if run %}<span class="dot {{ 'ok' if run.reached else 'down' }}"></span> {{ 'ja' if run.reached else 'nein' }}{% else %}<span class="muted">noch kein Ergebnis</span>{% endif %}</td>
-      <td>{{ run.first_ts|dt if run else '–' }}</td>
-      <td>{{ run.ts|ago if run else '–' }}</td>
-      <td>{% if has_role(user, 'operator') %}<form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Neu ermitteln</button></form>{% endif %}</td>
-    </tr>
-  {% endfor %}</tbody>
-</table>
-{% else %}<p class="muted">Keine Pfad-Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='path') }}">Pfad-Check anlegen</a>{% endif %}</p>{% endif %}
-
-<h2>Bandbreite</h2>
-{% if bandwidth %}
-<table>
-  <thead><tr><th>Name</th><th>Gegenstelle</th><th>Download</th><th>Upload</th><th>Letzte Messung</th><th>Zeitplan</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
-  <tbody>{% for c, last, pending, params in bandwidth %}
-    {% set ref = last.down or last.up %}
-    <tr>
-      <td><a href="{{ url_for('web.bandwidth_view', probe_id=probe.id, check_id=c.id) }}">{{ c.name }}</a></td>
-      <td>{{ check_target(c) }}</td>
-      {% for d in ('down', 'up') %}
-        {% set r = last[d] %}
-        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error }}">Fehler</span>
-            {% elif r %}<span class="{{ 'text-bad' if (d == 'down' and params.min_down_mbps and r.mbps < params.min_down_mbps) or (d == 'up' and params.min_up_mbps and r.mbps < params.min_up_mbps) }}">{{ r.mbps|mbps }}</span>
-            {% else %}–{% endif %}</td>
-      {% endfor %}
-      <td>{{ ref.ts|ago if ref else 'noch keine' }}</td>
-      <td class="small">{{ ('alle %d min'|format(params.schedule_min)) if params.schedule_min else 'nur manuell' }}</td>
-      <td>{% if has_role(user, 'operator') %}
-        {% if pending %}<span class="muted small">beauftragt …</span>{% else %}
-        <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Jetzt messen</button></form>{% endif %}
-      {% endif %}</td>
-    </tr>
-  {% endfor %}</tbody>
-</table>
-{% else %}<p class="muted">Keine Bandbreiten-Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='iperf') }}">iperf3-Check</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung</a> anlegen.{% endif %}</p>{% endif %}
-
 {% if has_role(user, 'admin') %}
-<h2 id="einstellungen">Einstellungen dieser Probe</h2>
+<h2 id="einstellungen">Einstellungen dieses PCs</h2>
 <form method="post" action="{{ url_for('web.probe_settings', probe_id=probe.id) }}" class="settings-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset>
@@ -176,18 +155,6 @@
 </form>
 {% endif %}
 
-<h2 id="hinweise">Hinweise dieses PCs</h2>
-{% if client_findings %}
-<p class="muted">Was die Probe auf diesem PC erkannt hat – der Benutzer sieht dasselbe als Sprechblase. Aktive und die der letzten 30 Tage.</p>
-{{ findings_table(client_findings, show_probe=False) }}
-{% else %}<p class="muted">Die Probe hat an Netzwerkkarte, Kabel und Treiber dieses PCs nichts Auffälliges erkannt.</p>{% endif %}
-
-<h2 id="meldungen">Störungsmeldungen</h2>
-{% if reports %}
-<p class="muted">Was Benutzer an diesem PC gemeldet haben. <a href="{{ url_for('web.reports_view', status='all', probe=probe.id) }}">Alle Meldungen dieser Probe</a></p>
-{{ report_table(reports, show_probe=False) }}
-{% else %}<p class="muted">Von diesem PC gibt es keine Meldungen.</p>{% endif %}
-
 <h2>Letzte Alarme</h2>
 {% if alerts %}
 <table>
@@ -197,5 +164,6 @@
       <td>{{ a.starts_at|dt }}</td><td>{{ a.ends_at|dt if a.ends_at else 'aktiv' }}</td></tr>
   {% endfor %}</tbody>
 </table>
-{% else %}<p class="muted">Keine Alarme für diese Probe.</p>{% endif %}
+{% else %}<p class="muted">Keine Alarme für diesen PC.</p>{% endif %}
+</details>
 {% endblock %}

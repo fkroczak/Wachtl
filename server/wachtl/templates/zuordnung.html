@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Messungen zuordnen{% endblock %}
+{% block content %}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Einstellungen</a> / Messungen zuordnen</nav>
+<h1>Messungen zuordnen</h1>
+<p class="lead">Ein Haken bedeutet: dieser PC misst das. Haken setzen oder entfernen, dann <strong>Speichern</strong>.</p>
+<ul class="muted hints">
+  <li>Ist eine Messung für alle PCs angehakt, bekommen neue PCs sie automatisch.</li>
+  <li>Mit „Alle“ über einer Spalte setzen oder entfernen Sie alle Haken dieser Messung.</li>
+  <li>Eine neue Messung (z. B. Drucker oder Server anpingen) legen Sie unter
+    <a href="{{ url_for('web.admin', bereich='messungen') }}">Messungen anlegen und bearbeiten</a> an.</li>
+</ul>
+{% if not probes %}
+<p class="flash warn">Noch keine PCs. <a href="{{ url_for('web.setup_wizard') }}">PCs hinzufügen</a></p>
+{% elif not checks %}
+<p class="flash warn">Noch keine Messungen. <a href="{{ admin_url('standardpaket') }}">Standardmessungen anlegen</a></p>
+{% else %}
+<form method="post" class="matrix-form" data-matrix>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="scroll">
+  <table class="assign">
+    <caption class="sr-only">PCs (Zeilen) und Messungen (Spalten)</caption>
+    <thead>
+      <tr>
+        <th scope="col">PC</th>
+        {% for c in checks %}
+        <th scope="col" class="{{ 'disabled' if not c.enabled }}">
+          <a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a>
+          <span class="muted small">{{ PLAIN_KIND.get(c.type, c.type) }}{% if c.target %} · {{ c.target }}{% endif %}{% if not c.enabled %} · pausiert{% endif %}</span>
+        </th>
+        {% endfor %}
+      </tr>
+      <tr class="all-row">
+        <th scope="row">Alle</th>
+        {% for c in checks %}
+        <td><input type="checkbox" data-col="{{ c.id }}" aria-label="{{ c.name }}: alle PCs an oder aus"></td>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for site in probes|groupby('site_name') %}
+      <tr class="group"><th colspan="{{ checks|length + 1 }}" scope="rowgroup"><a href="{{ url_for('web.site', site_id=site.list[0].site_id) }}">{{ site.grouper }}</a></th></tr>
+      {% for p in site.list %}
+      <tr>
+        <th scope="row"><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</th>
+        {% for c in checks %}
+        <td>{% if can_run(c, p) %}<input type="checkbox" name="a-{{ c.id }}-{{ p.id }}" data-col="{{ c.id }}" {{ 'checked' if p.id in current[c.id] }}
+              aria-label="{{ c.name }} bei {{ p.hostname }}">{% else %}<span class="muted" title="Der Wachtl-Server misst nicht gegen sich selbst">–</span>{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="actions sticky-actions">
+    <button class="primary">Speichern</button>
+    <a class="button" href="{{ url_for('web.assignment_matrix') }}">Verwerfen</a>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

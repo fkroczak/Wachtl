@@ -1,7 +1,7 @@
 {#- Kompakte Tabelle mit Störungsmeldungen (Übersicht, Probe, Standort, Ziel). Volle Liste: reports.html -#}
 {% macro report_table(items, show_probe=True, show_site=False, show_status=True) %}
 <table class="reports">
-  <thead><tr><th>Störung</th>{% if show_probe %}<th>PC / Probe</th>{% endif %}{% if show_site %}<th>Standort</th>{% endif %}<th>Benutzer</th><th>Art</th><th>Dauer</th><th>Beschreibung</th>{% if show_status %}<th>Status</th>{% endif %}<th><span class="sr-only">Graph</span></th></tr></thead>
+  <thead><tr><th>Störung</th>{% if show_probe %}<th>PC</th>{% endif %}{% if show_site %}<th>Standort</th>{% endif %}<th>Benutzer</th><th>Art</th><th>Dauer</th><th>Beschreibung</th>{% if show_status %}<th>Status</th>{% endif %}<th><span class="sr-only">Graph</span></th></tr></thead>
   <tbody>{% for r in items %}
     <tr>
       <td class="nowrap" title="Eingang {{ r.received_at|dt }}">{{ r.occurred_at|dt }}</td>

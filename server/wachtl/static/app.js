@@ -22,6 +22,41 @@
     update();
   }
 
+  // Messungen zuordnen: „Alle“-Haken je Spalte (an, aus, teilweise)
+  const matrix = document.querySelector("[data-matrix]");
+  if (matrix) {
+    const heads = matrix.querySelectorAll("thead input[data-col]");
+    const cells = (col) => matrix.querySelectorAll(`tbody input[data-col="${col}"]`);
+    const sync = (head) => {
+      const boxes = [...cells(head.dataset.col)];
+      const on = boxes.filter((b) => b.checked).length;
+      head.checked = boxes.length > 0 && on === boxes.length;
+      head.indeterminate = on > 0 && on < boxes.length;
+    };
+    heads.forEach((head) => {
+      sync(head);
+      head.addEventListener("change", () => cells(head.dataset.col).forEach((b) => (b.checked = head.checked)));
+    });
+    matrix.addEventListener("change", (ev) => {
+      if (ev.target.closest("tbody")) heads.forEach((h) => h.dataset.col === ev.target.dataset.col && sync(h));
+    });
+  }
+
+
+  // Handy: Tabellen als Karten (app.css) – jede Zelle bekommt ihre Spaltenüberschrift als Beschriftung
+  document.querySelectorAll("table:not(.matrix):not(.assign):not(.hops)").forEach((t) => {
+    // Überschriften nur für Screenreader (z. B. „Aktionen“) nicht als sichtbare Beschriftung
+    const heads = [...t.querySelectorAll("thead th")].map((th) => (th.querySelector(".sr-only") ? "" : th.textContent.trim()));
+    if (!heads.some(Boolean)) return;
+    t.querySelectorAll("tbody tr").forEach((tr) => {
+      let i = 0;
+      for (const c of tr.children) {
+        if (heads[i] && c.colSpan === 1) c.dataset.label = heads[i];
+        i += c.colSpan;
+      }
+    });
+  });
+
   // Fehlerübersicht nach dem Absenden fokussieren, damit Screenreader sie vorlesen
   document.querySelector("[data-error-summary]")?.focus();
 
@@ -515,6 +550,13 @@
     window.addEventListener("resize", draw);
   }
 })();
+
+// Sprungziel in einem zugeklappten Bereich (z. B. nach dem Speichern der PC-Einstellungen): aufklappen
+if (location.hash) {
+  const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  const box = target && target.closest("details");
+  if (box) { box.open = true; target.scrollIntoView(); }
+}
 
 // Standort-Dashboard: aufgeklappte Detailbereiche über das automatische Neuladen hinweg offen halten
 for (const d of document.querySelectorAll("details[id]")) {

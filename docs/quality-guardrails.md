@@ -221,7 +221,7 @@ für 2–4, 6–11 und 14 meldet `npx playwright test` bzw. axe die Stelle, wenn
 - Tastatur: Anmeldung, Navigation, Check-Formular inkl. Fehlerkorrektur, Zeitraum-Buttons – vollständig bedienbar, keine Fokusfalle.
 - Reflow: alle Seiten bei 320 und 640 px ohne seitliches Scrollen der Seite; breite Tabellen scrollen in ihrem Container.
 - Nähe: Label-zu-Feld-Abstand 0,25 rem, Feld-zu-Feld 1,1 rem; bei 1280/768/320 px liegt jedes Label näher am eigenen Feld.
-- Hick: Hauptnavigation 3–4 Punkte, Verwaltung gegliedert mit Sprungmarken, Check-Formulare in Feldgruppen.
+- Hick: Hauptnavigation mit wenigen Punkten, Einstellungen als Startseite mit Kacheln und eigener Seite je Bereich, Check-Formulare in Feldgruppen.
   Das iperf3-Formular zeigt bis zu 16 Felder gleichzeitig – Vorschlag zum Einklappen siehe offene Punkte.
 - Nicht geprüft: Screenreader-Ausgabe (NVDA/VoiceOver), echte Mobilgeräte, Windows-Hochkontrastmodus.
 

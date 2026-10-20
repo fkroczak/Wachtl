@@ -1,0 +1,26 @@
+{#- Messungen als Kacheln: Name (Link zum Graph), Art in Alltagssprache, aktueller Wert, Zustand. Import: with context -#}
+{% from "_links.html" import check_target with context %}
+
+{% macro measure_value(st) -%}
+  {%- set v = st.values or {} -%}
+  {%- if st.kind == 'ping' and v.get('rtt') is not none %}{{ v.rtt|ms }} · {{ v.loss|pct }} Verlust
+  {%- elif st.kind == 'ping' and v.get('loss') is not none %}{{ v.loss|pct }} Verlust
+  {%- elif st.kind == 'path' and v.get('hops') %}{{ v.hops }} Stationen{{ '' if v.reached else ' – Ziel nicht erreicht' }}
+  {%- elif st.kind in ('iperf', 'speedtest') and (v.get('down') or v.get('up')) -%}
+    {%- if v.down and v.down.mbps is not none %}↓ {{ v.down.mbps|mbps }}{% endif %}{% if v.up and v.up.mbps is not none %} ↑ {{ v.up.mbps|mbps }}{% endif %}
+  {%- else %}–{% endif -%}
+{%- endmacro %}
+
+{% macro measure_tiles(probe, states) %}
+<ul class="mtiles">
+{% for st in states %}
+  <li class="mtile {{ st.state }}">
+    <h3><a href="{{ check_url(probe, st.check) }}">{{ st.check.name }}</a></h3>
+    <span class="muted small">{{ PLAIN_KIND.get(st.kind, st.kind) }}{% if st.check.target %} · {{ check_target(st.check) }}{% endif %}</span>
+    <span class="value">{{ measure_value(st) }}</span>
+    <span><span class="dot {{ st.state }}"></span> {{ st.label }}{% if st.detail and st.state != 'ok' %} – {{ st.detail }}{% endif %}</span>
+    <span class="go" aria-hidden="true">{{ 'Graph ansehen' if st.kind != 'path' else 'Weg ansehen' }} →</span>
+  </li>
+{% endfor %}
+</ul>
+{% endmacro %}

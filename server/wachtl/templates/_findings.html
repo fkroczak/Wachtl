@@ -1,7 +1,7 @@
 {#- Client-Hinweise der Probes (Kabel, Link-Geschwindigkeit, Treiber …). Vertrag: docs/CLIENT-HINWEISE.md -#}
 {% macro findings_table(items, show_probe=True) %}
 <table class="findings">
-  <thead><tr><th>Stufe</th>{% if show_probe %}<th>PC / Probe</th>{% endif %}<th>Hinweis</th><th>Lösungsvorschlag</th><th>Erkannt</th><th>Zustand</th></tr></thead>
+  <thead><tr><th>Stufe</th>{% if show_probe %}<th>PC</th>{% endif %}<th>Hinweis</th><th>Lösungsvorschlag</th><th>Erkannt</th><th>Zustand</th></tr></thead>
   <tbody>{% for f in items %}
     <tr>
       <td><span class="badge {{ f.severity if f.state == 'active' else 'info' }}">{{ f.severity_label }}</span></td>

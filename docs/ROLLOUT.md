@@ -23,12 +23,12 @@ vom Server aus funktionieren.
 
 ## 2. Standorte und Standardpaket
 
-**Am schnellsten:** Verwaltung › **Probes einrichten (geführt)**. Vier Schritte – Standort, Messungen (Standardpaket),
+**Am schnellsten:** Einstellungen › **PCs hinzufügen**. Vier Schritte – Standort, Messungen (Standardpaket),
 Alarmierung (E-Mail/Teams) und Anzahl PCs – sind mit Standards vorbelegt. **Einrichten** legt alles an und bietet
 direkt das fertige Setup für die PCs an; weiter mit Schritt 3, Punkt 2. Von Hand geht es so:
 
-1. **Verwaltung › Standorte**: für jeden Standort einen Eintrag anlegen (z. B. „Zentrale“, „Lager Coesfeld“).
-2. **Verwaltung › Standardpaket**: alles angehakt lassen, „Gilt für: alle Probes“, **Standardpaket anlegen**.
+1. **Einstellungen › Standorte**: für jeden Standort einen Eintrag anlegen (z. B. „Zentrale“, „Lager Coesfeld“).
+2. **Einstellungen › Messungen anlegen und bearbeiten › Standardmessungen**: alles angehakt lassen, „Gilt für: alle Probes“, **Standardpaket anlegen**.
 
 Damit misst jede Probe:
 
@@ -43,11 +43,11 @@ Damit misst jede Probe:
 | Speedtest Internet | Bandbreite, alle 6 h | Download/Upload ins Internet |
 
 Bei sehr vielen PCs an einem Standort reicht es, die Bandbreiten-Checks nur einer Probe je Standort zuzuweisen
-(Verwaltung › Checks › Bearbeiten › Zuweisung). Bandbreitentests belasten die Leitung.
+(Einstellungen › Messungen anlegen und bearbeiten › Bearbeiten › Zuweisung). Bandbreitentests belasten die Leitung.
 
 ## 3. Probes installieren
 
-1. **Verwaltung › Probes registrieren**: Standort wählen, „Für wie viele PCs“ eintragen, **Setup herunterladen**.
+1. **Einstellungen › Setup-Datei für PCs**: Standort wählen, „Für wie viele PCs“ eintragen, **Setup herunterladen**.
 2. Auf jedem PC `WachtlSetup-<Standort>.exe` als Administrator starten und **Installieren** klicken. Server, Pin und
    Token sind eingebaut; ist der Server gerade nicht erreichbar, meldet sich die Probe später selbst an.
 3. Nach 30 Sekunden steht der PC in der Übersicht unter **Probes** mit „online“.
@@ -79,7 +79,7 @@ Typische Gründe, wenn etwas nicht grün wird:
 
 ## 5. Übergabe
 
-- Benachrichtigungen einrichten: **Verwaltung › Benachrichtigungen** (E-Mail und/oder Teams), **Testnachricht** senden.
+- Benachrichtigungen einrichten: **Einstellungen › Benachrichtigungen** (E-Mail und/oder Teams), **Testnachricht** senden.
 - Für den Kunden einen Benutzer mit Rolle **Nur lesen** anlegen.
 - Sicherung prüfen: Windows legt sie täglich an, unter Linux den Cron-Eintrag aus [BETRIEB.md](BETRIEB.md) setzen.
 

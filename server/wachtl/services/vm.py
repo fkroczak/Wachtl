@@ -132,12 +132,13 @@ def ping_series(probe_id: int, check_id: int, range_key: str, hop: int | None = 
             "start": start, "end": end}
 
 
-def ping_stats(probe_id: int, check_id: int, hop: int | None = None) -> dict[str, dict]:
+def ping_stats(probe_id: int, check_id: int, hop: int | None = None,
+               windows: tuple[str, ...] = STAT_WINDOWS) -> dict[str, dict]:
     """Min, Max, Durchschnitt, Median, Jitter, Verlust für 1 min bis 24 h."""
     sel = _hop_sel(probe_id, check_id, hop)
     m = _metric_names(hop)
     stats: dict[str, dict] = {}
-    for w in STAT_WINDOWS:
+    for w in windows:
         if w == "24h":
             agg = True
             q = {

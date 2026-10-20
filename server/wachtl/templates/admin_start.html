@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen{% endblock %}
+{% block content %}
+<h1>Einstellungen</h1>
+<p class="muted">Was möchten Sie tun?</p>
+
+<h2>Häufige Aufgaben</h2>
+<div class="tiles">
+  <a class="tile main" href="{{ url_for('web.setup_wizard') }}">
+    <strong>PCs hinzufügen</strong>
+    <span>Geführt in vier Schritten: Standort, Messungen, Benachrichtigung und die Installationsdatei für die PCs.</span>
+  </a>
+  <a class="tile main" href="{{ url_for('web.assignment_matrix') }}">
+    <strong>Messungen zuordnen</strong>
+    <span>Welcher PC misst was – eine Tabelle mit Häkchen.</span>
+  </a>
+  <a class="tile main" href="{{ url_for('web.admin', bereich='alarme') }}">
+    <strong>Benachrichtigungen</strong>
+    <span>E-Mail oder Teams bei Störungen und ab wann ein Alarm kommt.</span>
+    {% if channels %}<span class="ok-t small">Eingerichtet: {{ channels|join(' und ') }}</span>
+    {% else %}<span class="warn-t small">Noch nicht eingerichtet – bei Störungen erfährt niemand davon.</span>{% endif %}
+  </a>
+</div>
+
+<h2>Weitere Einstellungen</h2>
+<div class="tiles">
+  <a class="tile" href="{{ url_for('web.admin', bereich='messungen') }}">
+    <strong>Messungen anlegen und bearbeiten</strong>
+    <span>Neue Ziele wie Drucker oder Server, Speedtest, Pfad ins Internet. {{ n_checks }} Messungen.</span>
+  </a>
+  <a class="tile" href="{{ url_for('web.admin', bereich='standorte') }}">
+    <strong>Standorte</strong>
+    <span>Filialen und Gebäude, nach denen die PCs gruppiert sind. {{ n_sites }} Standorte, {{ n_probes }} PCs.</span>
+  </a>
+  <a class="tile" href="{{ url_for('web.admin', bereich='pcs') }}">
+    <strong>Setup-Datei für PCs</strong>
+    <span>Installationsdatei mit Zugangsdaten herunterladen, auch für die Softwareverteilung.</span>
+  </a>
+  <a class="tile" href="{{ url_for('web.admin', bereich='benutzer') }}">
+    <strong>Benutzer</strong>
+    <span>Wer sich anmelden darf und was er ändern darf. {{ n_users }} Benutzer.</span>
+  </a>
+  <a class="tile" href="{{ url_for('web.admin', bereich='erweitert') }}">
+    <strong>Erweitert</strong>
+    <span>Aufbewahrung, Übertragungsintervalle, iperf3-Server, Hinweise auf den PCs.</span>
+  </a>
+  <a class="tile" href="{{ url_for('web.audit') }}">
+    <strong>Protokoll</strong>
+    <span>Wer hat wann was geändert.</span>
+  </a>
+</div>
+{% endblock %}

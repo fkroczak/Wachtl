@@ -1,6 +1,6 @@
 # Messungen in Wachtl
 
-Was gemessen wird, legst du zentral im Web-UI fest: **Verwaltung › Checks**. Jeder Check gilt für alle Probes, einen Standort oder eine einzelne Probe. Änderungen erreichen die Probes mit dem nächsten Heartbeat, ohne Neustart und ohne Zugriff auf die PCs.
+Was gemessen wird, legst du zentral im Web-UI fest: **Einstellungen › Messungen anlegen und bearbeiten**. Jeder Check gilt für alle Probes, einen Standort oder eine einzelne Probe. Änderungen erreichen die Probes mit dem nächsten Heartbeat, ohne Neustart und ohne Zugriff auf die PCs.
 
 **Ab Werk** legt eine neue Installation diese Messungen für alle Probes an: Ping auf Gateway, Cloudflare (1.1.1.1),
 Google (8.8.8.8) und Quad9 (9.9.9.9) im 1-s-Takt, Ping auf den Wachtl-Server (5 s), Traceroute ins Internet und zum
@@ -9,10 +9,10 @@ echten Hostnamen hat. Bestehende Installationen behalten ihre Checks.
 
 **Einzeln entfernen:** Auf der Seite einer Probe hat jede Messung den Knopf **Entfernen** (Administratoren). Gilt die
 Messung nur für diese Probe, wird sie gelöscht. Gilt sie für mehrere, wird sie nur bei dieser Probe ausgenommen, die
-anderen messen weiter; „wieder aufnehmen“ macht das rückgängig. Unter Verwaltung › Checks steht dann z. B.
-„Alle Probes, außer PC-01“. Ganz löschen geht weiter unter Verwaltung › Checks.
+anderen messen weiter; „wieder aufnehmen“ macht das rückgängig. Unter Einstellungen › Messungen anlegen und bearbeiten steht dann z. B.
+„Alle Probes, außer PC-01“. Ganz löschen geht weiter unter Einstellungen › Messungen anlegen und bearbeiten.
 
-Für einen neuen Kunden gibt es das **Standardpaket** (Verwaltung › Standardpaket): Ping auf Gateway, drei
+Für einen neuen Kunden gibt es das **Standardpaket** (Einstellungen › Messungen anlegen und bearbeiten › Standardmessungen): Ping auf Gateway, drei
 Internet-Referenzen und den Wachtl-Server, Traceroute ins Internet und zum Server, iperf3 zum Server und ein
 WAN-Speedtest – mit einem Klick, ohne doppelte Checks. Anleitung: [ROLLOUT.md](ROLLOUT.md).
 
@@ -66,7 +66,7 @@ Die Probe ermittelt die Router bis zum Ziel (ICMP mit steigender TTL, wie `trace
 
 Gegenstelle ist wahlweise:
 
-- **der Wachtl-Server**: Er bringt einen iperf3-Server mit (Port 5201, bei der Installation änderbar). Adresse und Port, die die Probes verwenden, stehen unter **Verwaltung › Messung**, etwa bei NAT oder Portweiterleitung.
+- **der Wachtl-Server**: Er bringt einen iperf3-Server mit (Port 5201, bei der Installation änderbar). Adresse und Port, die die Probes verwenden, stehen unter **Einstellungen › Erweitert**, etwa bei NAT oder Portweiterleitung.
 - **eine andere Probe**: Auf deren Seite unter **Einstellungen dieser Probe** die Option **iperf3-Gegenstelle** einschalten. Das Probe-Setup hat dafür eine Firewall-Regel nur für `iperf3.exe` angelegt. Die Adresse ermittelt Wachtl aus den lokalen IP-Adressen der Probe und lässt sich überschreiben.
 - **ein eigener iperf3-Server**: Host und Port eintragen.
 
@@ -137,13 +137,13 @@ Dieselbe Liste liefert `GET /api/v1/check-status`.
 | Starker Paketverlust | kritische Paketverlust-Schwelle überschritten |
 | Ziel / einzelne Referenz | nur dieses Ziel gestört |
 
-Eine Störung zählt ab **5 s ohne Antwort** (Verwaltung › Alarmregeln). Beginn und Dauer rechnet Wachtl nach dem Ende
+Eine Störung zählt ab **5 s ohne Antwort** (Einstellungen › Benachrichtigungen › Ab wann ein Alarm kommt). Beginn und Dauer rechnet Wachtl nach dem Ende
 aus den 1-s-Messwerten sekundengenau nach; beim WAN zählt nur die Zeit, in der alle Referenzen zugleich weg waren.
 Kurze Ausfälle erkennt nur ein Ping-Intervall von 1 s sicher – bei 5 s Intervall braucht es 2 verlorene Pings (≈ 10 s).
 
-Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispiel „Internet weg“ während „Gateway weg“. Mit „Folgestörungen zeigen“ werden sie eingeblendet. Unter **Verwaltung › Messung** lässt sich eine Mindestdauer einstellen, ab der eine Störung erscheint.
+Gleichzeitige Folgestörungen derselben Probe werden zusammengefasst, zum Beispiel „Internet weg“ während „Gateway weg“. Mit „Folgestörungen zeigen“ werden sie eingeblendet. Unter **Einstellungen › Erweitert** lässt sich eine Mindestdauer einstellen, ab der eine Störung erscheint.
 
-## Allgemeine Einstellungen (Verwaltung › Messung)
+## Allgemeine Einstellungen (Einstellungen › Erweitert)
 
 | Einstellung | Standard |
 |---|---|

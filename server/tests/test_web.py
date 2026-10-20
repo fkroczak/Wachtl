@@ -294,7 +294,7 @@ class SiteDashboardTest(AppTestCase):
                                                      "probe": str(self.off)},
                                           "annotations": {"summary": "Probe PC-AUS offline"}}]})
         html = self.get()
-        self.assertIn("Probes online", html)
+        self.assertIn("PCs online", html)
         self.assertIn('<span class="num">1 / 2</span>', html)
         self.assertIn(f'href="/meldungen?site={self.site}"', html)
         self.assertIn('href="#alarme"', html)

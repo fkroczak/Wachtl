@@ -42,7 +42,35 @@ def inject():
         "check_url": check_url,
         "report_graph_url": report_graph_url,
         "alert_refs": alert_refs,
+        "admin_url": admin_url,
+        "PLAIN_KIND": PLAIN_KIND,
     }
+
+
+# Art einer Messung in Alltagssprache (Kacheln, Graphen-Seite)
+PLAIN_KIND = {"ping": "Erreichbarkeit", "path": "Weg durchs Netz", "iperf": "Bandbreite im Firmennetz",
+              "speedtest": "Internet-Geschwindigkeit"}
+
+
+# Einstellungen: Startseite mit Kacheln, je Bereich eine eigene Seite (/admin?bereich=…).
+# Anker der früheren Gesamtseite → Bereich, damit Formulare und Links an die richtige Stelle zurückführen.
+ADMIN_SECTIONS = {
+    "messungen": ("Messungen anlegen und bearbeiten", ("standardpaket", "checks")),
+    "pcs": ("Setup-Datei für PCs", ("enrollment",)),
+    "standorte": ("Standorte", ("standorte",)),
+    "alarme": ("Benachrichtigungen und Alarmgrenzen", ("benachrichtigungen", "alarme")),
+    "benutzer": ("Benutzer", ("benutzer",)),
+    "erweitert": ("Erweiterte Mess-Einstellungen", ("messung",)),
+}
+_ANCHOR_SECTION = {a: key for key, (_, anchors) in ADMIN_SECTIONS.items() for a in anchors}
+
+
+def admin_url(anchor: str = "") -> str:
+    """Link auf einen Abschnitt der Einstellungen, z. B. admin_url("checks") → /admin?bereich=messungen#checks."""
+    section = _ANCHOR_SECTION.get(anchor)
+    if not section:
+        return url_for("web.admin")
+    return url_for("web.admin", bereich=section) + "#" + anchor
 
 
 def check_url(probe: dict, check: dict) -> str:
@@ -243,12 +271,24 @@ def overview():
         site_stats[p["site_id"]]["problems"] += sum(1 for st in states[p["id"]] if st.problem)
         bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.SCHEDULED_TYPES]
     problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
+    # Ampel je PC für die Standort-Kacheln: off (deaktiviert), bad (offline/gestört), warn (auffällig), ok
+    light = {}
+    for p in probes:
+        if p["status"] != "active" or p["deregistered_at"]:
+            light[p["id"]] = "off"
+        elif not repo.probe_online(p) or any(st.state in ("down", "stale") for st in states[p["id"]]):
+            light[p["id"]] = "bad"
+        elif any(st.state == "warn" for st in states[p["id"]]):
+            light[p["id"]] = "warn"
+        else:
+            light[p["id"]] = "ok"
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
     since = repo.now() - 7 * 86400
     recent_reports = report_service.search("open", since=since, limit=5)
     client_findings = finding_service.search(since=repo.now() - 86400, limit=20)
     return render_template(
-        "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
+        "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats, light=light,
+        problems_bad=any(st.state in ("down", "stale") for _, st in problems),
         client_findings=client_findings,
         alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth,
         KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
@@ -409,6 +449,8 @@ def probe(probe_id: int):
         reports=report_service.search(probe_id=probe_id, limit=10),
         client_findings=finding_service.search(probe_id=probe_id, since=repo.now() - 30 * 86400, limit=20),
         excluded_checks=repo.excluded_checks(p),
+        pending={r["check_id"] for r in q("SELECT check_id FROM probe_commands WHERE probe_id = ? AND delivered_at IS NULL",
+                                          (probe_id,))},
     )
 
 
@@ -425,7 +467,7 @@ def probe_check_remove(probe_id: int, check_id: int):
         flash(f"Messung „{c['name']}“ gelöscht.", "ok")
     else:
         repo.audit(user, "check.exclude", f"check:{check_id}", f"{c['name']} für {p['hostname']} entfernt")
-        flash(f"Messung „{c['name']}“ für {p['hostname']} entfernt. Andere Probes messen weiter.", "ok")
+        flash(f"Messung „{c['name']}“ für {p['hostname']} entfernt. Andere PCs messen weiter.", "ok")
     _regen_rules()
     return redirect(url_for("web.probe", probe_id=probe_id) + "#messungen")
 
@@ -531,7 +573,8 @@ def hop_view(probe_id: int, check_id: int, hop: int):
              (probe_id, check_id))
     ip = next((h["ip"] for h in json.loads(run["hops"]) if h["hop"] == hop), None) if run else None
     return render_template("target.html", probe=p, check=c, hop=hop, hop_ip=ip, ranges=list(vm.RANGES),
-                           windows=vm.STAT_WINDOWS, **_chart_reports(probe_id))
+                           windows=vm.STAT_WINDOWS, verdict=ping_verdict(probe_id, check_id, hop), others=[],
+                           **_chart_reports(probe_id))
 
 
 BW_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
@@ -703,8 +746,33 @@ def target(probe_id: int, check_id: int):
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?", (probe_id,)
     ) or abort(404)
     c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    others = [o for o in repo.checks_for_probe(p) if o["id"] != c["id"]]
     return render_template("target.html", probe=p, check=c, hop=None, hop_ip=None, ranges=list(vm.RANGES),
-                           windows=vm.STAT_WINDOWS, **_chart_reports(probe_id))
+                           windows=vm.STAT_WINDOWS, verdict=ping_verdict(probe_id, check_id), others=others,
+                           **_chart_reports(probe_id))
+
+
+def ping_verdict(probe_id: int, check_id: int, hop: int | None = None) -> dict:
+    """Ein Satz zur letzten Stunde in Alltagssprache: gut, auffällig oder schlecht – mit den Schwellen der Alarmregeln."""
+    try:
+        s = vm.ping_stats(probe_id, check_id, hop, windows=("1h",))["1h"]
+    except vm.VMError:
+        return {"cls": "none", "title": "Keine Bewertung", "text": "Messwerte sind gerade nicht abrufbar."}
+    med, loss = s.get("median"), s.get("loss")
+    if med is None and loss is None:
+        return {"cls": "none", "title": "Noch keine Werte", "text": "Für die letzte Stunde gibt es noch keine Messwerte."}
+    loss = loss or 0.0
+    if med is None or loss >= 99.5:
+        return {"cls": "bad", "title": "Schlecht",
+                "text": "Das Ziel hat in der letzten Stunde nicht geantwortet."}
+    thr = repo.graph_thresholds()
+    facts = f"In der letzten Stunde meist {fmt_ms(med)} Antwortzeit und {fmt_pct(loss)} Paketverlust."
+    if thr.get("loss_bad_pct") and loss >= thr["loss_bad_pct"]:
+        return {"cls": "bad", "title": "Schlecht",
+                "text": facts + " So viel Verlust stört Telefonate, Videokonferenzen und Downloads."}
+    if (thr.get("loss_warn_pct") and loss >= thr["loss_warn_pct"]) or (thr.get("lat_warn_ms") and med >= thr["lat_warn_ms"]):
+        return {"cls": "warn", "title": "Auffällig", "text": facts + " Verbindungen können zeitweise stocken."}
+    return {"cls": "ok", "title": "Gut", "text": facts}
 
 
 def _chart_reports(probe_id: int) -> dict:
@@ -723,6 +791,30 @@ def _chart_reports(probe_id: int) -> dict:
 
 
 # -- Alarme ---------------------------------------------------------------
+@bp.get("/graphen")
+@login_required()
+def graphs():
+    """Graphen finden: PC auswählen, dann eine Messung anklicken."""
+    probes = q("SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
+               "WHERE p.status = 'active' AND p.deregistered_at IS NULL ORDER BY s.name, p.hostname")
+    chosen = None
+    wanted = _int_param("probe")
+    if wanted is not None:
+        chosen = next((p for p in probes if p["id"] == wanted), None) or abort(404)
+    states = []
+    if probes:
+        live, _ = _live()
+        if chosen is None:
+            # ohne Auswahl: der erste PC mit Problemen, sonst der erste
+            all_states = checkstatus.overview(probes, live)
+            chosen = next((p for p in probes if any(st.problem for st in all_states[p["id"]])), probes[0])
+            states = all_states[chosen["id"]]
+        else:
+            paths, bandwidth = checkstatus.latest_runs([chosen["id"]])
+            states = checkstatus.probe_states(chosen, repo.checks_for_probe(chosen), live, paths, bandwidth)
+    return render_template("graphen.html", probes=probes, chosen=chosen, states=states)
+
+
 @bp.get("/alerts")
 @login_required()
 def alerts():
@@ -749,6 +841,9 @@ def alert_ack(event_id: int):
 @bp.get("/admin")
 @login_required("admin")
 def admin():
+    bereich = request.args.get("bereich", "")
+    if bereich not in ADMIN_SECTIONS:
+        return _admin_start()
     sites = q("SELECT * FROM sites ORDER BY name")
     probes = q("SELECT id, hostname, site_id FROM probes ORDER BY hostname")
     site_map = {s["id"]: s for s in sites}
@@ -768,7 +863,8 @@ def admin():
         (repo.now(),),
     )
     return render_template(
-        "admin.html", sites=sites, probes=probes, checks=checks, assignments=assignments, tokens=tokens,
+        "admin.html", bereich=bereich, sections=ADMIN_SECTIONS,
+        sites=sites, probes=probes, checks=checks, assignments=assignments, tokens=tokens,
         rules=list(repo.alert_rules().values()), users=q("SELECT * FROM users ORDER BY username"),
         intervals=repo.ALLOWED_INTERVALS, roles=ROLES, notify_settings=notify.get_settings(),
         probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]),
@@ -777,6 +873,61 @@ def admin():
         measure=settings_service.get(), measure_fields=settings_service.FIELDS,
         package=standardpaket.preview(current_app.config["PUBLIC_URL"]),
     )
+
+
+def _admin_start():
+    """Startseite der Einstellungen: die häufigen Aufgaben als Kacheln, mit kurzem Stand."""
+    n = notify.get_settings()
+    channels = [c for c, on in (("E-Mail", n.get("email_to")), ("Teams", n.get("teams_webhook_url"))) if on]
+    count = lambda sql: q1(sql)["n"]  # noqa: E731
+    return render_template(
+        "admin_start.html", channels=channels,
+        n_sites=count("SELECT COUNT(*) AS n FROM sites"),
+        n_probes=count("SELECT COUNT(*) AS n FROM probes WHERE status = 'active' AND deregistered_at IS NULL"),
+        n_checks=count("SELECT COUNT(*) AS n FROM checks"),
+        n_users=count("SELECT COUNT(*) AS n FROM users"),
+    )
+
+
+def _matrix_probes() -> list[dict]:
+    return q("SELECT p.id, p.hostname, p.site_id, p.kind, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
+             "WHERE p.status = 'active' AND p.deregistered_at IS NULL ORDER BY s.name, p.hostname")
+
+
+@bp.route("/admin/zuordnung", methods=["GET", "POST"])
+@login_required("admin")
+def assignment_matrix():
+    """Messungen zuordnen: welcher PC misst was – eine Tabelle mit Häkchen."""
+    probes = _matrix_probes()
+    order = list(PLAIN_KIND)
+    checks = sorted(q("SELECT * FROM checks"), key=lambda c: (order.index(c["type"]) if c["type"] in order else 9, c["name"]))
+    current = repo.assigned_probes(checks, probes)
+    if request.method == "POST":
+        changed, refused = [], []
+        for c in checks:
+            possible = {p["id"] for p in probes if repo.can_run(c, p)}
+            wanted = {pid for pid in possible if request.form.get(f"a-{c['id']}-{pid}")}
+            if wanted == current[c["id"]] & possible:
+                continue
+            if not wanted:
+                refused.append(c["name"])
+                continue
+            repo.set_check_probes(c["id"], wanted, [p for p in probes if p["id"] in possible])
+            changed.append(c["name"])
+        user = current_user()["username"]
+        for name in changed:
+            repo.audit(user, "check.assign", "", name)
+        if changed:
+            _regen_rules()
+            flash(f"Gespeichert: {', '.join(changed)}. Die PCs übernehmen die Änderung innerhalb weniger Minuten.", "ok")
+        if refused:
+            flash(f"Nicht geändert: {', '.join(refused)} – mindestens ein PC muss messen. "
+                  "Eine Messung, die niemand braucht, unter „Messungen anlegen und bearbeiten“ pausieren oder löschen.", "error")
+        if not changed and not refused:
+            flash("Keine Änderung.", "ok")
+        return redirect(url_for("web.assignment_matrix"))
+    return render_template("zuordnung.html", probes=probes, checks=checks, current=current, can_run=repo.can_run,
+                           check_types=checktypes.TYPES)
 
 
 @bp.post("/admin/standard-package")
@@ -789,13 +940,13 @@ def standard_package():
         scope_id = int(request.form.get("site_id", 0) or 0)
         if not q1("SELECT id FROM sites WHERE id = ?", (scope_id,)):
             flash("Bitte einen Standort auswählen.", "error")
-            return redirect(url_for("web.admin") + "#standardpaket")
+            return redirect(admin_url("standardpaket"))
     elif scope != "all":
         abort(400)
     keys = request.form.getlist("items")
     if not keys:
         flash("Bitte mindestens einen Check auswählen.", "error")
-        return redirect(url_for("web.admin") + "#standardpaket")
+        return redirect(admin_url("standardpaket"))
     created, skipped = standardpaket.apply(keys, scope, scope_id, current_app.config["PUBLIC_URL"])
     user = current_user()["username"]
     for cid, item in created:
@@ -806,7 +957,7 @@ def standard_package():
               "Die Probes übernehmen sie mit dem nächsten Heartbeat.", "ok")
     if skipped:
         flash("Nicht angelegt: " + "; ".join(skipped) + ".", "ok" if created else "error")
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.route("/admin/einrichtung", methods=["GET", "POST"])
@@ -902,7 +1053,7 @@ def measure_update():
         changed = settings_service.save(values)
         repo.audit(current_user()["username"], "measure.update", detail=", ".join(f"{k}={values[k]}" for k in changed))
         flash("Messeinstellungen gespeichert." if changed else "Keine Änderungen.", "ok")
-    return redirect(url_for("web.admin") + "#messung")
+    return redirect(admin_url("messung"))
 
 
 @bp.post("/admin/sites")
@@ -921,7 +1072,7 @@ def site_create():
         )
         repo.audit(current_user()["username"], "site.create", name)
         flash(f"Standort {name} angelegt.", "ok")
-    return redirect(url_for("web.admin") + "#standorte")
+    return redirect(admin_url("standorte"))
 
 
 @bp.post("/admin/sites/<int:site_id>/delete")
@@ -935,7 +1086,7 @@ def site_delete(site_id: int):
         repo.audit(current_user()["username"], "site.delete", f"site:{site_id}")
         flash("Standort gelöscht.", "ok")
         _regen_rules()
-    return redirect(url_for("web.admin") + "#standorte")
+    return redirect(admin_url("standorte"))
 
 
 @bp.post("/admin/tokens")
@@ -945,7 +1096,7 @@ def token_create():
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,))
     if s is None:
         flash("Bitte zuerst einen Standort anlegen und auswählen.", "error")
-        return redirect(url_for("web.admin") + "#enrollment")
+        return redirect(admin_url("enrollment"))
     days = min(max(int(request.form.get("days", 7) or 7), 1), 90)
     max_uses = min(max(int(request.form.get("max_uses", 1) or 1), 1), 500)
     token = repo.create_enrollment_token(site_id, max_uses, days, current_user()["username"],
@@ -1052,7 +1203,7 @@ def token_revoke(token_id: int):
     ex("UPDATE enrollment_tokens SET revoked = TRUE WHERE id = ?", (token_id,))
     repo.audit(current_user()["username"], "token.revoke", f"token:{token_id}")
     flash("Enrollment-Token widerrufen.", "ok")
-    return redirect(url_for("web.admin") + "#enrollment")
+    return redirect(admin_url("enrollment"))
 
 
 def _probe_names() -> dict[int, str]:
@@ -1175,7 +1326,7 @@ def check_create():
         repo.audit(user, "check.create", f"check:{check_id}", f"{ctype} {target} alle {interval} s")
         flash(f"Check {name} angelegt. Probes übernehmen ihn mit dem nächsten Heartbeat.", "ok")
     _regen_rules()
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.post("/admin/checks/<int:check_id>/toggle")
@@ -1185,7 +1336,7 @@ def check_toggle(check_id: int):
     ex("UPDATE checks SET enabled = ?, updated_at = ? WHERE id = ?", (not c["enabled"], repo.now(), check_id))
     repo.audit(current_user()["username"], "check.toggle", f"check:{check_id}", "aus" if c["enabled"] else "an")
     _regen_rules()
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.post("/admin/checks/<int:check_id>/delete")
@@ -1195,7 +1346,7 @@ def check_delete(check_id: int):
     repo.audit(current_user()["username"], "check.delete", f"check:{check_id}")
     flash("Check gelöscht.", "ok")
     _regen_rules()
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.post("/admin/rules")
@@ -1209,12 +1360,12 @@ def rules_update():
             for_s = int(request.form.get(f"for_{k}", r["for_s"]))
         except ValueError:
             flash(f"Ungültiger Wert bei {r['name']}.", "error")
-            return redirect(url_for("web.admin") + "#alarme")
+            return redirect(admin_url("alarme"))
         enabled = request.form.get(f"enabled_{k}") == "on"
         severity = request.form.get(f"severity_{k}", r["severity"])
         if severity not in ("warning", "critical", "info") or threshold < 0 or window_s < 0 or for_s < 0:
             flash(f"Ungültiger Wert bei {r['name']}.", "error")
-            return redirect(url_for("web.admin") + "#alarme")
+            return redirect(admin_url("alarme"))
         ex(
             "UPDATE alert_rules SET threshold = ?, window_s = ?, for_s = ?, severity = ?, enabled = ?, updated_at = ? "
             "WHERE id = ?",
@@ -1223,7 +1374,7 @@ def rules_update():
     repo.audit(current_user()["username"], "rules.update")
     _regen_rules()
     flash("Alarmregeln gespeichert und an vmalert übergeben.", "ok")
-    return redirect(url_for("web.admin") + "#alarme")
+    return redirect(admin_url("alarme"))
 
 
 @bp.post("/admin/users")
@@ -1246,7 +1397,7 @@ def user_create():
         )
         repo.audit(current_user()["username"], "user.create", username, role)
         flash(f"Benutzer {username} angelegt.", "ok")
-    return redirect(url_for("web.admin") + "#benutzer")
+    return redirect(admin_url("benutzer"))
 
 
 @bp.post("/admin/users/<int:user_id>/delete")
@@ -1259,7 +1410,7 @@ def user_delete(user_id: int):
         ex("DELETE FROM users WHERE id = ?", (user_id,))
         repo.audit(current_user()["username"], "user.delete", u["username"])
         flash(f"Benutzer {u['username']} gelöscht.", "ok")
-    return redirect(url_for("web.admin") + "#benutzer")
+    return redirect(admin_url("benutzer"))
 
 
 @bp.get("/admin/audit")
@@ -1301,7 +1452,7 @@ def notify_update():
     if errors:
         for e in errors:
             flash(e, "error")
-        return redirect(url_for("web.admin") + "#benachrichtigungen")
+        return redirect(admin_url("benachrichtigungen"))
     notify.save_settings(values)
     changed = [k for k in notify.FIELDS if values[k] != current.get(k, "")]
     shown = ", ".join("smtp_password" if k in notify.SECRET_FIELDS else f"{k}={values[k]}" for k in changed)
@@ -1312,7 +1463,7 @@ def notify_update():
     except OSError as exc:
         log.error("Alertmanager-Konfiguration nicht geschrieben: %s", exc)
         flash("Gespeichert, aber die Alertmanager-Datei konnte nicht geschrieben werden (siehe Log).", "error")
-    return redirect(url_for("web.admin") + "#benachrichtigungen")
+    return redirect(admin_url("benachrichtigungen"))
 
 
 @bp.post("/admin/notify/test")
@@ -1324,4 +1475,4 @@ def notify_test():
         flash("Testnachricht ausgelöst – sie kommt nach etwa 30 Sekunden bei allen Empfängern an.", "ok")
     except notify.NotifyError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("web.admin") + "#benachrichtigungen")
+    return redirect(admin_url("benachrichtigungen"))

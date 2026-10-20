@@ -37,7 +37,8 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Standardpaket (0.4) | Ping, Traceroute, iperf3 und Speedtest mit einem Klick; Rollout-Anleitung [docs/ROLLOUT.md](docs/ROLLOUT.md) |
 | Deinstallation (0.4) | Probe meldet sich am Server ab, alle Firewall-Regeln und das Token werden entfernt; Server Windows/Linux (`deploy/uninstall.sh`) mit Prüfung auf offene Ports |
 | Tray-Symbol (0.6) | Symbol neben der Uhr auf Clients und Windows-Server: Problem melden, Über, Beenden ([docs/STOERUNGSMELDUNGEN.md](docs/STOERUNGSMELDUNGEN.md)) |
-| Geführte Einrichtung (0.7) | Verwaltung › Probes einrichten: Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten, mit Standards vorbelegt |
+| Einfache Oberfläche (0.8.4) | Übersicht mit Ampel, Seite „Graphen“, Messungen als Kacheln mit Bewertung in Klartext, Einstellungen als Kacheln, „Messungen zuordnen“ als Tabelle mit Häkchen |
+| Geführte Einrichtung (0.7) | Einstellungen › PCs hinzufügen: Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten, mit Standards vorbelegt |
 | Kurzausfälle (0.8) | Ziel und WAN gelten ab 5 s ohne Antwort als gestört, sekundengenaue Dauer in der Ausfallübersicht |
 | Client-Hinweise (0.8) | Probe erkennt Kabel getrennt, ausgeschaltete Netzwerkkarte, Link-Geschwindigkeit, Treiberfehler, DHCP/Gateway, Paketfehler – Sprechblase mit Lösung auf dem PC, Anzeige im Web-UI; ab 0.8.4 auch auf dem Windows-Server ([docs/CLIENT-HINWEISE.md](docs/CLIENT-HINWEISE.md)) |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |

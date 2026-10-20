@@ -8,25 +8,86 @@
 <h1>Übersicht</h1>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
 
-<section class="cards stats" aria-label="Kennzahlen">
-  <div class="card stat"><span class="num">{{ sites|length }}</span><span>Standorte</span></div>
-  <div class="card stat"><span class="num">{{ probes|selectattr('status','equalto','active')|list|length }}</span><span>Probes aktiv</span></div>
-  <div class="card stat {{ 'bad' if alerts else '' }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></div>
-  <a class="card stat {{ 'bad' if problems or offline else '' }}" href="#probleme"><span class="num">{{ problems|length + offline|length }}</span><span>Messungen mit Problemen</span></a>
+{% set active_findings = client_findings|selectattr('state', 'equalto', 'active')|rejectattr('severity', 'equalto', 'info')|list %}
+{% set n_issues = offline|length + problems|length + active_findings|length %}
+{% set bad = offline or problems_bad or active_findings|selectattr('severity', 'equalto', 'critical')|list %}
+{% set active_probes = probes|selectattr('status', 'equalto', 'active')|rejectattr('deregistered_at')|list %}
+<section class="status-banner {{ ('bad' if bad else 'warn') if n_issues else 'ok' }}" aria-labelledby="status-title">
+  <span class="status-icon" aria-hidden="true">{{ '!' if n_issues else '✓' }}</span>
+  <div>
+    {% if not active_probes %}
+    <h2 id="status-title">Noch keine PCs</h2>
+    <p>Sobald Wachtl auf den ersten PCs installiert ist, sehen Sie hier, ob alles in Ordnung ist.
+      {% if has_role(user, 'admin') %}<a href="{{ url_for('web.setup_wizard') }}">PCs hinzufügen</a>{% endif %}</p>
+    {% elif not n_issues %}
+    <h2 id="status-title">Alles in Ordnung</h2>
+    <p>Alle {{ active_probes|length }} PCs melden sich und ihre Messungen laufen ohne Auffälligkeiten.{% if alerts %} Es gibt aber
+      <a href="{{ url_for('web.alerts') }}">{{ alerts|length }} aktive{{ 'n' if alerts|length == 1 }} Alarm{{ 'e' if alerts|length != 1 }}</a>.{% endif %}</p>
+    {% else %}
+    <h2 id="status-title">{{ n_issues }} {{ 'Problem' if n_issues == 1 else 'Probleme' }}</h2>
+    <ul>
+      {% for p in offline[:5] %}<li><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> {% if p.last_seen %}meldet sich nicht mehr (letzter Kontakt {{ p.last_seen|ago }}){% else %}hat sich noch nie gemeldet{% endif %} – ausgeschaltet oder ohne Netzwerk?</li>{% endfor %}
+      {% for f in active_findings[:5] %}<li><a href="{{ url_for('web.probe', probe_id=f.probe_id) }}">{{ f.probe_name }}</a>: {{ f.title }}</li>{% endfor %}
+      {% for p, st in problems[:5] %}<li><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>: <a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> – {{ st.detail or st.label }}</li>{% endfor %}
+    </ul>
+    {% if offline|length > 5 or active_findings|length > 5 or problems|length > 5 %}<p class="muted">Alle Einzelheiten stehen unten unter „Alle Details“.</p>{% endif %}
+    {% if alerts %}<p><a href="{{ url_for('web.alerts') }}">{{ alerts|length }} aktive{{ 'n' if alerts|length == 1 }} Alarm{{ 'e' if alerts|length != 1 }} ansehen</a></p>{% endif %}
+    {% endif %}
+  </div>
 </section>
 
+<div class="quick">
+  <a class="button primary" href="{{ url_for('web.graphs') }}">Graphen ansehen</a>
+  <a class="button" href="{{ url_for('web.outages_view') }}">Ausfälle der letzten Tage</a>
+  {% if has_role(user, 'admin') %}<a class="button" href="{{ url_for('web.setup_wizard') }}">PCs hinzufügen</a>
+  <a class="button" href="{{ url_for('web.assignment_matrix') }}">Messungen zuordnen</a>{% endif %}
+</div>
+
+<h2>Standorte und PCs</h2>
+{% if sites %}
+<p class="muted">Grün: alles in Ordnung · Gelb: auffällig · Rot: gestört oder offline. Ein Klick auf einen PC zeigt seine Messungen.</p>
+<div class="cards">
+  {% for s in sites %}
+  {% set sp = probes|selectattr('site_id', 'equalto', s.id)|list %}
+  <section class="site-block" aria-labelledby="site-{{ s.id }}">
+    <h3 id="site-{{ s.id }}"><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a>{% if s.customer_no %} <span class="muted small">· {{ s.customer_no }}</span>{% endif %}</h3>
+    {% if sp %}
+    <ul class="pc-list">
+      {% for p in sp %}<li><a class="{{ light[p.id] }}" href="{{ url_for('web.probe', probe_id=p.id) }}"><span class="dot {{ {'bad': 'down', 'off': 'off'}.get(light[p.id], light[p.id]) }}"></span>{{ p.hostname }}<span class="sr-only"> ({{ {'ok': 'in Ordnung', 'warn': 'auffällig', 'bad': 'gestört', 'off': 'deaktiviert'}[light[p.id]] }})</span></a></li>{% endfor %}
+    </ul>
+    {% else %}<p class="muted small">Noch keine PCs an diesem Standort.</p>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.setup_wizard') }}">PCs hinzufügen</a>{% endif %}</p>{% endif %}
+
+<h2 id="meldungen">Meldungen von Benutzern</h2>
+{% if recent_reports %}
+<p class="muted">Offene Meldungen von Benutzern aus den letzten 7 Tagen{% if recent_reports_total > recent_reports|length %} – die neuesten {{ recent_reports|length }} von {{ recent_reports_total }}{% endif %}.
+  <a href="{{ url_for('web.reports_view') }}">Alle Meldungen ansehen</a></p>
+{{ report_table(recent_reports, show_site=True, show_status=False) }}
+{% else %}<p class="muted">Keine offenen Meldungen in den letzten 7 Tagen. <a href="{{ url_for('web.reports_view', status='all') }}">Alle Meldungen ansehen</a></p>{% endif %}
+
+<h2 id="hinweise">Hinweise von PCs</h2>
+{% if client_findings %}
+<p class="muted">Was Wachtl auf den PCs selbst erkannt hat (Netzwerkkarte, Kabel, Treiber, DHCP) – aktive und die der letzten 24 Stunden.</p>
+{{ findings_table(client_findings) }}
+{% else %}<p class="muted">Keine Hinweise von PCs in den letzten 24 Stunden.</p>{% endif %}
+
+<details class="more" id="details">
+<summary>Alle Details</summary>
 <h2 id="probleme">Messungen mit Problemen</h2>
 {% if problems or offline %}
 <p class="muted">Alle Messungen, die gerade fehlschlagen, auffällig sind oder ausbleiben – Ping, Pfad, iperf3 und WAN.</p>
 <table>
-  <thead><tr><th>Zustand</th><th>Probe</th><th>Art</th><th>Check</th><th>Problem</th><th>Letztes Ergebnis</th></tr></thead>
+  <thead><tr><th>Zustand</th><th>PC</th><th>Art</th><th>Messung</th><th>Problem</th><th>Letztes Ergebnis</th></tr></thead>
   <tbody>
   {% for p in offline %}
     <tr>
       <td><span class="dot down"></span> offline</td>
       <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
-      <td>Probe</td><td>–</td>
-      <td>Kein Heartbeat – keine der Messungen dieser Probe läuft</td>
+      <td>PC</td><td>–</td>
+      <td>Kein Heartbeat – der PC meldet sich nicht, keine seiner Messungen läuft</td>
       <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
     </tr>
   {% endfor %}
@@ -43,19 +104,6 @@
   </tbody>
 </table>
 {% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
-
-<h2 id="hinweise">Hinweise von PCs</h2>
-{% if client_findings %}
-<p class="muted">Was die Probes auf ihrem PC selbst erkannt haben (Netzwerkkarte, Kabel, Treiber, DHCP) – aktive und die der letzten 24 Stunden.</p>
-{{ findings_table(client_findings) }}
-{% else %}<p class="muted">Keine Hinweise von PCs in den letzten 24 Stunden.</p>{% endif %}
-
-<h2 id="meldungen">Störungsmeldungen</h2>
-{% if recent_reports %}
-<p class="muted">Offene Meldungen von Benutzern aus den letzten 7 Tagen{% if recent_reports_total > recent_reports|length %} – die neuesten {{ recent_reports|length }} von {{ recent_reports_total }}{% endif %}.
-  <a href="{{ url_for('web.reports_view') }}">Alle Meldungen ansehen</a></p>
-{{ report_table(recent_reports, show_site=True, show_status=False) }}
-{% else %}<p class="muted">Keine offenen Meldungen in den letzten 7 Tagen. <a href="{{ url_for('web.reports_view', status='all') }}">Alle Meldungen ansehen</a></p>{% endif %}
 
 <h2>Aktive Alarme</h2>
 {% if alerts %}
@@ -74,23 +122,10 @@
 </table>
 {% else %}<p class="muted">Keine aktiven Alarme.</p>{% endif %}
 
-<h2>Standorte</h2>
-{% if sites %}
-<div class="cards">
-  {% for s in sites %}
-  <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}">
-    <div><strong>{{ s.name }}</strong>{% if s.customer_no %} <span class="muted">· {{ s.customer_no }}</span>{% endif %}</div>
-    <span>{{ site_stats[s.id].online }} / {{ site_stats[s.id].probes }} Probes online</span>
-    {% if site_stats[s.id].problems %}<span class="down-t small">{{ site_stats[s.id].problems }} Messungen mit Problemen</span>{% endif %}
-  </a>
-  {% endfor %}
-</div>
-{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.setup_wizard') }}">Geführt einrichten</a>{% endif %}</p>{% endif %}
-
-<h2>Probes</h2>
+<h2>Alle PCs</h2>
 {% if probes %}
 <table>
-  <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
+  <thead><tr><th>Status</th><th>PC</th><th>Standort</th><th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
   <tbody>
   {% for p in probes %}
     {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
@@ -113,25 +148,5 @@
 </table>
 {% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
-<h2 id="bandbreite">Bandbreite</h2>
-{% if bandwidth %}
-<table>
-  <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>Art</th><th>Download</th><th>Upload</th><th>Letzte Messung</th></tr></thead>
-  <tbody>
-  {% for p, st in bandwidth %}
-    <tr>
-      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
-      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
-      <td>{{ KIND_LABELS[st.kind] }}</td>
-      {% for d in ('down', 'up') %}
-        {% set r = st.values[d] %}
-        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error }}">Fehler</span>{% elif r %}{{ r.mbps|mbps }}{% else %}–{% endif %}</td>
-      {% endfor %}
-      <td>{{ st.ts|ago if st.ts else st.detail }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}<p class="muted">Keine Bandbreiten-Checks. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung anlegen</a>.{% endif %}</p>{% endif %}
+</details>
 {% endblock %}

@@ -3,15 +3,21 @@
 {% from "_reports.html" import report_table with context %}
 {% block content %}
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
-  {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
+  {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Messung{% endif %}</nav>
 {% if hop %}
 <h1>Hop {{ hop }} <span class="muted">· {{ hop_ip or 'keine Antwort' }}</span></h1>
 <p class="muted">Auf dem Pfad zu {{ check.target }} (<a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">{{ check.name }}</a>) · Ping alle {{ check.interval_s }} s. Verlust nur an diesem Hop, aber nicht an späteren, ist meist ICMP-Drosselung des Routers.</p>
 {% set q = {'hop': hop} %}
 {% else %}
 <h1>{{ check.name }} <span class="muted">· {{ check.target }}</span></h1>
-<p class="muted">{{ CHECK_ROLES[check.role] }} · Ping alle {{ check.interval_s }} s · Timeout {{ check.timeout_ms }} ms</p>
+<p class="muted">{{ CHECK_ROLES[check.role] }} · Ping alle {{ check.interval_s }} s · Timeout {{ check.timeout_ms }} ms · gemessen von <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a></p>
 {% set q = {} %}
+{% endif %}
+
+<p class="verdict {{ verdict.cls }}"><strong>{{ verdict.title }}.</strong> {{ verdict.text }}</p>
+{% if others %}
+<nav class="subnav" aria-label="Weitere Messungen dieses PCs"><span class="muted">Weitere Messungen:</span>
+  {% for o in others %}<a href="{{ check_url(probe, o) }}">{{ o.name }}</a>{% endfor %}</nav>
 {% endif %}
 
 {% if at %}<p class="flash warn">Der Graph zeigt den Zeitraum um die Störungsmeldung vom {{ at|dt }}.
@@ -39,6 +45,17 @@
   <p id="chart-error" class="flash error" hidden></p>
 </div>
 
+<details class="help">
+  <summary>So lesen Sie den Graphen</summary>
+  <ul>
+    <li>Die <strong>Linie</strong> zeigt die typische Antwortzeit in Millisekunden (ms) – je niedriger, desto besser. Im Firmennetz sind wenige ms üblich, ins Internet meist unter 30 ms.</li>
+    <li>Die <strong>Farbe der Linie</strong> zeigt verlorene Pakete: grün = keine, je röter, desto mehr. Rote Striche unter der Zeitachse markieren Verluste.</li>
+    <li>Der <strong>graue Bereich</strong> zeigt, wie stark die Antwortzeiten schwanken. Breit und unruhig bedeutet: Gespräche und Videos können ruckeln.</li>
+    <li>Eine <strong>violette Linie</strong> markiert eine Störungsmeldung eines Benutzers – so sehen Sie, ob das Netz zu diesem Zeitpunkt auffällig war.</li>
+    <li>Oben wählen Sie den <strong>Zeitraum</strong>. Mit der Maus einen Bereich aufziehen vergrößert ihn.</li>
+  </ul>
+</details>
+
 <h2>Statistik</h2>
 <table id="stats">
   <thead><tr><th>Zeitraum</th><th>Min</th><th>Median</th><th>Durchschnitt</th><th>Max</th><th>Jitter</th><th>Verlust</th></tr></thead>
@@ -54,7 +71,7 @@
 </ul>
 
 {% if chart_reports %}
-<h2 id="meldungen">Störungsmeldungen dieser Probe</h2>
+<h2 id="meldungen">Störungsmeldungen dieses PCs</h2>
 <p class="muted">Im Graph als senkrechte Markierung zum gemeldeten Zeitpunkt. Die neuesten Meldungen der letzten 30 Tage:</p>
 {{ report_table(chart_reports, show_probe=False) }}
 {% endif %}

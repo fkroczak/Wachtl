@@ -130,7 +130,7 @@ class StandardPackageTest(AppTestCase):
         n = q1("SELECT COUNT(*) AS n FROM checks")["n"]
         self.client.post("/admin/standard-package", data={"csrf_token": tok, "scope": "all", "items": keys})
         self.assertEqual(q1("SELECT COUNT(*) AS n FROM checks")["n"], n)
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?bereich=messungen").get_data(as_text=True)
         self.assertIn("schon vorhanden", html)
         # alle angelegten Checks sind gültig für die Probe-Konfiguration
         probe = self.enroll("PC-02")

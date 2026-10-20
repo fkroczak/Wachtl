@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Graphen{% endblock %}
+{% from "_measure.html" import measure_tiles with context %}
+{% block content %}
+<h1>Graphen</h1>
+{% if not probes %}
+<p class="muted">Noch keine PCs – es gibt noch nichts zu zeigen.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.setup_wizard') }}">PCs hinzufügen</a>{% endif %}</p>
+{% else %}
+<p class="lead">PC wählen, dann eine Messung anklicken – der Graph zeigt ihren Verlauf.</p>
+<form method="get" class="picker">
+  <label for="graph-probe">PC
+    <select name="probe" id="graph-probe">
+      {% for site in probes|groupby('site_name') %}
+      <optgroup label="{{ site.grouper }}">
+        {% for p in site.list %}<option value="{{ p.id }}" {{ 'selected' if p.id == chosen.id }}>{{ p.hostname }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+  </label>
+  <button class="primary">Anzeigen</button>
+</form>
+
+<h2>Messungen von <a href="{{ url_for('web.probe', probe_id=chosen.id) }}">{{ chosen.hostname }}</a></h2>
+<p class="muted">Standort <a href="{{ url_for('web.site', site_id=chosen.site_id) }}">{{ chosen.site_name }}</a> ·
+  {% if probe_online(chosen) %}<span class="dot ok"></span> online{% else %}<span class="dot down"></span> offline, letzter Kontakt {{ chosen.last_seen|ago }}{% endif %}</p>
+{% if states %}{{ measure_tiles(chosen, states) }}
+{% else %}<p class="muted">Diesem PC sind keine Messungen zugeordnet.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.assignment_matrix') }}">Messungen zuordnen</a>{% endif %}</p>{% endif %}
+{% endif %}
+{% endblock %}

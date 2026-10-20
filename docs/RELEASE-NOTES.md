@@ -6,6 +6,13 @@
 ## Neu in 0.8.4
 
 - **Hinweis „Netzwerkkarte ausgeschaltet“**: Wird die Netzwerkkarte oder das WLAN in Windows deaktiviert und hat der PC dadurch kein Netzwerk mehr, erscheint neben der Uhr sofort eine Sprechblase mit Lösungsvorschlag (Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen › „Aktivieren“). Nach dem Einschalten meldet Wachtl „Netzwerkkarte wieder eingeschaltet“. Übernimmt eine andere Verbindung, geht der Hinweis nur als Info an den Server. Eine stillgelegte Zweitkarte bleibt still.
+- **Einfachere Oberfläche** – auch für Menschen ohne IT-Kenntnisse:
+  - **Übersicht mit Ampel**: oben steht in einem Satz, ob alles in Ordnung ist, sonst die Probleme mit Link zum betroffenen PC. Darunter die Standorte mit ihren PCs (grün, gelb, rot). Die bisherigen Tabellen stehen eingeklappt unter „Alle Details“.
+  - **Neue Seite „Graphen“**: PC wählen, Messung anklicken – fertig.
+  - **PC-Seite**: oben der Zustand in Klartext mit Lösungsvorschlag, darunter jede Messung als Kachel mit aktuellem Wert und Link zum Graph. Steckbrief, Aktionen und Einstellungen sind eingeklappt.
+  - **Graph-Seite**: Bewertung der letzten Stunde (gut, auffällig, schlecht) in einem Satz, Lesehilfe „So lesen Sie den Graphen“ und Links zu den anderen Messungen des PCs.
+  - **Einstellungen statt Verwaltung**: eine Startseite mit Kacheln (PCs hinzufügen, Messungen zuordnen, Benachrichtigungen …) statt einer langen Seite; jeder Bereich hat eine eigene Seite.
+  - **Messungen zuordnen**: eine Tabelle PCs × Messungen mit Häkchen. Wachtl wählt dabei die einfachste Zuweisung (alle PCs, ein Standort, alle außer einzelnen oder einzelne PCs).
 - **Auch der Windows-Server prüft seine Netzwerkkarten**: Kabel getrennt, Netzwerkkarte ausgeschaltet, Treiberfehler, DHCP und die übrigen Client-Hinweise gibt es jetzt auch für den Wachtl-Server unter Windows – als Sprechblase am Tray-Symbol des Servers und im Web-UI bei der Server-Probe. Dafür liegt `wachtl-probe.exe` auch im Programmordner des Servers; sie läuft dort nur als Hilfsprozess der Server-Probe, ohne eigenen Dienst und ohne offenen Port.
 - **Schneller erkannt**: Verschwindet eine Netzwerkkarte oder taucht sie wieder auf, liest die Probe den Geräte-Manager sofort neu statt nach bis zu 30 s.
 

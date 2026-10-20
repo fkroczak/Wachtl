@@ -208,7 +208,8 @@ class PageSemanticsTest(AppTestCase):
         pid = self.probe["probe_id"]
         return ["/", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
-                "/admin", "/admin/audit", "/account", "/meldungen", "/meldungen?status=all",
+                "/admin", "/admin/audit", "/account", "/admin/zuordnung", "/graphen", f"/graphen?probe={pid}",
+                *[f"/admin?bereich={b}" for b in ("messungen", "pcs", "standorte", "alarme", "benutzer", "erweitert")], "/meldungen", "/meldungen?status=all",
                 f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
 
     def test_all_pages_pass_lint(self):
@@ -252,7 +253,7 @@ class PageSemanticsTest(AppTestCase):
         self.assertIn(f'href="/probes/{pid}/checks/1" aria-label="8.8.8.8 von PC-EMPFANG"',
                       self.client.get("/outages").get_data(as_text=True))
         self.assertIn('<a href="/admin/checks/1/edit">check:1</a>', self.client.get("/admin/audit").get_data(as_text=True))
-        admin = self.client.get("/admin").get_data(as_text=True)
+        admin = self.client.get("/admin?bereich=standorte").get_data(as_text=True)
         self.assertIn('<td><a href="/sites/1">Zentrale</a></td><td>', admin)
 
     def test_navigation_marks_current_page(self):

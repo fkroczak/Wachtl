@@ -95,17 +95,17 @@ Ausfälle werden ab der eingestellten Dauer zuverlässig erkannt, auch wenn sie 
 Beginn und Dauer sekundengenau, nachgerechnet aus den 1-s-Messwerten. Der Alarm selbst kommt bis zu 45 s nach dem
 Ausfall (Auswertetakt plus 30 s Wartezeit auf spät hochgeladene Messwerte).
 
-Schwellwerte, Dauer und Stufe sind unter **Verwaltung › Alarmregeln** änderbar. Empfehlungen:
+Schwellwerte, Dauer und Stufe sind unter **Einstellungen › Benachrichtigungen › Ab wann ein Alarm kommt** änderbar. Empfehlungen:
 
 - Pro Standort mindestens zwei Probes, damit „nur dieser PC“ und „ganzer Standort“ unterscheidbar sind.
 - Für Telefonie-Standorte die Latenz-Warnung auf 50 ms und den Paketverlust auf 1 % senken.
 - WLAN-Clients als Probe nur gezielt einsetzen – sie erzeugen naturgemäß mehr Jitter und Verlust.
 - Bestätigen schaltet einen Alarm für 1 h bis 3 Tage stumm; danach meldet er sich erneut, falls er noch besteht.
-- Empfänger (E-Mail, Teams) unter **Verwaltung › Benachrichtigungen**; die Testnachricht kommt nach etwa 30 Sekunden an.
+- Empfänger (E-Mail, Teams) unter **Einstellungen › Benachrichtigungen**; die Testnachricht kommt nach etwa 30 Sekunden an.
 
 ## Beispielkonfiguration
 
-Im MVP werden Checks im Web-UI angelegt (Verwaltung › Checks). Die Probe erhält daraus diese Konfiguration (`GET /api/probe/v1/config`):
+Im MVP werden Checks im Web-UI angelegt (Einstellungen › Messungen anlegen und bearbeiten). Die Probe erhält daraus diese Konfiguration (`GET /api/probe/v1/config`):
 
 ```json
 {

@@ -46,7 +46,7 @@ Am Ende stehen URL, **Admin-Passwort** (nur einmal angezeigt) und **SPKI-Pin** a
 
 ## 4. Alarm-Empfänger eintragen
 
-Im Web-UI unter **Verwaltung › Benachrichtigungen**: E-Mail (SMTP) und/oder Microsoft-Teams-Webhook eintragen,
+Im Web-UI unter **Einstellungen › Benachrichtigungen**: E-Mail (SMTP) und/oder Microsoft-Teams-Webhook eintragen,
 speichern, **Testnachricht senden**. Die Werte `ALERT_EMAIL_*`, `SMTP_*` und `TEAMS_WEBHOOK_URL` in `.env` werden
 nur bei der Ersteinrichtung einmalig übernommen.
 
@@ -54,10 +54,10 @@ nur bei der Ersteinrichtung einmalig übernommen.
 
 1. `https://wachtl.kunde.local` öffnen. Die Browserwarnung ist bei selbstsignierten Zertifikaten normal; dauerhaft beheben, indem `deploy/certs/wachtl.crt` per GPO als vertrauenswürdige Stammzertifizierungsstelle verteilt wird.
 2. Mit `admin` und dem Passwort aus Schritt 3 anmelden, unter **admin › Konto** das Passwort ändern.
-3. **Verwaltung › Standorte**: Standorte anlegen (Name, Kundennummer).
-4. **Verwaltung › Standardpaket**: mit einem Klick Ping, Traceroute, iperf3 und Speedtest für alle Probes anlegen (Schritt-für-Schritt: [ROLLOUT.md](ROLLOUT.md)). Eigene Ziele (Server, Firewall, Cloud-Dienste) unter **Verwaltung › Checks** ergänzen, global, je Standort oder je Probe.
-5. **Verwaltung › Probes registrieren**: Enrollment-Token erzeugen; die Seite zeigt den fertigen Installationsbefehl für die Probes.
-6. **Verwaltung › Benutzer**: Operatoren (dürfen Alarme bestätigen) und Nur-lesen-Konten anlegen.
+3. **Einstellungen › Standorte**: Standorte anlegen (Name, Kundennummer).
+4. **Einstellungen › Messungen anlegen und bearbeiten › Standardmessungen**: mit einem Klick Ping, Traceroute, iperf3 und Speedtest für alle Probes anlegen (Schritt-für-Schritt: [ROLLOUT.md](ROLLOUT.md)). Eigene Ziele (Server, Firewall, Cloud-Dienste) unter **Einstellungen › Messungen anlegen und bearbeiten** ergänzen, global, je Standort oder je Probe.
+5. **Einstellungen › Setup-Datei für PCs**: Enrollment-Token erzeugen; die Seite zeigt den fertigen Installationsbefehl für die Probes.
+6. **Einstellungen › Benutzer**: Operatoren (dürfen Alarme bestätigen) und Nur-lesen-Konten anlegen.
 
 ## Prüfen
 

@@ -15,7 +15,7 @@ automatisch (verzögert) und braucht keinen angemeldeten Benutzer.
 
 ## Installation: vorbelegtes Setup (empfohlen)
 
-Im Web-UI unter **Verwaltung › Probes registrieren** Standort wählen und **Setup herunterladen**.
+Im Web-UI unter **Einstellungen › Setup-Datei für PCs** Standort wählen und **Setup herunterladen**.
 Die Datei `WachtlSetup-<Standort>.exe` enthält alle Adressen des Servers (Namen und IP-Adressen), den SPKI-Pin
 und einen Token für die eingestellte Zahl PCs. Auf dem PC als Administrator starten, **Installieren** klicken – fertig.
 
@@ -24,7 +24,7 @@ und einen Token für die eingestellte Zahl PCs. Auf dem PC als Administrator sta
   Installation und später im Betrieb. Neue Adressen des Servers übernimmt sie automatisch.
 - Ist der Server bei der Installation gar nicht erreichbar (Standort offline, VPN aus), wird die Probe trotzdem
   installiert und meldet sich selbst an, sobald der Server erreichbar ist.
-- Welche Ziele gemessen werden, legt immer der Server fest (Verwaltung › Checks).
+- Welche Ziele gemessen werden, legt immer der Server fest (Einstellungen › Messungen anlegen und bearbeiten).
 
 Dasselbe Setup ohne Vorbelegung (`WachtlSetup-<Version>.exe`, Link ebenfalls unter „Probes registrieren“) fragt nach
 der Rolle (Probe ist Standard) und dann auf einer Seite nach Server, Pin, Token und optional Proxy.

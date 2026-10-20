@@ -6,6 +6,7 @@ import ipaddress
 import json
 import re
 import time
+from collections import defaultdict
 
 from .db import ex, ins, q, q1
 
@@ -302,6 +303,52 @@ def scope_label(scope: str, scope_id, sites: dict, probes: dict) -> str:
     if scope == "exclude_probe":
         return f"außer {probes.get(scope_id, {}).get('hostname', scope_id)}"
     return f"Probe {probes.get(scope_id, {}).get('hostname', scope_id)}"
+
+
+def can_run(check: dict, probe: dict) -> bool:
+    """Kann diese Probe den Check überhaupt messen? Die Server-Probe misst kein iperf3 gegen sich selbst."""
+    return not (probe.get("kind") == "server" and is_server_iperf(check))
+
+
+def assigned_probes(checks: list[dict], probes: list[dict]) -> dict[int, set[int]]:
+    """Je Check die Probes, denen er zugewiesen ist – wie checks_for_probe, aber auch für pausierte Checks."""
+    rows = defaultdict(list)
+    for a in q("SELECT check_id, scope, scope_id FROM check_assignments"):
+        rows[a["check_id"]].append(a)
+    result = {}
+    for c in checks:
+        assigns = rows[c["id"]]
+        excluded = {a["scope_id"] for a in assigns if a["scope"] == "exclude_probe"}
+        ids = set()
+        for p in probes:
+            if p["id"] in excluded or not can_run(c, p):
+                continue
+            if any(a["scope"] == "all" or (a["scope"] == "site" and a["scope_id"] == p["site_id"])
+                   or (a["scope"] == "probe" and a["scope_id"] == p["id"]) for a in assigns):
+                ids.add(p["id"])
+        result[c["id"]] = ids
+    return result
+
+
+def set_check_probes(check_id: int, wanted: set[int], probes: list[dict]) -> None:
+    """Zuweisung so setzen, dass genau ``wanted`` (aus ``probes``) misst – möglichst einfach ausgedrückt:
+    alle, ein Standort, alle außer einigen (neue PCs messen dann mit) oder einzelne PCs."""
+    universe = {p["id"] for p in probes}
+    wanted = wanted & universe
+    by_site = defaultdict(set)
+    for p in probes:
+        by_site[p["site_id"]].add(p["id"])
+    if wanted == universe:
+        rows = [("all", None)]
+    elif site_id := next((sid for sid, ids in by_site.items() if ids == wanted), None):
+        rows = [("site", site_id)]
+    elif len(wanted) * 2 > len(universe):
+        rows = [("all", None)] + [("exclude_probe", pid) for pid in sorted(universe - wanted)]
+    else:
+        rows = [("probe", pid) for pid in sorted(wanted)]
+    ex("DELETE FROM check_assignments WHERE check_id = ?", (check_id,))
+    for scope, scope_id in rows:
+        ins("INSERT INTO check_assignments (check_id, scope, scope_id) VALUES (?, ?, ?)", (check_id, scope, scope_id))
 
 
 def remove_check_from_probe(check_id: int, probe: dict) -> str:

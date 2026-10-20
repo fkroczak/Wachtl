@@ -43,7 +43,7 @@ des Servers (ohne Probe-Dienst). Die Server-Probe startet sie als `wachtl-probe.
 auf den PCs, je Änderung eine JSON-Zeile. Die Server-Probe zeigt die Hinweise über das Tray-Symbol des Servers
 (`GET /tray/v1/findings`) und trägt sie im Web-UI bei der Server-Probe ein. Endet der Prozess, startet die
 Server-Probe ihn nach 30 s neu (bei wiederholtem Absturz bis 10 min Abstand); seine offenen Hinweise gelten dann als
-„nicht mehr bestätigt“. Die Einstellungen unter Verwaltung › Messung › Client-Hinweise gelten auch für den Server.
+„nicht mehr bestätigt“. Die Einstellungen unter Einstellungen › Erweitert › Client-Hinweise gelten auch für den Server.
 
 ## Sprechblase auf dem PC
 
@@ -56,7 +56,7 @@ Server-Probe ihn nach 30 s neu (bei wiederholtem Absturz bis 10 min Abstand); se
 
 ## Einstellungen
 
-**Verwaltung › Messung › Client-Hinweise**
+**Einstellungen › Erweitert › Client-Hinweise**
 
 | Einstellung | Standard |
 |---|---|

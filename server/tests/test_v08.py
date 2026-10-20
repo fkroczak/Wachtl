@@ -256,11 +256,11 @@ class DefaultChecksAndRemoveTest(AppTestCase):
         self.assertNotIn(quad9, [c["id"] for c in cfg["checks"]])
         # Anzeige „für diese Probe entfernt“, Bearbeiten behält die Ausnahme
         html = self.client.get(f"/probes/{self.pa['id']}").get_data(as_text=True)
-        self.assertIn("Für diese Probe entfernt", html)
+        self.assertIn("Für diesen PC entfernt", html)
         c = q1("SELECT * FROM checks WHERE id = ?", (quad9,))
         repo.update_check(quad9, "Quad9", c["target"], c["role"], 1, 1000, "all", None, {})
         self.assertNotIn("Quad9", self.names(self.pa))
-        self.assertIn("außer PC-A", self.client.get("/admin").get_data(as_text=True))
+        self.assertIn("außer PC-A", self.client.get("/admin?bereich=messungen").get_data(as_text=True))
         # wieder aufnehmen
         self.client.post(f"/probes/{self.pa['id']}/checks/{quad9}/restore", data={"csrf_token": self.session_csrf()})
         self.assertIn("Quad9", self.names(self.pa))

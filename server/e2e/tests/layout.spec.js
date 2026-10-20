@@ -74,6 +74,7 @@ test.describe("Auto-Refresh", () => {
   test("verwirft keine Eingaben auf Seiten mit Formular", async ({ page }) => {
     await page.clock.install();
     await page.goto(`/probes/${ids.probe}`);
+    await page.getByText("Technische Details, Aktionen und Einstellungen").click();   // Einstellungen sind eingeklappt
     const field = page.getByLabel("Adresse für andere Probes");
     await field.fill("10.0.0.99");
     await page.getByRole("heading", { level: 1 }).click();               // Fokus weg, Formular bleibt geändert
