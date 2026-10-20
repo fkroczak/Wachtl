@@ -3,6 +3,12 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.8.4
+
+- **Passwort vergessen?**: Die Anmeldeseite verlinkt eine Hilfe. Normale Benutzer bitten einen Admin; der setzt das Passwort unter Verwaltung › Benutzer › **Passwort zurücksetzen** neu (hebt auch eine Sperre auf, steht im Audit-Log). Für das Admin-Konto zeigt die Seite den Weg passend zum Server.
+- **Admin-Passwort zurücksetzen**: Windows-Server mit Startmenü-Eintrag **Wachtl › Admin-Passwort zurücksetzen**, Linux mit `sudo /opt/wachtl/deploy/passwort.sh`.
+- **Passwort frei wählbar**: keine Mindestlänge mehr, nur nicht leer.
+
 ## Neu in 0.8.3
 
 - **Messungen ab Werk**: Eine neue Installation legt für alle Probes Ping auf Gateway, Cloudflare, Google und Quad9 (1 s), Ping auf den Wachtl-Server (5 s), Traceroute ins Internet und zum Server und einen Speedtest alle 6 Stunden an. iperf3 bleibt im Standardpaket wählbar. Bestehende Installationen behalten ihre Checks.
