@@ -179,6 +179,10 @@ section { margin-bottom: 1.5rem; }
   border-radius: var(--radius); padding: 1.8rem; border-top: 6px solid var(--accent); }
 .login .wordmark { display: block; width: 230px; height: auto; margin: 0 auto 0.2rem; }
 .login .tagline { text-align: center; margin: 0 0 1.4rem; color: var(--text-muted); }
+.login .forgot { text-align: center; margin: 1rem 0 0; font-size: 0.9rem; }
+.login pre { white-space: pre-wrap; word-break: break-all; font-size: 0.82rem; }
+details.pw-reset { display: inline-block; margin-right: 0.8rem; }
+details.pw-reset summary { cursor: pointer; color: var(--accent); }
 .wordmark-dark { display: none !important; }
 @media (prefers-color-scheme: dark) { .wordmark-light { display: none !important; } .wordmark-dark { display: block !important; } }
 

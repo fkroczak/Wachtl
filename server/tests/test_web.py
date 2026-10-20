@@ -32,6 +32,38 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 200)  # Formular erneut, nicht angemeldet
         self.assertIn("gesperrt", r.get_data(as_text=True))
 
+    def test_password_forgot_page_public_and_linked(self):
+        self.assertIn("/passwort-vergessen", self.client.get("/login").get_data(as_text=True))
+        r = self.client.get("/passwort-vergessen")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("create-user admin", r.get_data(as_text=True))
+
+    def test_admin_resets_password_and_unlocks(self):
+        self.make_user()
+        self.make_user("leser", "readonly")
+        for _ in range(5):
+            self.login("leser", password="falsch-falsch-falsch")
+        self.login()
+        tok = self.session_csrf()
+        uid = q1("SELECT id FROM users WHERE username = 'leser'")["id"]
+        r = self.client.post(f"/admin/users/{uid}/password", data={"password": "kurz", "csrf_token": tok},
+                             follow_redirects=True)
+        self.assertIn("mindestens 12", r.get_data(as_text=True))
+        self.client.post(f"/admin/users/{uid}/password", data={"password": "neues-passwort-123", "csrf_token": tok})
+        self.assertIsNotNone(q1("SELECT id FROM audit_log WHERE action = 'user.password_reset'"))
+        self.client.post("/logout", data={"csrf_token": tok})
+        self.login("leser", password="neues-passwort-123")
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_operator_cannot_reset_password(self):
+        self.make_user()
+        self.make_user("op", "operator")
+        self.login("op")
+        uid = q1("SELECT id FROM users WHERE username = 'admin'")["id"]
+        r = self.client.post(f"/admin/users/{uid}/password",
+                             data={"password": "neues-passwort-123", "csrf_token": self.session_csrf()})
+        self.assertEqual(r.status_code, 403)
+
     def test_readonly_cannot_open_admin(self):
         self.make_user("leser", "readonly")
         self.login("leser")

@@ -57,7 +57,8 @@ nur bei der Ersteinrichtung einmalig übernommen.
 3. **Verwaltung › Standorte**: Standorte anlegen (Name, Kundennummer).
 4. **Verwaltung › Standardpaket**: mit einem Klick Ping, Traceroute, iperf3 und Speedtest für alle Probes anlegen (Schritt-für-Schritt: [ROLLOUT.md](ROLLOUT.md)). Eigene Ziele (Server, Firewall, Cloud-Dienste) unter **Verwaltung › Checks** ergänzen, global, je Standort oder je Probe.
 5. **Verwaltung › Probes registrieren**: Enrollment-Token erzeugen; die Seite zeigt den fertigen Installationsbefehl für die Probes.
-6. **Verwaltung › Benutzer**: Operatoren (dürfen Alarme bestätigen) und Nur-lesen-Konten anlegen.
+6. **Verwaltung › Benutzer**: Operatoren (dürfen Alarme bestätigen) und Nur-lesen-Konten anlegen. Hat jemand sein
+   Passwort vergessen, setzt ein Admin es dort mit **Passwort zurücksetzen** neu (hebt auch eine Sperre auf).
 
 ## Prüfen
 
@@ -69,6 +70,9 @@ sudo docker compose exec app flask --app wachtl regen-rules   # Alarmregeln neu 
 ```
 
 ## Admin-Passwort vergessen
+
+Die Anmeldeseite verweist mit **Passwort vergessen?** hierher. Andere Benutzer setzt ein Admin im Web-UI zurück;
+für das Admin-Konto selbst:
 
 ```bash
 sudo docker compose exec app flask --app wachtl create-user admin --role admin

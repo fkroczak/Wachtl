@@ -219,8 +219,15 @@
     <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for u in users %}
       <tr><td>{{ u.username }}</td><td>{{ ROLE_LABELS[u.role] }}</td><td>{{ u.last_login|dt }}</td>
-        <td>{% if u.id != user.id %}<form method="post" action="{{ url_for('web.user_delete', user_id=u.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Benutzer {{ u.username }} löschen?">Löschen</button></form>{% endif %}</td></tr>
+        <td>{% if u.id != user.id %}<details class="pw-reset"><summary>Passwort zurücksetzen</summary>
+          <form method="post" action="{{ url_for('web.user_password', user_id=u.id) }}" class="row">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <label>Neues Passwort für {{ u.username }} (min. 12 Zeichen) <input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+            <button class="primary">Setzen</button>
+          </form></details>
+          <form method="post" action="{{ url_for('web.user_delete', user_id=u.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Benutzer {{ u.username }} löschen?">Löschen</button></form>
+        {% else %}<a href="{{ url_for('web.account') }}">Eigenes Passwort ändern</a>{% endif %}</td></tr>
     {% endfor %}</tbody>
   </table>
   <form method="post" action="{{ url_for('web.user_create') }}" class="row">
