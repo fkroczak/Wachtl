@@ -113,6 +113,10 @@ class Api:
     def result(self, kind: str, payload: dict) -> None:
         self.json("POST", f"results/{kind}", payload)
 
+    def findings(self, items: list[dict]) -> dict:
+        """Client-Hinweise dieses Servers (docs/CLIENT-HINWEISE.md)."""
+        return self.json("POST", "findings", {"findings": items}, ok=(200,))
+
     def report(self, payload: dict) -> dict:
         """Störungsmeldung vom Tray-Symbol weiterleiten (201 neu, 200 schon bekannt)."""
         return self.json("POST", "report", payload)

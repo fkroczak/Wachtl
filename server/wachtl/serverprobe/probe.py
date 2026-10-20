@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .. import __version__, repo
 from . import icmp, net
+from .diag import Diagnostics, Rejected
 from .api import Api, ApiError
 from .runners import BandwidthRunner, PathRunner, PingRunner, Runner, check_key
 from .tray import PENDING_FILE, PendingReports, ReportRejected, TrayEndpoint, TrayService
@@ -50,7 +51,7 @@ def probe_hostname() -> str:
 class ServerProbe:
     def __init__(self, url: str, pin: str, state_dir: Path, iperf_exe: str | None = None,
                  stop_event: threading.Event | None = None, pinger=None, gateway=None, measure=None,
-                 tray_port: int | None = None, public_url: str = ""):
+                 tray_port: int | None = None, public_url: str = "", diag_exe: str | None = None):
         self.url, self.pin, self.state_dir, self.iperf_exe = url, pin, Path(state_dir), iperf_exe
         self.measurement = {"pinger": pinger or icmp.ping, "gateway": gateway or net.gateway}
         self.measure = measure
@@ -69,6 +70,8 @@ class ServerProbe:
         self.tray_port = tray_port
         self.pending_reports = PendingReports(self.state_dir / PENDING_FILE)
         self.tray: TrayEndpoint | None = None
+        # Client-Hinweise (Netzwerkkarte, Kabel …) nur unter Windows, mit wachtl-probe.exe aus dem Setup
+        self.diag = Diagnostics(diag_exe, self.send_findings, self.stop_event) if Diagnostics.available(diag_exe) else None
 
     # -- Registrierung ---------------------------------------------------------
     def ensure_registered(self) -> bool:
@@ -96,12 +99,15 @@ class ServerProbe:
         log.info("Wachtl-Server-Probe %s startet, Server %s, Daten %s", __version__, self.url, self.state_dir)
         if self.tray_port:
             self.tray = TrayEndpoint(TrayService(self.tray_status, self.send_report, self.pending_reports,
-                                                 probe_hostname(), ready=lambda: self.api is not None), self.tray_port)
+                                                 probe_hostname(), ready=lambda: self.api is not None,
+                                                 findings=self.diag.feed.since if self.diag else None), self.tray_port)
             self.tray.start()
         while not self.ensure_registered():
             log.info("Warte auf Registrierung (%s vom Server) …", self.state_dir / ENROLL_FILE)
             if self.stop_event.wait(30):
                 return
+        if self.diag:
+            self.diag.start()
         loops = [threading.Thread(target=fn, daemon=True, name=fn.__name__)
                  for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop)]
         for t in loops:
@@ -131,6 +137,14 @@ class ServerProbe:
         except ApiError as exc:
             if exc.status == 400:
                 raise ReportRejected(str(exc).split(": ", 1)[-1]) from exc
+            raise
+
+    def send_findings(self, items: list[dict]) -> None:
+        try:
+            self.api.findings(items)
+        except ApiError as exc:
+            if exc.status == 400:
+                raise Rejected(str(exc)) from exc
             raise
 
     def sink(self, line: str) -> None:
@@ -166,6 +180,8 @@ class ServerProbe:
                 if key not in self.runners:
                     self.runners[key] = self.create_runner(check).start()
             self.config = config
+        if self.diag:
+            self.diag.configure(config.get("client_findings"))
         types: dict[str, int] = {}
         for c in wanted.values():
             types[c["type"]] = types.get(c["type"], 0) + 1
@@ -232,6 +248,8 @@ class ServerProbe:
                 self.last_contact = time.time()
                 self.handle_commands(resp.get("commands") or [])
                 self.pending_reports.flush(self.send_report)
+                if self.diag:
+                    self.diag.flush_now.set()
                 if resp.get("config_etag") != (self.config or {}).get("etag"):
                     self.config_changed.set()
             except (ApiError, OSError) as exc:

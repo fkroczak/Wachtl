@@ -29,7 +29,7 @@ def main() -> int:
     # Tray-Endpunkt nur, wenn ein Port gesetzt ist (Windows-Server; im Docker-Container gibt es kein Tray)
     tray_port = int(os.environ.get("WACHTL_TRAY_PORT") or 0) or None
     ServerProbe(url, pin, state_dir, os.environ.get("WACHTL_IPERF_EXE"), stop, tray_port=tray_port,
-                public_url=os.environ.get("WACHTL_PUBLIC_URL", "")).run()
+                public_url=os.environ.get("WACHTL_PUBLIC_URL", ""), diag_exe=os.environ.get("WACHTL_DIAG_EXE")).run()
     return 0
 
 

@@ -217,6 +217,8 @@ def server_probe_env(layout: "Layout") -> dict[str, str]:
         "WACHTL_SPKI_PIN": layout.env["WACHTL_SPKI_PIN"],
         "WACHTL_SERVER_PROBE_DIR": str(layout.data_dir / "serverprobe"),
         "WACHTL_IPERF_EXE": str(layout.iperf_exe),
+        # Client-Hinweise für diesen Server: wachtl-probe.exe diagnose (Kabel, Netzwerkkarte, Treiber …)
+        "WACHTL_DIAG_EXE": str(layout.install_dir / f"wachtl-probe{EXE}"),
         # lokaler Endpunkt für das Tray-Symbol (Störungsmeldungen, „Dashboard öffnen“), nur 127.0.0.1
         "WACHTL_TRAY_PORT": layout.env.get("TRAY_PORT") or "47251",
         "WACHTL_PUBLIC_URL": layout.env.get("WACHTL_PUBLIC_URL", ""),

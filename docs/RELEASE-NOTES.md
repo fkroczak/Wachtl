@@ -6,6 +6,7 @@
 ## Neu in 0.8.4
 
 - **Hinweis „Netzwerkkarte ausgeschaltet“**: Wird die Netzwerkkarte oder das WLAN in Windows deaktiviert und hat der PC dadurch kein Netzwerk mehr, erscheint neben der Uhr sofort eine Sprechblase mit Lösungsvorschlag (Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen › „Aktivieren“). Nach dem Einschalten meldet Wachtl „Netzwerkkarte wieder eingeschaltet“. Übernimmt eine andere Verbindung, geht der Hinweis nur als Info an den Server. Eine stillgelegte Zweitkarte bleibt still.
+- **Auch der Windows-Server prüft seine Netzwerkkarten**: Kabel getrennt, Netzwerkkarte ausgeschaltet, Treiberfehler, DHCP und die übrigen Client-Hinweise gibt es jetzt auch für den Wachtl-Server unter Windows – als Sprechblase am Tray-Symbol des Servers und im Web-UI bei der Server-Probe. Dafür liegt `wachtl-probe.exe` auch im Programmordner des Servers; sie läuft dort nur als Hilfsprozess der Server-Probe, ohne eigenen Dienst und ohne offenen Port.
 - **Schneller erkannt**: Verschwindet eine Netzwerkkarte oder taucht sie wieder auf, liest die Probe den Geräte-Manager sofort neu statt nach bis zu 30 s.
 
 ## Neu in 0.8.3

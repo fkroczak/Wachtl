@@ -80,7 +80,8 @@ Source: "{#BuildDir}\THIRD-PARTY.txt"; DestDir: "{app}"; Flags: ignoreversion
 ; Tray-Symbol neben der Uhr, beide Rollen (.NET Framework 4.6.2 aus Windows, ~100 KB)
 Source: "{#ProbeDir}\wachtl-tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; ---- Probe ----
-Source: "{#ProbeDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsClient
+; Probe-Dienst auf den PCs; auf dem Server nur „wachtl-probe.exe diagnose“ für die Client-Hinweise (ab 0.8.4)
+Source: "{#ProbeDir}\wachtl-probe.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#ProbeDir}\iperf3\*"; DestDir: "{app}\iperf3"; Flags: ignoreversion recursesubdirs; Check: IsClient
 Source: "..\probe\setup\wachtl-status.cmd"; DestDir: "{app}"; Flags: ignoreversion; Check: IsClient
 ; ---- Server ----
@@ -133,6 +134,7 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=all ""program={app}\wachtl-probe.exe"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteFirewallProbe"; Check: IsClient
 ; ---- Server: Dienst (samt Server-Probe), Firewall-Regeln und geplante Sicherung entfernen, Ports prüfen ----
 Filename: "{app}\python\python.exe"; Parameters: "-m wachtl.win.installer uninstall --result ""{commonappdata}\Wachtl Server Deinstallation.ini"""; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "WachtlUninstall"; Check: IsServer
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process wachtl-probe -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopDiagnose"; Check: IsServer
 
 [UninstallDelete]
 Type: files; Name: "{app}\wachtl-tray.old"
@@ -1057,7 +1059,12 @@ begin
   if IsClient() then
     RunHidden(ExpandConstant('{sys}\net.exe'), 'stop ' + ServiceName)
   else
+  begin
     RunHidden(ExpandConstant('{sys}\net.exe'), 'stop WachtlServer');
+    // „wachtl-probe.exe diagnose“ endet mit der Server-Probe; falls nicht, die Datei nicht gesperrt lassen
+    RunHidden(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+      '-NoProfile -NonInteractive -Command "Get-Process wachtl-probe -ErrorAction SilentlyContinue | Where-Object { $_.Path -like ''' + ExpandConstant('{app}') + '\*'' } | Stop-Process -Force"');
+  end;
 end;
 
 // ============================================================ Probe einrichten

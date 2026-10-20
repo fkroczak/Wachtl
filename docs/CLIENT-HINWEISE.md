@@ -36,6 +36,15 @@ Standby zählen 60 s lang keine Abbrüche, Geschwindigkeitswechsel und Rücksetz
 Nach dem Beheben meldet Wachtl „wieder verbunden“ bzw. „wieder normal“ mit der Dauer der Störung. Derselbe Hinweis
 für dieselbe Karte erscheint frühestens nach 30 min erneut, außer er wird schlimmer.
 
+## Wachtl-Server unter Windows (ab 0.8.4)
+
+Auch der Server prüft seine eigenen Netzwerkkarten. Das Setup legt dafür `wachtl-probe.exe` in den Programmordner
+des Servers (ohne Probe-Dienst). Die Server-Probe startet sie als `wachtl-probe.exe diagnose`: dieselbe Erkennung wie
+auf den PCs, je Änderung eine JSON-Zeile. Die Server-Probe zeigt die Hinweise über das Tray-Symbol des Servers
+(`GET /tray/v1/findings`) und trägt sie im Web-UI bei der Server-Probe ein. Endet der Prozess, startet die
+Server-Probe ihn nach 30 s neu (bei wiederholtem Absturz bis 10 min Abstand); seine offenen Hinweise gelten dann als
+„nicht mehr bestätigt“. Die Einstellungen unter Verwaltung › Messung › Client-Hinweise gelten auch für den Server.
+
 ## Sprechblase auf dem PC
 
 - Rot für kritisch, Gelb für Warnung, Blau für die Entwarnung.
@@ -87,7 +96,7 @@ Liste für eigene Auswertungen: `GET /api/v1/client-findings?days=7[&probe=<id>]
 
 ## Grenzen
 
-- Nur Windows-Probes. Die Server-Probe (Wachtl-Server) erkennt keine Client-Hinweise.
+- Windows-Probes und ab 0.8.4 der Wachtl-Server unter Windows. Der Linux-Server (Docker) erkennt keine Client-Hinweise.
 - Duplex (Halb-/Vollduplex) liest Windows nicht zuverlässig aus. Ein Duplex-Fehler zeigt sich als
   „Viele fehlerhafte Datenpakete“ oder niedrige Geschwindigkeit.
 - Fehlercodes und Rücksetz-Ereignisse kommen aus WMI und dem Ereignisprotokoll. Ist eines davon gesperrt, fehlen

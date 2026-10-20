@@ -146,6 +146,12 @@ class ServerProbeEndToEndTest(AppTestCase):
             probe.handle_commands(probe.api.heartbeat({})["commands"])
             self.assertTrue(self.wait(lambda: q1("SELECT * FROM bandwidth_runs WHERE check_id = ?", (wan,)) is not None))
             self.assertEqual(q1("SELECT mbps FROM bandwidth_runs")["mbps"], 123.4)
+            # Client-Hinweise dieses Servers (wachtl-probe.exe diagnose) gehen über das Probe-API
+            probe.send_findings([{"finding_id": "srv-1", "kind": "adapter_disabled", "severity": "critical",
+                                  "state": "active", "title": "Netzwerkkarte ausgeschaltet",
+                                  "detected_at": int(time.time()), "details": {}}])
+            self.assertEqual(q1("SELECT kind FROM client_findings WHERE probe_id = ?", (row["id"],))["kind"],
+                             "adapter_disabled")
             stop.set()
             t.join(timeout=10)
 

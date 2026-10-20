@@ -3,6 +3,7 @@
   - Tray-Symbol: wachtl-tray.exe ist installiert, im Autostart eingetragen und startet
   - Tray-Endpunkt der Server-Probe (127.0.0.1:47251) und des Probe-Dienstes (hier auf 47252 umgestellt,
     weil Server und Probe auf demselben Runner laufen): Status, Schutz gegen Browser-Anfragen, Störungsmeldung
+  - Client-Hinweise des Servers (0.8.4): wachtl-probe.exe diagnose läuft, /tray/v1/findings antwortet
   - Meldungen kommen am Server an: /api/reports (Graph-Markierungen) und Seite „Meldungen“
 #>
 $ErrorActionPreference = 'Stop'
@@ -90,6 +91,21 @@ try {
 
     # --- Server-Probe: Tray-Endpunkt auf 47251 ------------------------------------------------------
     $tsServer = Test-Report 47251 'server' 'CI Meldung Server'
+
+    # --- 0.8.4: Client-Hinweise des Servers über „wachtl-probe.exe diagnose“ ------------------------
+    $diagExe = "${env:ProgramFiles}\Wachtl Server\wachtl-probe.exe"
+    if (-not (Test-Path $diagExe)) { throw "$diagExe fehlt (Client-Hinweise des Servers)" }
+    $diag = $null
+    foreach ($i in 1..30) {
+        $diag = Get-CimInstance Win32_Process -Filter "Name = 'wachtl-probe.exe'" |
+            Where-Object { $_.CommandLine -like '*diagnose*' -and $_.ExecutablePath -eq $diagExe }
+        if ($diag) { break }
+        Start-Sleep 2
+    }
+    if (-not $diag) { throw 'wachtl-probe.exe diagnose läuft auf dem Server nicht' }
+    $f = Invoke-Tray 47251 GET '/tray/v1/findings?since=0'
+    if ($f.Code -ne 200 -or $null -eq $f.Data.latest_seq) { throw "Server: /tray/v1/findings antwortet nicht ($($f.Code))" }
+    $summary.Add("Server: wachtl-probe.exe diagnose läuft (PID $(@($diag)[0].ProcessId)), /tray/v1/findings mit $(@($f.Data.findings).Count) Hinweis(en)")
 
     # --- Probe-Dienst: Port umstellen (47251 belegt die Server-Probe), neu starten ------------------
     $svcKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\Wachtl'

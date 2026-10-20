@@ -771,6 +771,33 @@ public sealed class ClientFindingsTransportTests : IDisposable
     }
 
     [Fact]
+    public void DiagnoseLineCarriesApiFieldsAndBalloon()
+    {
+        var f = new ClientFinding
+        {
+            FindingId = "1", Kind = FindingKinds.AdapterDisabled, Severity = "critical", Title = "Netzwerkkarte ausgeschaltet",
+            Balloon = "Kurz\nLösung: X", DetectedAt = 1_792_230_000, Details = { ["a"] = "b" },
+        };
+        using var doc = JsonDocument.Parse(DiagnoseCommand.ToLine(f));
+        var root = doc.RootElement;
+        Assert.Equal("adapter_disabled", root.GetProperty("kind").GetString());
+        Assert.Equal("Netzwerkkarte ausgeschaltet", root.GetProperty("title").GetString());
+        Assert.Equal("Kurz\nLösung: X", root.GetProperty("balloon").GetString());
+        Assert.Equal(1_792_230_000, root.GetProperty("detected_at").GetInt64());
+        Assert.Equal("b", root.GetProperty("details").GetProperty("a").GetString());
+        Assert.DoesNotContain('\n', DiagnoseCommand.ToLine(f)); // genau eine Zeile
+    }
+
+    [Fact]
+    public async Task DiagnoseEndsWhenStdinCloses()
+    {
+        var output = new StringWriter();
+        var run = DiagnoseCommand.RunAsync(new StringReader(string.Empty), output);
+        Assert.Same(run, await Task.WhenAny(run, Task.Delay(TimeSpan.FromSeconds(20))));
+        Assert.Equal(0, await run);
+    }
+
+    [Fact]
     public void BalloonReachesTrayButNotServer()
     {
         var f = new ClientFinding { FindingId = "1", Kind = FindingKinds.CableUnplugged, Title = "T", Balloon = "Kurz\nLösung: X" };

@@ -21,7 +21,7 @@ public static class Cli
     public const int ExitOk = 0, ExitUsage = 2, ExitPinMismatch = 3, ExitUnreachable = 4, ExitRejected = 5, ExitNotEnrolled = 6,
         ExitDeferred = 7;
 
-    private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "deregister", "--version", "help", "--help" };
+    private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "deregister", "diagnose", "--version", "help", "--help" };
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0]);
 
@@ -50,6 +50,7 @@ public static class Cli
                 "show-pin" => await ShowPinAsync(options),
                 "status" => Status(),
                 "deregister" => await DeregisterAsync(result),
+                "diagnose" => await Diagnostics.DiagnoseCommand.RunAsync(Console.In, Console.Out),
                 "--version" => PrintVersion(),
                 _ => Help(),
             };
@@ -453,6 +454,7 @@ public static class Cli
               wachtl-probe.exe show-pin --server https://wachtl.firma.local
               wachtl-probe.exe status
               wachtl-probe.exe deregister         am Server abmelden und Token löschen (Deinstallation)
+              wachtl-probe.exe diagnose           Netzwerk-Hinweise als JSON-Zeilen (für die Server-Probe), Ende mit stdin
               wachtl-probe.exe --version
 
             Optional bei check/enroll/configure: --out ergebnis.ini (für den Setup-Assistenten)

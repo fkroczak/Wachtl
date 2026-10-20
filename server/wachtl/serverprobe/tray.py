@@ -1,4 +1,4 @@
-"""Lokaler Endpunkt für das Tray-Symbol auf dem Windows-Server (docs/STOERUNGSMELDUNGEN.md).
+"""Lokaler Endpunkt für das Tray-Symbol auf dem Windows-Server (docs/STOERUNGSMELDUNGEN.md, docs/CLIENT-HINWEISE.md).
 
 Lauscht nur auf 127.0.0.1. Das Tray-Programm fragt den Zustand ab und gibt Störungsmeldungen ab; die
 Server-Probe leitet sie mit ihrem Probe-Token an ``POST /api/probe/v1/report`` weiter. Ist der Server
@@ -16,6 +16,7 @@ import uuid
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs
 from typing import Callable
 
 from ..reports import CATEGORIES, DURATIONS, MAX_AGE_S, MAX_FUTURE_S
@@ -120,9 +121,11 @@ class TrayService:
     """Fachlogik des Endpunkts, ohne HTTP – testbar."""
 
     def __init__(self, status: Callable[[], dict], send: Callable[[dict], None], pending: PendingReports,
-                 hostname: str, ready: Callable[[], bool] = lambda: True, clock: Callable[[], float] = time.time):
+                 hostname: str, ready: Callable[[], bool] = lambda: True, clock: Callable[[], float] = time.time,
+                 findings: Callable[[int], dict] | None = None):
         self.status_fn, self.send, self.pending, self.hostname = status, send, pending, hostname
         self.ready, self.clock = ready, clock
+        self.findings = findings            # Client-Hinweise dieses Servers (nur Windows mit wachtl-probe.exe)
         self.recent: dict[str, deque[float]] = {}
         self.rate_lock = threading.Lock()
 
@@ -200,8 +203,12 @@ def make_handler(service: TrayService, port: int):
         def do_GET(self):  # noqa: N802
             if not self.guard():
                 return
-            if self.path.split("?")[0] == "/tray/v1/status":
+            path, _, query = self.path.partition("?")
+            if path == "/tray/v1/status":
                 self.reply(200, service.status())
+            elif path == "/tray/v1/findings" and service.findings is not None:
+                since = parse_qs(query).get("since", ["0"])[0]
+                self.reply(200, service.findings(int(since) if since.isdigit() else 0))
             elif self.path.split("?")[0] == "/tray/v1/report":
                 self.reply(405, {"error": "Nur POST."})
             else:
