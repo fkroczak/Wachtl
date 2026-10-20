@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -9,7 +10,7 @@ using Wachtl.Tray.Core;
 
 namespace Wachtl.Tray
 {
-    /// <summary>Symbol neben der Uhr mit Menü, Statusabfrage alle 30 s und Netzwerk-Hinweisen (Abfrage alle 10 s).</summary>
+    /// <summary>Symbol neben der Uhr mit Menü, Statusabfrage alle 30 s und Netzwerk-Hinweisen (Abfrage alle 10 s, Anzeige im eigenen Hinweisfenster).</summary>
     internal sealed class TrayContext : ApplicationContext
     {
         private readonly TrayClient _client;
@@ -32,6 +33,7 @@ namespace Wachtl.Tray
         private bool _findingsPolling;
         private bool _findingsUnsupported;
         private Balloon? _lastBalloon;
+        private NoticeForm? _notice;
         private ReportForm? _reportForm;
         private AboutForm? _aboutForm;
 
@@ -97,8 +99,6 @@ namespace Wachtl.Tray
                     OpenReport();
                 }
             };
-
-            _icon.BalloonTipClicked += (s, e) => ShowBalloonDetails();
 
             _pollTimer = new System.Windows.Forms.Timer { Interval = 30_000 };
             _pollTimer.Tick += (s, e) => RefreshStatus();
@@ -213,9 +213,9 @@ namespace Wachtl.Tray
 
         private void ShowNextBalloon()
         {
-            if (!_notifier.HasQueued)
+            if (!_notifier.HasQueued || UserIsPresenting())
             {
-                return;
+                return; // bleibt in der Warteschlange
             }
 
             var balloon = _notifier.Next(DateTime.UtcNow);
@@ -225,10 +225,38 @@ namespace Wachtl.Tray
             }
 
             _lastBalloon = balloon;
-            var icon = balloon.Icon == BalloonIcon.Error ? ToolTipIcon.Error
-                : balloon.Icon == BalloonIcon.Warning ? ToolTipIcon.Warning
-                : ToolTipIcon.Info;
-            _icon.ShowBalloonTip(15_000, balloon.Title, balloon.Text, icon);
+
+            // Eigenes Fenster statt _icon.ShowBalloonTip: Windows 11 verschluckt Sprechblasen bei „Nicht stören“ und
+            // ausgeschalteten Benachrichtigungen, ohne dass das Programm davon erfährt.
+            _notice?.Close();
+            var notice = new NoticeForm(balloon, TimeSpan.FromSeconds(15));
+            notice.Opened += (s, e) => ShowBalloonDetails();
+            notice.FormClosed += (s, e) =>
+            {
+                if (_notice == notice)
+                {
+                    _notice = null;
+                }
+            };
+            _notice = notice;
+            notice.Show();
+        }
+
+        [DllImport("shell32.dll")]
+        private static extern int SHQueryUserNotificationState(out int state);
+
+        /// <summary>Spiel im Vollbild oder Präsentation: Hinweis zurückhalten, bis der Benutzer fertig ist.</summary>
+        private static bool UserIsPresenting()
+        {
+            try
+            {
+                // 3 = QUNS_RUNNING_D3D_FULL_SCREEN, 4 = QUNS_PRESENTATION_MODE
+                return SHQueryUserNotificationState(out var state) == 0 && (state == 3 || state == 4);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private void ShowBalloonDetails()
@@ -321,6 +349,7 @@ namespace Wachtl.Tray
         protected override void ExitThreadCore()
         {
             _icon.Visible = false;
+            _notice?.Close();
             _reportForm?.Close();
             _aboutForm?.Close();
             base.ExitThreadCore();

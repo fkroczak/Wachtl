@@ -3,6 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 0.9.1
+
+- **Netzwerk-Hinweise auch unter Windows 11**: Das Wachtl-Symbol zeigt Hinweise (z. B. Kabel getrennt) jetzt in einem eigenen kleinen Fenster unten rechts statt als Windows-Benachrichtigung. Windows 11 hatte die Meldung bei „Nicht stören“, ausgeschalteten Benachrichtigungen oder kurz nach der Anmeldung still verworfen. Das Fenster nimmt keinen Fokus, bleibt unter der Maus stehen, schließt sich sonst nach 15 s; ein Klick zeigt Details und Lösung. Bei Spielen im Vollbild und Präsentationen wartet der Hinweis.
+
 ## Neu in 0.9.0
 
 - **Sprachtest (RTP/VoIP)**: Neue Messart „Sprache (RTP/VoIP)“. Die Probe simuliert ein Telefonat – ein echter RTP-Sprachstrom wie von einem SIP-Telefon (G.711 oder G.729, alle 20 ms ein Paket) – zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor. Wachtl misst Laufzeit sowie Jitter und Paketverlust **getrennt je Richtung** und schätzt die Sprachqualität als **MOS** (E-Modell nach ITU-T G.107). Standard: 30 s alle 15 Minuten, „Jetzt testen“ auf Knopfdruck.
