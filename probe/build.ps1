@@ -5,7 +5,7 @@
   Voraussetzungen auf dem Build-Rechner: .NET 8 SDK, Inno Setup 6 (sonst per choco).
 #>
 param(
-    [string]$Version = '0.9.1',
+    [string]$Version = '0.9.2',
     [string]$Output = "$PSScriptRoot\..\dist\probe",
     # Windows-Build von iperf3 (BSD-Lizenz), https://github.com/ar51an/iperf3-win-builds
     [string]$IperfVersion = '3.21',

@@ -125,10 +125,26 @@ class LoopbackTest(unittest.TestCase):
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
+    def wait_bound(self, port: int) -> None:
+        """Bis der Reflektor-Thread antwortet – sonst geht das erste Paket des Tests ins Leere."""
+        probe = rtp.build_packet(rtp.CODECS["g711"], 20, 0, 0x5741, 0, query=True)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("127.0.0.1", port))
+            s.settimeout(0.05)
+            for _ in range(100):
+                try:
+                    s.send(probe)
+                    if s.recv(2048):
+                        return
+                except OSError:      # noch nicht gebunden (ICMP) oder keine Antwort
+                    pass
+        self.fail(f"Reflektor antwortet nicht auf Port {port}")
+
     def test_against_reflector(self):
         port, stop = self.free_port(), threading.Event()
         threading.Thread(target=reflector.serve, args=(port, stop, "127.0.0.1"), daemon=True).start()
         self.addCleanup(stop.set)
+        self.wait_bound(port)
         result = stream.run("127.0.0.1", port, "g711", 20, 1)
         self.assertNotIn("error", result)
         self.assertEqual((result["mode"], result["sent"], result["received"]), ("wachtl", 50, 50))
