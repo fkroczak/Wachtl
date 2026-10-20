@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -188,6 +189,12 @@ def login():
         repo.audit(request.form.get("username", "")[:64], "login.failed", detail=request.remote_addr or "")
         flash(error, "error")
     return render_template("login.html")
+
+
+@bp.get("/passwort-vergessen")
+def password_forgot():
+    # Windows-Server läuft ohne Docker direkt unter Windows, Linux-Server im Container
+    return render_template("password_forgot.html", windows=os.name == "nt")
 
 
 @bp.post("/logout")
@@ -1246,6 +1253,22 @@ def user_create():
         )
         repo.audit(current_user()["username"], "user.create", username, role)
         flash(f"Benutzer {username} angelegt.", "ok")
+    return redirect(url_for("web.admin") + "#benutzer")
+
+
+@bp.post("/admin/users/<int:user_id>/password")
+@login_required("admin")
+def user_password(user_id: int):
+    u = q1("SELECT username FROM users WHERE id = ?", (user_id,)) or abort(404)
+    password = request.form.get("password", "")
+    if problem := password_problem(password):
+        flash(problem, "error")
+    else:
+        # neues Passwort hebt auch eine Sperre nach Fehlversuchen auf
+        ex("UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
+           (hash_password(password), user_id))
+        repo.audit(current_user()["username"], "user.password_reset", u["username"])
+        flash(f"Passwort für {u['username']} zurückgesetzt. Bitte das neue Passwort sicher weitergeben.", "ok")
     return redirect(url_for("web.admin") + "#benutzer")
 
 

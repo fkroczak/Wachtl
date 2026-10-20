@@ -36,8 +36,8 @@ def hash_token(token: str) -> str:
 
 
 def password_problem(password: str) -> str | None:
-    if len(password) < 12:
-        return "Das Passwort muss mindestens 12 Zeichen lang sein."
+    if not password:
+        return "Bitte ein Passwort eingeben."
     return None
 
 
@@ -47,7 +47,7 @@ def try_login(username: str, password: str) -> tuple[dict | None, str | None]:
     now = int(time.time())
     user = q1("SELECT * FROM users WHERE username = ?", (username,))
     if user is None:
-        verify_password(hash_password("x" * 12), password)  # gleiche Laufzeit wie bei Treffern
+        verify_password(hash_password("x"), password)  # gleiche Laufzeit wie bei Treffern
         return None, "Benutzername oder Passwort falsch."
     if user["locked_until"] and user["locked_until"] > now:
         return None, "Konto vorübergehend gesperrt. Bitte später erneut versuchen."

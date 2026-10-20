@@ -169,6 +169,7 @@ class PageSemanticsTest(AppTestCase):
         super().setUp()
         self.probe = self.enroll("PC-EMPFANG")
         self.make_user()
+        self.make_user("leser", "readonly")  # Admin-Seite zeigt so auch das Formular „Passwort zurücksetzen“
         self.login()
         now = repo.now()
         self.path = repo.create_check("Pfad", "1.1.1.1", "target", 1, 1000, "all", None, "path",
@@ -220,9 +221,9 @@ class PageSemanticsTest(AppTestCase):
             if problems:
                 failures[url] = problems
         self.client.post("/logout", data={"csrf_token": self.session_csrf()})
-        login_problems = lint(self.client.get("/login").get_data(as_text=True))
-        if login_problems:
-            failures["/login"] = login_problems
+        for url in ("/login", "/passwort-vergessen"):
+            if problems := lint(self.client.get(url).get_data(as_text=True)):
+                failures[url] = problems
         self.assertEqual(failures, {}, json.dumps(failures, indent=1, ensure_ascii=False))
 
     def test_references_are_links(self):
