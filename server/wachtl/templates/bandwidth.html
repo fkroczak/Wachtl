@@ -49,7 +49,7 @@
     <tr>
       <td class="nowrap">{{ r.ts|dt }}</td>
       <td>{{ '↓ Download' if r.direction == 'down' else '↑ Upload' }}</td>
-      <td class="num">{% if r.error %}<span class="badge critical">Fehler</span> <span class="small">{{ r.error }}</span>{% else %}{{ r.mbps|mbps }}{% endif %}</td>
+      <td class="num">{% if r.error %}<span class="badge critical">Fehler</span> <span class="small">{{ r.error|explain_error }}</span>{% else %}{{ r.mbps|mbps }}{% endif %}</td>
       <td>{{ (r.protocol or '')|upper }}</td>
       <td class="num">{{ r.latency_ms|ms }}</td>
       <td class="num">{{ r.jitter_ms|ms }}</td>

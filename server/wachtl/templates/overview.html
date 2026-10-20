@@ -126,7 +126,7 @@
       <td>{{ KIND_LABELS[st.kind] }}</td>
       {% for d in ('down', 'up') %}
         {% set r = st.values[d] %}
-        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error }}">Fehler</span>{% elif r %}{{ r.mbps|mbps }}{% else %}–{% endif %}</td>
+        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error|explain_error }}">Fehler</span>{% elif r %}{{ r.mbps|mbps }}{% else %}–{% endif %}</td>
       {% endfor %}
       <td>{{ st.ts|ago if st.ts else st.detail }}</td>
     </tr>
@@ -146,7 +146,7 @@
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
       <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
       <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
-      {% if r and r.error %}<td colspan="4"><span class="badge critical">Fehler</span> <span class="small">{{ r.error }}</span></td>
+      {% if r and r.error %}<td colspan="4"><span class="badge critical">Fehler</span> <span class="small">{{ r.error|explain_error }}</span></td>
       {% elif r %}<td>{{ r.mos|mos }}</td><td>{{ r.rtt_ms|ms }}</td><td>{{ r.loss_pct|pct }}</td><td>{{ r.jitter_ms|ms }}</td>
       {% else %}<td>–</td><td>–</td><td>–</td><td>–</td>{% endif %}
       <td>{{ st.ts|ago if st.ts else st.detail }}</td>
