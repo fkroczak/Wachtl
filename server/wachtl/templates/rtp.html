@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
+{% from "_links.html" import check_target with context %}
+{% block content %}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Sprache</nav>
+<h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> ↔ {{ check_target(check) }}</span></h1>
+<p class="muted">Sprachtest (RTP) · {{ summary }}{% if params.window_start != '00:00' or params.window_end != '23:59' %} · nur {{ params.window_start }}–{{ params.window_end }} Uhr{% endif %}</p>
+
+<div class="actions">
+  <span class="range-buttons">{% for r in ranges %}<a class="button {{ 'active' if r == range_key }}" href="?range={{ r }}"{% if r == range_key %} aria-current="true"{% endif %}>{{ r }}</a>{% endfor %}</span>
+  {% if has_role(user, 'operator') %}
+    {% if pending %}<span class="muted">Test beauftragt – Ergebnis erscheint nach Abschluss (Seite neu laden).</span>
+    {% else %}
+    <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=check.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <button class="primary">Jetzt testen</button></form>
+    {% endif %}
+  {% endif %}
+  {% if has_role(user, 'admin') %}<a class="button" href="{{ url_for('web.check_edit', check_id=check.id) }}">Einstellungen</a>{% endif %}
+</div>
+
+<section class="cards">
+  <div class="card kv">
+    <h2 class="card-title">Letzter Test</h2>
+    {% if last and last.error %}
+    <p><span class="badge critical">Fehler</span> {{ last.error }}</p>
+    <dl><dt>Zeit</dt><dd>{{ last.ts|dt }}</dd></dl>
+    {% elif last %}
+    <dl>
+      <dt>MOS</dt><dd><strong class="{{ 'text-bad' if params.min_mos and last.mos < params.min_mos }}">{{ last.mos|mos }}</strong> ({{ mos_label(last.mos) }})</dd>
+      <dt>Laufzeit</dt><dd>{{ last.rtt_ms|ms }} hin und zurück (max. {{ last.rtt_max_ms|ms }})</dd>
+      {% if last.mode == 'wachtl' %}
+      <dt>Verlust ↑ / ↓</dt><dd>{{ last.up_loss_pct|pct }} / {{ last.down_loss_pct|pct }}</dd>
+      <dt>Jitter ↑ / ↓</dt><dd>{{ last.up_jitter_ms|ms }} / {{ last.down_jitter_ms|ms }}</dd>
+      {% else %}
+      <dt>Verlust</dt><dd>{{ last.loss_pct|pct }} (hin und zurück)</dd>
+      <dt>Jitter</dt><dd>{{ last.jitter_ms|ms }} (hin und zurück)</dd>
+      {% endif %}
+      <dt>Zeit</dt><dd>{{ last.ts|dt }}</dd>
+    </dl>
+    {% else %}<p class="muted">Noch kein Test im Zeitraum.</p>{% endif %}
+  </div>
+  <div class="card kv">
+    <h2 class="card-title">Zeitraum {{ range_key }}</h2>
+    {% if stats.mos %}
+    <dl>
+      <dt>MOS Median</dt><dd><strong>{{ stats.mos.median|mos }}</strong> ({{ mos_label(stats.mos.median) }})</dd>
+      <dt>MOS Min / Max</dt><dd>{{ stats.mos.min|mos }} / {{ stats.mos.max|mos }}</dd>
+      <dt>Laufzeit Median</dt><dd>{{ stats.rtt_ms.median|ms if stats.rtt_ms else '–' }}</dd>
+      <dt>Tests</dt><dd>{{ stats.count }}{% if stats.errors %}, {{ stats.errors }} fehlgeschlagen{% endif %}{% if stats.below %}, {{ stats.below }} unter {{ '%g'|format(params.min_mos) }}{% endif %}</dd>
+      <dt>Alarm unter</dt><dd>{{ '%g'|format(params.min_mos) if params.min_mos else 'aus' }}</dd>
+    </dl>
+    {% else %}<p class="muted">Keine Tests im Zeitraum.</p>{% endif %}
+  </div>
+</section>
+
+<div class="legend small"><span class="lg-mos"></span> MOS <span class="lg-thr"></span> Alarmschwelle{% if chart.reports %} <span class="lg-report"></span> Störungsmeldung{% endif %}</div>
+<div id="mos-chart" class="chart chart-small"></div>
+<script type="application/json" id="mos-data">{{ chart|tojson }}</script>
+
+<details>
+  <summary>So liest du die Werte</summary>
+  <p>Die Probe sendet {{ params.duration_s }} s lang Sprachpakete wie ein Telefon ({{ codec.label if codec else params.codec }},
+    alle {{ params.ptime_ms }} ms ein Paket). Die Gegenstelle schickt jedes Paket sofort zurück und vermerkt, wann es ankam.
+    So misst Wachtl Verlust und Jitter getrennt für ↑ (Probe → Gegenstelle) und ↓ (zurück).</p>
+  <p><strong>MOS</strong> schätzt die Sprachqualität nach dem E-Modell (ITU-T G.107) aus Laufzeit, Jitter und Verlust der
+    schlechteren Richtung: ab 4.3 sehr gut, ab 4.0 gut, ab 3.6 ausreichend, darunter merken Gesprächspartner Aussetzer,
+    Knacken oder Verzögerung. G.711 erreicht höchstens etwa 4.4, G.729 etwa 4.1.</p>
+  <p>Faustregeln für Sprache: Verlust unter 1 %, Jitter unter 30 ms, Laufzeit einfach unter 150 ms. Schlechte Werte nur
+    in einer Richtung zeigen meist eine volle Leitung ohne Priorisierung (oft der Upload).</p>
+</details>
+
+<h2>Tests <span class="muted small">(die letzten 50, alle per API /api/v1/probes/…/rtp)</span></h2>
+<table>
+  <thead><tr><th>Zeit</th><th>MOS</th><th>Laufzeit</th><th>Verlust ↑</th><th>Verlust ↓</th><th>Jitter ↑</th><th>Jitter ↓</th><th>Pakete</th><th>Auslöser</th></tr></thead>
+  <tbody>{% for r in runs %}
+    <tr>
+      <td class="nowrap">{{ r.ts|dt }}</td>
+      {% if r.error %}
+      <td colspan="6"><span class="badge critical">Fehler</span> <span class="small">{{ r.error }}</span></td>
+      {% else %}
+      <td class="num"><span class="{{ 'text-bad' if params.min_mos and r.mos is not none and r.mos < params.min_mos }}">{{ r.mos|mos }}</span></td>
+      <td class="num">{{ r.rtt_ms|ms }}</td>
+      {% if r.mode == 'wachtl' %}
+      <td class="num">{{ r.up_loss_pct|pct }}</td>
+      <td class="num">{{ r.down_loss_pct|pct }}</td>
+      <td class="num">{{ r.up_jitter_ms|ms }}</td>
+      <td class="num">{{ r.down_jitter_ms|ms }}</td>
+      {% else %}
+      <td class="num" colspan="2">{{ r.loss_pct|pct }} <span class="muted small">zusammen</span></td>
+      <td class="num" colspan="2">{{ r.jitter_ms|ms }} <span class="muted small">zusammen</span></td>
+      {% endif %}
+      {% endif %}
+      <td class="num">{{ r.received if r.received is not none else '–' }} / {{ r.sent if r.sent is not none else '–' }}</td>
+      <td>{{ 'manuell' if r.trigger == 'manual' else 'Zeitplan' }}</td>
+    </tr>
+  {% else %}<tr><td colspan="9" class="muted">Noch keine Tests.</td></tr>{% endfor %}</tbody>
+</table>
+{% endblock %}

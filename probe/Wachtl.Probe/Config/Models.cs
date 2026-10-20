@@ -90,6 +90,13 @@ public sealed class IperfServerConfig
     public int Port { get; init; } = 5201;
 }
 
+/// <summary>RTP-Reflektor: Gegenstelle für Sprachtests anderer Probes (an, wenn die Probe Gegenstelle ist).</summary>
+public sealed class RtpReflectorConfig
+{
+    public bool Enabled { get; init; }
+    public int Port { get; init; } = 5004;
+}
+
 /// <summary>Client-Hinweise (Netzwerkkarte, Kabel, DHCP …): erkennen, an den Server senden, im Tray anzeigen.</summary>
 public sealed class ClientFindingsConfig
 {
@@ -105,6 +112,7 @@ public sealed class ProbeConfig
     public long ProbeId { get; init; }
     public List<CheckConfig> Checks { get; init; } = new();
     public IperfServerConfig IperfServer { get; init; } = new();
+    public RtpReflectorConfig RtpReflector { get; init; } = new();
     public ClientFindingsConfig ClientFindings { get; init; } = new();
     public List<string> ServerUrls { get; init; } = new();
     public int UploadIntervalS { get; init; } = 10;

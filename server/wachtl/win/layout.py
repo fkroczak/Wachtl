@@ -28,6 +28,7 @@ DEFAULTS = {
     "PORT_VMALERT": "8880",
     "PORT_ALERTMANAGER": "9093",
     "PORT_IPERF": "5201",           # iperf3-Gegenstelle für Probes, öffentlich (TCP+UDP); 0 = aus
+    "PORT_RTP": "5004",             # RTP-Reflektor für Sprachtests der Probes, öffentlich (UDP); 0 = aus
     "SERVER_PROBE": "1",            # Server misst selbst (Server-Probe); 0 = aus
     "BACKUP_KEEP_DAYS": "14",
 }
@@ -196,6 +197,7 @@ class Layout:
             "WACHTL_COOKIE_SECURE": "1",
             "WACHTL_PROBE_DIR": str(self.install_dir / "probe"),
             "WACHTL_IPERF_PORT": str(self.port("IPERF")),
+            "WACHTL_RTP_PORT": str(self.port("RTP")),
             "WACHTL_SERVER_PROBE": "1" if self.env.get("SERVER_PROBE", "1") != "0" else "0",
             "WACHTL_SERVER_PROBE_DIR": str(self.data_dir / "serverprobe"),
             # nur für den HTTPS-Server (wachtl.win.serve)

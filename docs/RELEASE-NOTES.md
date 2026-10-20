@@ -3,9 +3,17 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
-## Neu in 0.8.5
+## Neu in 0.9.1
 
 - **Netzwerk-Hinweise auch unter Windows 11**: Das Wachtl-Symbol zeigt Hinweise (z. B. Kabel getrennt) jetzt in einem eigenen kleinen Fenster unten rechts statt als Windows-Benachrichtigung. Windows 11 hatte die Meldung bei „Nicht stören“, ausgeschalteten Benachrichtigungen oder kurz nach der Anmeldung still verworfen. Das Fenster nimmt keinen Fokus, bleibt unter der Maus stehen, schließt sich sonst nach 15 s; ein Klick zeigt Details und Lösung. Bei Spielen im Vollbild und Präsentationen wartet der Hinweis.
+
+## Neu in 0.9.0
+
+- **Sprachtest (RTP/VoIP)**: Neue Messart „Sprache (RTP/VoIP)“. Die Probe simuliert ein Telefonat – ein echter RTP-Sprachstrom wie von einem SIP-Telefon (G.711 oder G.729, alle 20 ms ein Paket) – zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor. Wachtl misst Laufzeit sowie Jitter und Paketverlust **getrennt je Richtung** und schätzt die Sprachqualität als **MOS** (E-Modell nach ITU-T G.107). Standard: 30 s alle 15 Minuten, „Jetzt testen“ auf Knopfdruck.
+- **Sprachqualität im Web-UI**: eigene Seite je Test mit MOS-Verlauf und allen Werten, Abschnitt „Sprache (RTP)“ auf der Probe-Seite, „Sprachqualität“ auf der Übersicht; schlechte oder fehlgeschlagene Tests erscheinen unter „Messungen mit Problemen“.
+- **Alarm „Sprachqualität“**: wenn der MOS mehrere Tests in Folge unter dem Schwellwert des Checks liegt (Standard 3.6).
+- **RTP-Reflektor**: Der Wachtl-Server antwortet auf UDP-Port 5004 (Linux: Container `rtp`, `RTP_PORT` in `.env`; Windows: Teil des Dienstes, Firewall-Regel „Wachtl Server RTP“, unbeaufsichtigt `/RtpPort=`). Probes, die als **Gegenstelle für andere Probes** eingerichtet sind, antworten ebenfalls (Firewall-Regel „Wachtl Probe RTP“ legt das Probe-Setup an).
+- Für Sprachtests braucht es auf den PCs die Probe 0.9; ältere Probes melden den Check als nicht unterstützt.
 
 ## Neu in 0.8.4
 

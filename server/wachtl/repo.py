@@ -25,6 +25,7 @@ DEFAULT_ALERT_RULES = {
     "jitter_high": ("Jitter Durchschnitt (ms)", 30, 300, 60, "warning"),
     "route_change": ("Pfad geändert (Alarm bleibt Sekunden stehen)", 900, 0, 0, "info"),
     "bandwidth_low": ("Bandbreite unter Schwellwert des Checks (Messungen in Folge)", 2, 0, 0, "warning"),
+    "voip_quality": ("Sprachqualität (MOS) unter Schwellwert des Checks (Messungen in Folge)", 2, 0, 0, "warning"),
 }
 
 DEFAULT_CHECKS = (
@@ -65,7 +66,8 @@ def valid_probe_hostname(hostname: str) -> bool:
 def checks_for_probe(probe: dict) -> list[dict]:
     """Alle aktiven Checks, die dieser Probe zugewiesen sind (global, Standort, Probe).
 
-    Die Server-Probe misst kein iperf3 gegen den Wachtl-Server – das wäre eine Messung gegen sich selbst.
+    Die Server-Probe misst kein iperf3 und keinen Sprachtest gegen den Wachtl-Server – das wäre eine Messung
+    gegen sich selbst.
     """
     rows = q(
         """
@@ -83,12 +85,13 @@ def checks_for_probe(probe: dict) -> list[dict]:
         (probe["site_id"], probe["id"], probe["id"]),
     )
     if probe.get("kind") == "server":
-        rows = [c for c in rows if not is_server_iperf(c)]
+        rows = [c for c in rows if not against_server(c)]
     return rows
 
 
-def is_server_iperf(check: dict) -> bool:
-    if check["type"] != "iperf":
+def against_server(check: dict) -> bool:
+    """iperf3 oder Sprachtest mit dem Wachtl-Server als Gegenstelle."""
+    if check["type"] not in ("iperf", "rtp"):
         return False
     params = json.loads(check.get("params") or "{}")
     return params.get("peer", "server") == "server"
@@ -113,6 +116,18 @@ def probe_iperf_endpoint(peer: dict, default_port: int = 5201) -> tuple[str | No
     return host, int(peer.get("iperf_port") or default_port)
 
 
+def probe_peer(probe: dict, peer_id: int, what: str = "Gegenstelle") -> tuple[dict | None, str | None]:
+    """Andere Probe als Gegenstelle (iperf3, RTP): (Probe, Fehler)."""
+    peer = q1("SELECT * FROM probes WHERE id = ?", (peer_id,))
+    if peer is None:
+        return None, "Gegenstellen-Probe existiert nicht mehr"
+    if peer["id"] == probe["id"]:
+        return None, "Probe kann nicht gegen sich selbst messen"
+    if not peer["iperf_server"]:
+        return None, f"Probe {peer['hostname']} ist nicht als {what} eingerichtet"
+    return peer, None
+
+
 def probe_config(probe: dict) -> tuple[dict, str]:
     """Konfiguration für eine Probe und ihr ETag (Hash des Inhalts)."""
     from . import checktypes
@@ -120,6 +135,7 @@ def probe_config(probe: dict) -> tuple[dict, str]:
 
     settings = settings_service.get()
     server_iperf = None
+    server_rtp = settings_service.rtp_server_address(settings)
     checks = []
     for c in checks_for_probe(probe):
         ctype = c["type"]
@@ -142,17 +158,18 @@ def probe_config(probe: dict) -> tuple[dict, str]:
                 peer_host, peer_port = server_iperf
                 if not peer_host:
                     peer_error = "iperf3-Gegenstelle auf dem Wachtl-Server ist abgeschaltet"
-            elif ctype == "iperf" and params["peer"] == "probe":
-                peer = q1("SELECT * FROM probes WHERE id = ?", (params["peer_probe_id"],))
-                if peer is None:
-                    peer_error = "Gegenstellen-Probe existiert nicht mehr"
-                elif peer["id"] == probe["id"]:
-                    peer_error = "Probe kann nicht gegen sich selbst messen"
-                elif not peer["iperf_server"]:
-                    peer_error = f"Probe {peer['hostname']} ist nicht als iperf3-Gegenstelle eingerichtet"
-                else:
+            elif ctype == "rtp" and params["peer"] == "server":
+                peer_host, peer_port = server_rtp or (None, None)
+                if not peer_host:
+                    peer_error = "RTP-Reflektor auf dem Wachtl-Server ist abgeschaltet"
+            elif ctype in ("iperf", "rtp") and params["peer"] == "probe":
+                peer, peer_error = probe_peer(probe, params["peer_probe_id"],
+                                              "iperf3-Gegenstelle" if ctype == "iperf" else "Gegenstelle")
+                if peer is not None:
                     peer_host, peer_port = probe_iperf_endpoint(peer, settings["probe_iperf_port"])
-            elif ctype == "iperf" or params.get("method") == "iperf":
+                    if ctype == "rtp":
+                        peer_port = int(settings["probe_rtp_port"])
+            elif ctype in ("iperf", "rtp") or params.get("method") == "iperf":
                 peer_host, peer_port = params["host"], params["port"]
             item["peer"] = {"host": peer_host, "port": peer_port, "error": peer_error}
         checks.append(item)
@@ -162,6 +179,11 @@ def probe_config(probe: dict) -> tuple[dict, str]:
         "iperf_server": {
             "enabled": bool(probe.get("iperf_server")),
             "port": int(probe.get("iperf_port") or settings["probe_iperf_port"]),
+        },
+        # Gegenstelle für Sprachtests anderer Probes – zusammen mit der iperf3-Gegenstelle ein- und ausgeschaltet
+        "rtp_reflector": {
+            "enabled": bool(probe.get("iperf_server")),
+            "port": int(settings["probe_rtp_port"]),
         },
         "server_urls": server_urls(),
         "upload_interval_s": settings["upload_interval_s"],
@@ -342,6 +364,7 @@ def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, hi
         history_days = settings_service.get()["history_days"]
     ex("DELETE FROM path_runs WHERE ts < ?", (ts - history_days * 86400,))
     ex("DELETE FROM bandwidth_runs WHERE ts < ?", (ts - history_days * 86400,))
+    ex("DELETE FROM rtp_runs WHERE ts < ?", (ts - history_days * 86400,))
     ex("DELETE FROM probe_commands WHERE created_at < ?", (ts - 7 * 86400,))
     ex("DELETE FROM ingest_batches WHERE received_at < ?", (ts - ingest_days * 86400,))
     ex("DELETE FROM audit_log WHERE ts < ?", (ts - audit_days * 86400,))

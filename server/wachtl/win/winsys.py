@@ -23,6 +23,7 @@ SID_ADMINS = "*S-1-5-32-544"
 FW_HTTPS = "Wachtl Server HTTPS"
 FW_HTTP = "Wachtl Server HTTP"
 FW_IPERF = "Wachtl Server iperf3"
+FW_RTP = "Wachtl Server RTP"
 TASK_BACKUP = "Wachtl Server Backup"
 
 
@@ -155,11 +156,14 @@ def configure_firewall(layout: Layout, run: Runner) -> None:
         for proto in ("TCP", "UDP"):
             run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_IPERF}", "dir=in", "action=allow",
                  f"protocol={proto}", f"localport={layout.port('IPERF')}", "profile=any"])
+    if layout.port("RTP"):
+        run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_RTP}", "dir=in", "action=allow",
+             "protocol=UDP", f"localport={layout.port('RTP')}", "profile=any"])
 
 
 def remove_firewall(run: Runner, programs: list[Path] | None = None) -> None:
     """Eigene Regeln entfernen; mit ``programs`` auch Regeln, die Windows für diese Programme angelegt hat."""
-    for name in (FW_HTTPS, FW_HTTP, FW_IPERF):
+    for name in (FW_HTTPS, FW_HTTP, FW_IPERF, FW_RTP):
         run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={name}"], check=False)
     for program in programs or []:
         run(["netsh", "advfirewall", "firewall", "delete", "rule", "name=all", f"program={program}"], check=False)

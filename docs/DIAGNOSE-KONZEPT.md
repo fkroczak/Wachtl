@@ -93,9 +93,9 @@ Schuld sind fast immer **volle Leitung ohne Priorisierung** (vor allem Upload), 
   ITU-T G.107, vereinfacht): L = RTT/2 + 2 × Jitter + 10 ms; R = 93,2 − L/40 (L < 160 ms), sonst
   93,2 − (L − 120)/10; R −= 2,5 × Verlust in %; MOS = 1 + 0,035·R + 7·10⁻⁶·R·(R − 60)·(100 − R), höchstens ca. 4,4.
   Geht **ohne neue Probe-Version**.
-- **VoIP-Profil** für iperf3: UDP, 50 Pakete/s à 172 Byte wie G.711 mit 20-ms-Paketen (`-u -l 172 -b 69k`),
-  30 s, beide Richtungen. Liefert Jitter und Verlust wie bei einem echten Gespräch. Mit DSCP EF (`--dscp 46`)
-  nur, wenn eine QoS-Richtlinie (GPO) für `iperf3.exe` die Markierung setzt – Windows ignoriert sie sonst.
+- **VoIP-Profil** – umgesetzt in 0.9 als eigener Check „Sprache (RTP/VoIP)“ statt über iperf3: echter RTP-Strom
+  wie G.711/G.729 mit 20-ms-Paketen, 30 s, zu einem Reflektor (Wachtl-Server oder Probe); Jitter und Verlust je
+  Richtung, MOS nach E-Modell. DSCP EF wirkt unter Windows nur mit QoS-Richtlinie (GPO) für `wachtl-probe.exe`.
 - **Latenz unter Last** (Bufferbloat): während jedes Speedtests läuft ein Ping zum Gateway und ins Internet mit.
   Ergebnis: Latenz Leerlauf vs. Download vs. Upload.
 - **SIP-Ziel als Rolle** „Telefonie“ im Ping-Check, damit Regeln wissen, welches Ziel zählt.
@@ -369,9 +369,9 @@ Empfehlung für den Kunden jetzt: eine **Probe auf dem Fileserver** installieren
 | Phase | Inhalt |
 |---|---|
 | 0.8 (erledigt) | Ausfälle ab 5 s sekundengenau, Netzwerkkarte + Ereignisse als Client-Hinweise mit Sprechblase |
-| 0.9 | Rest von „Sofort umsetzbar“ (Wiederkehr, Standort-Korrelation, MOS, Soll-Bandbreite), Diagnose-Seite |
+| 0.9 | Sprachtest (RTP) mit MOS je Richtung (erledigt); Rest von „Sofort umsetzbar“ (Wiederkehr, Standort-Korrelation, MOS aus Ping, Soll-Bandbreite), Diagnose-Seite |
 | 1.0 | Probe: DNS-, TCP-Port- und HTTP-Check, MTU-Check, öffentliche IP |
-| 1.1 | VoIP-Profil, Latenz unter Last, HTTP-Stream, Dauertransfer, ARP/MAC |
+| 1.1 | Latenz unter Last, HTTP-Stream, Dauertransfer, ARP/MAC |
 | 1.2 | SNMP (Auslastung, Port-Fehler, STP), WLAN, Probe → Switch-Zuordnung |
 
 Jede neue Messart entsteht doppelt: in der Windows-Probe (C#) und in der Server-Probe (Python), mit Eintrag in

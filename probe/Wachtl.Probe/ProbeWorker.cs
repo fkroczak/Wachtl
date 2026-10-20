@@ -5,6 +5,7 @@ using Wachtl.Probe.Buffer;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
 using Wachtl.Probe.Diagnostics;
+using Wachtl.Probe.Rtp;
 using Wachtl.Probe.Transport;
 using Wachtl.Probe.Tray;
 
@@ -28,6 +29,7 @@ public sealed class ProbeWorker : BackgroundService
     private readonly LiveStats _live;
     private readonly Dictionary<string, IAsyncDisposable> _runners = new();
     private IperfServerHost? _iperfServer;
+    private RtpReflector? _rtpReflector;
     private readonly SemaphoreSlim _configChanged = new(0, 1);
     private readonly object _runnerLock = new();
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow;
@@ -149,7 +151,7 @@ public sealed class ProbeWorker : BackgroundService
         }
     }
 
-    private static readonly string[] SupportedTypes = { "ping", "path", "iperf", "speedtest" };
+    private static readonly string[] SupportedTypes = { "ping", "path", "iperf", "speedtest", "rtp" };
 
     private async Task<bool> TryPendingEnrollmentAsync(PendingEnrollment pending, CancellationToken ct)
     {
@@ -263,15 +265,35 @@ public sealed class ProbeWorker : BackgroundService
                 _iperfServer = new IperfServerHost(iperf.Port, _loggerFactory.CreateLogger<IperfServerHost>());
             }
 
+            var rtp = config.RtpReflector;
+            if (_rtpReflector is not null && (!rtp.Enabled || _rtpReflector.Port != rtp.Port))
+            {
+                _ = _rtpReflector.DisposeAsync().AsTask();
+                _rtpReflector = null;
+            }
+
+            if (rtp.Enabled && _rtpReflector is null)
+            {
+                try
+                {
+                    _rtpReflector = new RtpReflector(rtp.Port, _loggerFactory.CreateLogger<RtpReflector>());
+                }
+                catch (System.Net.Sockets.SocketException ex)
+                {
+                    _logger.LogError("RTP-Reflektor kann UDP-Port {Port} nicht öffnen: {Message}", rtp.Port, ex.Message);
+                }
+            }
+
             _config = config;
             _live.KeepChecks(wanted.Values.Select(c => c.Id));
         }
 
         _diagnostics.Configure(config.ClientFindings);
 
-        _logger.LogInformation("Konfiguration {Etag} aktiv: {Count} Checks ({Types}), iperf3-Gegenstelle {Iperf}", config.Etag,
-            wanted.Count, string.Join(", ", wanted.Values.GroupBy(c => c.Type).Select(g => $"{g.Count()} {g.Key}")),
-            config.IperfServer.Enabled ? $"an Port {config.IperfServer.Port}" : "aus");
+        _logger.LogInformation("Konfiguration {Etag} aktiv: {Count} Checks ({Types}), iperf3-Gegenstelle {Iperf}, RTP-Reflektor {Rtp}",
+            config.Etag, wanted.Count, string.Join(", ", wanted.Values.GroupBy(c => c.Type).Select(g => $"{g.Count()} {g.Key}")),
+            config.IperfServer.Enabled ? $"an Port {config.IperfServer.Port}" : "aus",
+            config.RtpReflector.Enabled ? $"an UDP-Port {config.RtpReflector.Port}" : "aus");
     }
 
     private IAsyncDisposable CreateRunner(CheckConfig check) => check.Type switch
@@ -286,6 +308,8 @@ public sealed class ProbeWorker : BackgroundService
                 return _api!.PostResultAsync("results/bandwidth", result, token);
             },
             _loggerFactory.CreateLogger<BandwidthRunner>()),
+        "rtp" => new RtpRunner(check, (result, token) => _api!.PostResultAsync("results/rtp", result, token),
+            _loggerFactory.CreateLogger<RtpRunner>()),
         _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>(), _live),
     };
 
@@ -300,6 +324,7 @@ public sealed class ProbeWorker : BackgroundService
                 {
                     PathRunner p => p.Check.Id == command.CheckId,
                     BandwidthRunner b => b.Check.Id == command.CheckId,
+                    RtpRunner v => v.Check.Id == command.CheckId,
                     _ => false,
                 });
             }
@@ -309,6 +334,10 @@ public sealed class ProbeWorker : BackgroundService
                 case ("run_check", BandwidthRunner b):
                     _logger.LogInformation("Auftrag vom Server: Check {Id} jetzt messen", command.CheckId);
                     b.RunNow();
+                    break;
+                case ("run_check", RtpRunner r):
+                    _logger.LogInformation("Auftrag vom Server: Sprachtest {Id} jetzt ausführen", command.CheckId);
+                    r.RunNow();
                     break;
                 case ("retrace", PathRunner p):
                     _logger.LogInformation("Auftrag vom Server: Pfad von Check {Id} neu ermitteln", command.CheckId);
@@ -333,6 +362,12 @@ public sealed class ProbeWorker : BackgroundService
             {
                 runners.Add(_iperfServer);
                 _iperfServer = null;
+            }
+
+            if (_rtpReflector is not null)
+            {
+                runners.Add(_rtpReflector);
+                _rtpReflector = null;
             }
         }
 

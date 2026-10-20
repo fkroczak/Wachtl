@@ -280,24 +280,24 @@ class PathRunner(Runner):
         log.info("Pfad-Check %s beendet", c["id"])
 
 
-class BandwidthRunner(Runner):
-    """Misst nach Zeitplan oder auf Anforderung; je Probe immer nur eine Bandbreitenmessung gleichzeitig."""
+class ScheduledRunner(Runner):
+    """Misst nach Zeitplan (schedule_min, Zeitfenster, Wochentage) oder auf Anforderung „Jetzt messen“."""
 
-    one_at_a_time = threading.Lock()
+    label = "Check"
 
-    def __init__(self, check: dict, report: Callable[[dict], None], iperf_exe: str | None = None,
-                 measure: Callable[[dict], list[dict]] | None = None):
+    def __init__(self, check: dict):
         super().__init__(check)
-        self.report = report
         self.manual = threading.Event()
-        self.measure = measure or (lambda c: bandwidth.measure(c, iperf_exe))
 
     def run_now(self) -> None:
         self.manual.set()
 
+    def _measure_and_report(self, trigger: str) -> None:
+        raise NotImplementedError
+
     def run(self) -> None:
         c = self.check
-        log.info("Bandbreiten-Check %s (%s) gestartet: %s", c["id"], c["type"], c["target"])
+        log.info("%s %s (%s) gestartet: %s", self.label, c["id"], c["type"], c["target"])
         while not self.stop_event.is_set():
             nxt = schedule.next_run(datetime.now(), int(_p(c, "schedule_min", 60)), int(_p(c, "offset_min", 0)),
                                     _p(c, "window_start", "00:00"), _p(c, "window_end", "23:59"),
@@ -314,7 +314,7 @@ class BandwidthRunner(Runner):
             self._measure_and_report("manual" if manual else "schedule")
             if not manual:
                 self.stop_event.wait(61)     # nicht zweimal im selben Takt
-        log.info("Bandbreiten-Check %s beendet", c["id"])
+        log.info("%s %s beendet", self.label, c["id"])
 
     def _wait_manual(self, seconds: float) -> bool:
         deadline = time.monotonic() + seconds
@@ -326,6 +326,20 @@ class BandwidthRunner(Runner):
                 self.manual.clear()
                 return True
         return False
+
+
+
+class BandwidthRunner(ScheduledRunner):
+    """Bandbreite; je Probe immer nur eine Bandbreitenmessung gleichzeitig."""
+
+    label = "Bandbreiten-Check"
+    one_at_a_time = threading.Lock()
+
+    def __init__(self, check: dict, report: Callable[[dict], None], iperf_exe: str | None = None,
+                 measure: Callable[[dict], list[dict]] | None = None):
+        super().__init__(check)
+        self.report = report
+        self.measure = measure or (lambda c: bandwidth.measure(c, iperf_exe))
 
     def _measure_and_report(self, trigger: str) -> None:
         with self.one_at_a_time:
@@ -339,3 +353,40 @@ class BandwidthRunner(Runner):
                 log.info("Bandbreiten-Check %s: %s %s Mbit/s", self.check["id"], r["direction"], r.get("mbps"))
         if results:
             self.report({"check_id": self.check["id"], "ts": ts, "trigger": trigger, "results": results})
+
+
+class RtpRunner(ScheduledRunner):
+    """Sprachtest (RTP); läuft unabhängig von Bandbreitenmessungen – Sprache unter Last ist aufschlussreich."""
+
+    label = "Sprachtest"
+
+    def __init__(self, check: dict, report: Callable[[dict], None], measure: Callable[[dict], dict] | None = None):
+        super().__init__(check)
+        self.report = report
+        self.measure = measure or (lambda c: measure_rtp(c, self.stop_event))
+
+    def _measure_and_report(self, trigger: str) -> None:
+        log.info("Sprachtest %s: Test startet (%s)", self.check["id"], trigger)
+        ts = int(time.time())
+        result = self.measure(self.check)
+        if self.stop_event.is_set():
+            return
+        if result.get("error"):
+            log.warning("Sprachtest %s fehlgeschlagen: %s", self.check["id"], result["error"])
+        else:
+            log.info("Sprachtest %s: MOS %s, Laufzeit %s ms, Verlust %s %%, Jitter %s ms", self.check["id"],
+                     result.get("mos"), result.get("rtt_ms"), result.get("loss_pct"), result.get("jitter_ms"))
+        self.report({"check_id": self.check["id"], "ts": ts, "trigger": trigger, "result": result})
+
+
+def measure_rtp(check: dict, stop: threading.Event | None = None) -> dict:
+    from ..rtp import stream
+
+    peer = check.get("peer") or {}
+    codec, ptime = str(_p(check, "codec", "g711")), int(_clamp(int(_p(check, "ptime_ms", 20)), 10, 60))
+    duration = int(_clamp(int(_p(check, "duration_s", 30)), 5, 300))
+    if peer.get("error") or not peer.get("host"):
+        return {"codec": codec, "ptime_ms": ptime, "duration_s": duration,
+                "error": peer.get("error") or "Gegenstelle unbekannt"}
+    return stream.run(peer["host"], int(peer.get("port") or 5004), codec, ptime, duration,
+                      int(_clamp(int(_p(check, "dscp", 46)), 0, 63)), stop)

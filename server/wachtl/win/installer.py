@@ -72,6 +72,9 @@ def parse_input(data: dict) -> dict:
     iperf_port = num("iperf_port", 5201, 0, 65535, "iperf3-Port")
     if iperf_port and iperf_port in (https_port, http_port):
         errors.append("Der iperf3-Port muss sich von den Web-Ports unterscheiden.")
+    rtp_port = num("rtp_port", 5004, 0, 65535, "RTP-Port")
+    if rtp_port and rtp_port == iperf_port:
+        errors.append("Der RTP-Port (UDP) muss sich vom iperf3-Port unterscheiden.")
     raw_days = num("raw_days", 30, 1, 365, "Aufbewahrung Rohdaten (Tage)")
     agg_months = num("agg_months", 13, 1, 120, "Aufbewahrung Verlauf (Monate)")
     password = str(data.get("admin_password", ""))
@@ -89,7 +92,7 @@ def parse_input(data: dict) -> dict:
     if errors:
         raise SetupError("\n".join(errors))
     return {"hostnames": hostnames, "auto_ips": bool(data.get("auto_ips", True)),
-            "https_port": https_port, "http_port": http_port, "iperf_port": iperf_port,
+            "https_port": https_port, "http_port": http_port, "iperf_port": iperf_port, "rtp_port": rtp_port,
             "raw_days": raw_days,
             "agg_months": agg_months, "admin_password": password, "data_dir": Path(data_dir), "notify": notify}
 
@@ -129,6 +132,7 @@ def write_configuration(layout: Layout, cfg: dict) -> str:
     env["WACHTL_HTTPS_PORT"] = str(cfg["https_port"])
     env["WACHTL_HTTP_PORT"] = str(cfg["http_port"])
     env["PORT_IPERF"] = str(cfg.get("iperf_port", 5201))
+    env["PORT_RTP"] = str(cfg.get("rtp_port", 5004))
     env["RAW_RETENTION"] = f"{cfg['raw_days']}d"
     env["AGG_RETENTION"] = str(cfg["agg_months"])
     env["WACHTL_SECRET_KEY"] = env.get("WACHTL_SECRET_KEY") or secrets.token_urlsafe(48)
@@ -285,13 +289,13 @@ def check_removed(layout: Layout | None, run: winsys.Runner) -> list[str]:
     left = []
     if winsys.service_state(run) is not None:
         left.append("Dienst WachtlServer (wird nach einem Neustart entfernt)")
-    for name in (winsys.FW_HTTPS, winsys.FW_HTTP, winsys.FW_IPERF):
+    for name in (winsys.FW_HTTPS, winsys.FW_HTTP, winsys.FW_IPERF, winsys.FW_RTP):
         if winsys.firewall_rule_exists(name, run):
             left.append(f"Firewall-Regel „{name}“")
     if winsys.backup_task_exists(run):
         left.append(f"Geplante Aufgabe „{winsys.TASK_BACKUP}“")
     if layout is not None:
-        ports = {layout.https_port, layout.http_port, layout.port("IPERF")} - {0}
+        ports = {layout.https_port, layout.http_port, layout.port("IPERF")} - {0}   # TCP; RTP (UDP) endet mit dem Dienst
         for port in sorted(ports):
             if winsys.port_open(port):
                 left.append(f"Port {port} ist noch offen ({winsys.owner_of_port(port, run)})")

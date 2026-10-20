@@ -124,7 +124,7 @@ class StandardPackageTest(AppTestCase):
         r = self.client.post("/admin/standard-package", data={"csrf_token": tok, "scope": "all", "items": keys})
         self.assertEqual(r.status_code, 302)
         types = {c["type"] for c in q("SELECT type FROM checks")}
-        self.assertEqual(types, {"ping", "path", "iperf", "speedtest"})
+        self.assertEqual(types, {"ping", "path", "iperf", "speedtest", "rtp"})
         self.assertEqual(q1("SELECT COUNT(*) AS n FROM checks WHERE target = 'gateway'")["n"], 1)  # Seed nicht doppelt
         self.assertTrue(q1("SELECT id FROM checks WHERE type = 'path' AND target = 'wachtl.kunde.de'"))
         n = q1("SELECT COUNT(*) AS n FROM checks")["n"]
