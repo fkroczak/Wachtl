@@ -16,7 +16,7 @@ from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
                        hash_token, login_required, login_user, new_secret, password_problem, try_login,
                        verify_password)
-from . import checktypes, rtp, standardpaket
+from . import checktypes, httperrors, rtp, standardpaket
 from . import findings as finding_service
 from . import reports as report_service
 from .services import alertgen
@@ -141,6 +141,11 @@ def fmt_duration(seconds):
     if seconds < 86400:
         return f"{seconds // 3600} h {seconds % 3600 // 60:02d} min"
     return f"{seconds // 86400} d {seconds % 86400 // 3600} h"
+
+
+@bp.app_template_filter("explain_error")
+def explain_error(v):
+    return httperrors.explain(v)
 
 
 @bp.app_template_filter("fromjson")

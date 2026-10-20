@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-from .. import checktypes, repo, schedule
+from .. import checktypes, httperrors, repo, schedule
 from ..db import q
 
 STATE_LABELS = {"ok": "ok", "warn": "auffällig", "down": "gestört", "stale": "keine Daten", "waiting": "wartet"}
@@ -121,7 +121,7 @@ def _bandwidth_state(probe: dict, c: dict, runs: dict, now: int) -> CheckState:
     if errors:
         e = errors[0]
         arrow = "↓" if e["direction"] == "down" else "↑"
-        return CheckState(c, "down", f"{arrow} {e['error'] or 'kein Ergebnis'}", latest["ts"], vals)
+        return CheckState(c, "down", f"{arrow} {httperrors.explain(e['error']) or 'kein Ergebnis'}", latest["ts"], vals)
     low = []
     for r in current:
         limit = params.get("min_down_mbps" if r["direction"] == "down" else "min_up_mbps") or 0
