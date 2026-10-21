@@ -3,7 +3,7 @@ from datetime import datetime
 from unittest import mock
 
 from wachtl import checktypes, repo, schedule, standardpaket
-from wachtl.db import ex, ins, q, q1
+from wachtl.db import ex, q, q1
 from wachtl.services import checkstatus
 
 from .helpers import AppTestCase

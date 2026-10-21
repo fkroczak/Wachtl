@@ -855,12 +855,12 @@ def admin():
         (repo.now(),),
     )
     return render_template(
-        "admin.html", sites=sites, probes=probes, checks=checks, assignments=assignments, tokens=tokens,
+        "admin.html", sites=sites, checks=checks, assignments=assignments, tokens=tokens,
         rules=list(repo.alert_rules().values()), users=q("SELECT * FROM users ORDER BY username"),
-        intervals=repo.ALLOWED_INTERVALS, roles=ROLES, notify_settings=notify.get_settings(),
+        roles=ROLES, notify_settings=notify.get_settings(),
         probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]),
         notify_enabled=bool(current_app.config.get("AM_CONFIG")),
-        check_types=checktypes.TYPES, summary=checktypes.summary, merged=checktypes.merged,
+        check_types=checktypes.TYPES, summary=checktypes.summary,
         measure=settings_service.get(), measure_fields=settings_service.FIELDS,
         package=standardpaket.preview(current_app.config["PUBLIC_URL"]),
     )
@@ -966,7 +966,7 @@ def setup_wizard():
             setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
             return render_template(
                 "token_created.html", token=token, site=site, days=days, max_uses=max_uses, proxy=proxy,
-                server_url=public_url, server_urls=repo.server_urls(), pin=current_app.config["SPKI_PIN"],
+                server_urls=repo.server_urls(), pin=current_app.config["SPKI_PIN"],
                 setup_name=setup.name if setup else None,
             )
     return render_template(
@@ -1048,7 +1048,7 @@ def token_create():
     setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
     return render_template(
         "token_created.html", token=token, site=s, days=days, max_uses=max_uses,
-        server_url=current_app.config["PUBLIC_URL"], server_urls=repo.server_urls(),
+        server_urls=repo.server_urls(),
         pin=current_app.config["SPKI_PIN"], setup_name=setup.name if setup else None,
     )
 

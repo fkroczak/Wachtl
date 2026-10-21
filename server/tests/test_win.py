@@ -1,7 +1,4 @@
 """Tests der Windows-Variante, soweit sie plattformunabhängig ist (Systembefehle im Trockenlauf)."""
-import base64
-import hashlib
-import io
 import json
 import os
 import shutil

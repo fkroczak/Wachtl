@@ -1,4 +1,3 @@
-import json
 from unittest import mock
 
 from wachtl.db import ex, q, q1
