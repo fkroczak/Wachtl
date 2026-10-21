@@ -114,12 +114,15 @@ def csrf_token() -> str:
 
 def check_csrf() -> None:
     """Für alle zustandsändernden Session-Requests (Formular oder Header)."""
-    if request.method in ("GET", "HEAD", "OPTIONS"):
-        return
+    if request.method not in ("GET", "HEAD", "OPTIONS") and not csrf_ok():
+        abort(400, "CSRF-Prüfung fehlgeschlagen. Bitte Seite neu laden.")
+
+
+def csrf_ok() -> bool:
     sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
     expected = session.get("csrf", "")
-    if not expected or not hmac.compare_digest(sent, expected):
-        abort(400, "CSRF-Prüfung fehlgeschlagen. Bitte Seite neu laden.")
+    # Bytes vergleichen: compare_digest wirft bei Nicht-ASCII-Strings einen TypeError (500)
+    return bool(expected) and hmac.compare_digest(sent.encode(), expected.encode())
 
 
 # -- Probe-Authentifizierung -----------------------------------------------

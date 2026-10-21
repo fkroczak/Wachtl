@@ -24,6 +24,20 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(self.client.get("/").status_code, 200)
 
+    def test_login_needs_csrf_from_session(self):
+        # Fremde Seite postet ohne Sitzung und ohne Token: kein Login (Login-CSRF)
+        self.make_user()
+        r = self.client.post("/login", data={"username": "admin", "password": "sehr-geheimes-pw"})
+        self.assertIn("/login", r.headers["Location"])
+        with self.client.session_transaction() as s:
+            self.assertNotIn("uid", s)
+
+    def test_csrf_non_ascii_is_400(self):
+        self.make_user()
+        self.login()
+        r = self.client.post("/logout", headers={"X-CSRF-Token": "ä"})
+        self.assertEqual(r.status_code, 400)
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")

@@ -13,9 +13,9 @@ from flask import (Blueprint, abort, current_app, flash, g, redirect, render_tem
 
 from . import repo
 from .db import ex, ins, q, q1
-from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
-                       hash_token, login_required, login_user, new_secret, password_problem, try_login,
-                       verify_password)
+from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_ok, csrf_token, current_user, has_role,
+                       hash_password, hash_token, login_required, login_user, new_secret, password_problem,
+                       try_login, verify_password)
 from . import checktypes, httperrors, rtp, standardpaket
 from . import findings as finding_service
 from . import reports as report_service
@@ -189,7 +189,7 @@ def _regen_rules() -> None:
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("csrf_token") != session.get("csrf"):
+        if not csrf_ok():
             flash("Sitzung abgelaufen, bitte erneut versuchen.", "error")
             return redirect(url_for("web.login"))
         user, error = try_login(request.form.get("username", "").strip(), request.form.get("password", ""))
