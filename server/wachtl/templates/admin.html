@@ -13,7 +13,7 @@
 
 <section id="standorte">
   <h2>Standorte</h2>
-  <table>
+  <div class="scroll"><table>
     <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>
     {% for s in sites %}
@@ -23,7 +23,7 @@
           <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td></tr>
     {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
     </tbody>
-  </table>
+  </table></div>
   <form method="post" action="{{ url_for('web.site_create') }}" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Name <input name="name" required maxlength="100"></label>
@@ -42,14 +42,14 @@
   {% if not probe_setup %}<p class="flash warn">Auf diesem Server liegt noch kein Setup. Windows-Server: wird beim Installieren abgelegt.
     Linux: <code>WachtlSetup-*.exe</code> in den Ordner <code>deploy/probe</code> legen.</p>{% endif %}
   {% if tokens %}
-  <table>
+  <div class="scroll"><table>
     <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for t in tokens %}
       <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
         <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
     {% endfor %}</tbody>
-  </table>
+  </table></div>
   {% else %}<p class="muted">Keine offenen Tokens. Unten Standort wählen und Setup herunterladen – das legt einen Token an.</p>
   {% endif %}
   <form method="post" action="{{ url_for('web.token_create') }}" class="row">
@@ -121,7 +121,7 @@
   <div class="actions">
     {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
   </div>
-  <table>
+  <div class="scroll"><table>
     <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for c in checks %}
       <tr class="{{ '' if c.enabled else 'disabled' }}">
@@ -140,7 +140,7 @@
         </td>
       </tr>
     {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
-  </table>
+  </table></div>
 </section>
 
 <section id="messung">
@@ -171,7 +171,7 @@
   <h2>Alarmregeln</h2>
   <form method="post" action="{{ url_for('web.rules_update') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <table>
+    <div class="scroll"><table>
       <thead><tr><th>Ein</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
       <tbody>{% for r in rules %}
         <tr>
@@ -184,7 +184,7 @@
           <td><select name="severity_{{ r.kind }}" aria-label="{{ r.name }}: Stufe">{% for sv in ('info','warning','critical') %}<option value="{{ sv }}" {{ 'selected' if sv == r.severity }}>{{ sv|severity }}</option>{% endfor %}</select></td>
         </tr>
       {% endfor %}</tbody>
-    </table>
+    </table></div>
     <button class="primary">Alarmregeln speichern</button>
   </form>
 </section>
@@ -216,7 +216,7 @@
 
 <section id="benutzer">
   <h2>Benutzer</h2>
-  <table>
+  <div class="scroll"><table>
     <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for u in users %}
       <tr><td>{{ u.username }}</td><td>{{ ROLE_LABELS[u.role] }}</td><td>{{ u.last_login|dt }}</td>
@@ -230,7 +230,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Benutzer {{ u.username }} löschen?" aria-label="Löschen: Benutzer {{ u.username }}">Löschen</button></form>
         {% else %}<a href="{{ url_for('web.account') }}">Eigenes Passwort ändern</a>{% endif %}</td></tr>
     {% endfor %}</tbody>
-  </table>
+  </table></div>
   <form method="post" action="{{ url_for('web.user_create') }}" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Benutzername <input name="username" required maxlength="64" autocomplete="off" value="{{ user_draft.username }}"></label>

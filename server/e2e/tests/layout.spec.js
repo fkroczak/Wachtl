@@ -2,8 +2,8 @@
 const { test, expect } = require("@playwright/test");
 const { PAGES, ids } = require("../pages");
 
-// 320 CSS-px ≙ 1280 px bei 400 % Zoom (WCAG 1.4.10), 640 px ≙ 200 %
-for (const width of [320, 640]) {
+// 320 CSS-px ≙ 1280 px bei 400 % Zoom (WCAG 1.4.10), 640 px ≙ 200 %, 768/900 px = Tablet (Audit 2026-10-21)
+for (const width of [320, 640, 768, 900]) {
   test.describe(`Reflow ${width}px`, () => {
     test.use({ viewport: { width, height: 800 } });
     for (const [name, url] of PAGES) {
