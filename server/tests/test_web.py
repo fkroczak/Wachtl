@@ -24,6 +24,10 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 302)
         self.assertEqual(self.client.get("/").status_code, 200)
 
+    def test_noindex_everywhere(self):
+        for path in ("/login", "/healthz", "/static/app.css"):
+            self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
+
     def test_user_menu_and_design(self):
         self.make_user()
         self.login()
