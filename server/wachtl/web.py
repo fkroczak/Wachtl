@@ -767,6 +767,7 @@ def probe_status(probe_id: int):
         return redirect(url_for("web.probe", probe_id=probe_id))
     ex("UPDATE probes SET status = ? WHERE id = ?", (new, probe_id))
     repo.audit(current_user()["username"], f"probe.{new}", f"probe:{probe_id}")
+    _regen_rules()  # Offline-Alarm folgt dem Status
     flash("Probe deaktiviert – ihr Token wird abgelehnt." if new == "disabled" else "Probe aktiviert.", "ok")
     return redirect(url_for("web.probe", probe_id=probe_id))
 
