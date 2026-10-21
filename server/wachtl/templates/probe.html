@@ -102,7 +102,7 @@
       <td>{{ (v.loss if v else None)|pct }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="muted">Keine Checks zugewiesen.</td></tr>
+    <tr><td colspan="7" class="muted">Keine Ping-Checks zugewiesen.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.check_new', ctype='ping') }}">Ping-Check anlegen</a>{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>

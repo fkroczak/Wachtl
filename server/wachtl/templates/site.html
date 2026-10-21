@@ -61,7 +61,7 @@
   </li>
   {% endfor %}
 </ul>
-{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
+{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.admin') }}#enrollment">Setup für diesen Standort herunterladen</a>{% endif %}</p>{% endif %}
 
 <h2 id="alarme">Aktive Alarme</h2>
 {% if alerts %}

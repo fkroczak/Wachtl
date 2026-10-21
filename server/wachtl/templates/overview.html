@@ -42,7 +42,8 @@
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
+{% elif probes %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>
+{% else %}<p class="muted">Noch nichts gemessen – es ist keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
 <h2 id="hinweise">Hinweise von PCs</h2>
 {% if client_findings %}
