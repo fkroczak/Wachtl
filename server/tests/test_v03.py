@@ -303,3 +303,12 @@ class LiveStatusTest(AppTestCase):
             self.assertIn("100.0 %", r.get_data(as_text=True))
             self.assertEqual(self.client.get("/sites/1").status_code, 200)
             self.assertEqual(self.client.get("/").status_code, 200)
+
+
+class ConvertTest(__import__("unittest").TestCase):
+    def test_nan_and_inf_are_not_numbers(self):
+        from wachtl import checktypes
+        f = next(f for t in checktypes.TYPES.values() for f in t.fields if f.key == "udp_mbps")
+        for raw in ("nan", "inf", "-inf"):
+            with self.assertRaises(ValueError):
+                checktypes._convert(f, raw)
