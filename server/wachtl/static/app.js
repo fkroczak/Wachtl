@@ -48,6 +48,14 @@
   // Fehlerübersicht nach dem Absenden fokussieren, damit Screenreader sie vorlesen
   document.querySelector("[data-error-summary]")?.focus();
 
+  // Meldung nach Speichern dort zeigen, wohin die Seite springt (z. B. /admin#benutzer) – oben wäre sie außer Sicht
+  const jumpTo = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  const flashes = document.querySelectorAll("main > .flash");
+  if (jumpTo && flashes.length) {
+    if (jumpTo.matches("h2, h3")) jumpTo.before(...flashes); else jumpTo.prepend(...flashes);
+    flashes[0].scrollIntoView();
+  }
+
   // Übersichten automatisch aktualisieren – aber nie mitten in einer Eingabe:
   // ein Neuladen würde Eingaben verwerfen und Fokus/Leseposition zurücksetzen.
   const auto = document.querySelector("[data-autorefresh]");
