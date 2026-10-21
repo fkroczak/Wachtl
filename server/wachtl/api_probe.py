@@ -64,7 +64,13 @@ def enroll():
 
     site = q1("SELECT * FROM sites WHERE id = ?", (et["site_id"],))
     secret = new_secret()
-    existing = q1("SELECT id FROM probes WHERE site_id = ? AND hostname = ?", (site["id"], hostname))
+    existing = q1("SELECT id, status, deregistered_at FROM probes WHERE site_id = ? AND hostname = ?",
+                  (site["id"], hostname))
+    if existing and existing["status"] == "disabled" and not existing["deregistered_at"]:
+        # vom Admin deaktiviert: Token bleibt abgelehnt, auch bei Neuinstallation (sonst hebt jeder Token-Inhaber
+        # die Sperre auf). Nach Deinstallation (deregistered_at) ist Neuinstallation erlaubt.
+        log.warning("Enrollment abgelehnt für deaktivierte Probe %s von %s", hostname, _client_ip())
+        return jsonify(error="Probe ist im Web-UI deaktiviert – dort zuerst aktivieren, dann neu installieren"), 403
     if existing:
         probe_id = existing["id"]
         action = "probe.reenroll"
