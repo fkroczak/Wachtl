@@ -147,7 +147,7 @@ def probe_auth(fn):
             return jsonify(error="Token fehlt"), 401
         token = header[7:].strip()
         probe_id, _, secret = token.partition(".")
-        if not probe_id.isdigit() or not secret:
+        if not (probe_id.isascii() and probe_id.isdigit()) or not secret:  # "²".isdigit() ist True
             return jsonify(error="Token ungültig"), 401
         probe = q1(
             "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?",

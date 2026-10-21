@@ -821,7 +821,7 @@ def alerts():
 @login_required("operator")
 def alert_ack(event_id: int):
     event = q1("SELECT * FROM alert_events WHERE id = ?", (event_id,)) or abort(404)
-    hours = min(max(int(request.form.get("hours", 4) or 4), 1), 168)
+    hours = min(max(request.form.get("hours", 4, type=int), 1), 168)
     try:
         alert_service.acknowledge(event, current_user()["username"], hours, request.form.get("comment", "")[:500])
         repo.audit(current_user()["username"], "alert.ack", f"alert:{event_id}", f"{hours} h")
@@ -872,7 +872,7 @@ def standard_package():
     scope = request.form.get("scope", "all")
     scope_id = None
     if scope == "site":
-        scope_id = int(request.form.get("site_id", 0) or 0)
+        scope_id = request.form.get("site_id", 0, type=int)
         if not q1("SELECT id FROM sites WHERE id = ?", (scope_id,)):
             flash("Bitte einen Standort auswählen.", "error")
             return redirect(url_for("web.admin") + "#standardpaket")
@@ -1027,13 +1027,13 @@ def site_delete(site_id: int):
 @bp.post("/admin/tokens")
 @login_required("admin")
 def token_create():
-    site_id = int(request.form.get("site_id", 0) or 0)
+    site_id = request.form.get("site_id", 0, type=int)
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,))
     if s is None:
         flash("Bitte zuerst einen Standort anlegen und auswählen.", "error")
         return redirect(url_for("web.admin") + "#enrollment")
-    days = min(max(int(request.form.get("days", 7) or 7), 1), 90)
-    max_uses = min(max(int(request.form.get("max_uses", 1) or 1), 1), 500)
+    days = min(max(request.form.get("days", 7, type=int), 1), 90)
+    max_uses = min(max(request.form.get("max_uses", 1, type=int), 1), 500)
     token = repo.create_enrollment_token(site_id, max_uses, days, current_user()["username"],
                                          request.form.get("description", ""))
     if request.form.get("action") == "setup":

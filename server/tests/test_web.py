@@ -52,6 +52,17 @@ class WebTest(AppTestCase):
         self.assertEqual(self.client.get("/").status_code, 200)   # eigene Sitzung bleibt
         self.assertEqual(other.get("/").status_code, 302)         # andere Sitzung endet
 
+    def test_bad_numbers_no_500(self):
+        self.make_user()
+        self.login()
+        tok = self.session_csrf()
+        self.assertEqual(self.client.post("/admin/tokens", data={"csrf_token": tok, "site_id": "x"}).status_code, 302)
+        self.assertEqual(self.client.post("/admin/standard-package",
+                                          data={"csrf_token": tok, "scope": "site", "site_id": "x"}).status_code, 302)
+        self.assertLess(self.client.get("/api/v1/probes/1/bandwidth?since=x").status_code, 500)
+        r = self.client.post("/api/probe/v1/heartbeat", headers={"Authorization": "Bearer \u00b2.x"})
+        self.assertEqual(r.status_code, 401)
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
