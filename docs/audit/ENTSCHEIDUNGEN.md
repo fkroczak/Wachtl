@@ -46,3 +46,43 @@ Komplett verwerfen: Branch löschen, `main` ist unberührt.
 - **Randfall:** API `?since=` (leer) bedeutet jetzt „Standard 30 Tage“ statt „seit 0“.
 - **Dateien:** `server/wachtl/web.py`, `server/wachtl/api_admin.py`, `server/wachtl/security.py`, `server/tests/test_web.py`
 - **Commit:** `a0ad35a` · **Risiko:** niedrig · **Rückbau:** `git revert a0ad35a`
+
+## E-07 · 03:01 · Deaktivierte Probe per Neu-Registrierung reaktivierbar — PRÜFEN
+- **Anlass:** `enroll` setzte bei gleichem Standort+Hostname immer `status='active'`. Wer einen gültigen Registrierungs-Token hat (steckt im verteilten Setup, bis 500 Nutzungen/90 Tage), hob die Admin-Sperre auf. Das UI verspricht „ihr Token wird abgelehnt“.
+- **Optionen:** (a) nichts tun, dokumentieren; (b) Neu-Registrierung nur für vom Admin deaktivierte Probes ablehnen (403 mit Hinweis); (c) zusätzlich Übernahme aktiver Probes verhindern.
+- **Gewählt:** (b). Deinstallierte Probes (`deregistered_at`) dürfen weiter neu installiert werden. (c) ändert den vorgesehenen Ablauf „PC neu aufsetzen“ → nur als Finding.
+- **Folge:** Neuinstallation auf einem im Web-UI deaktivierten PC scheitert mit „Probe ist im Web-UI deaktiviert – dort zuerst aktivieren“. Probe-Code und Messbetrieb unberührt.
+- **Dateien:** `server/wachtl/api_probe.py`, `server/tests/test_probe_api.py`
+- **Commit:** `a65207c` · **Risiko:** mittel · **Rückbau:** `git revert a65207c`
+
+## E-08 · 03:04 · Offline-Alarm für deaktivierte/deinstallierte Probes — PRÜFEN
+- **Anlass:** Regel `WachtlProbeOffline` filterte nicht nach Status → nach Deaktivieren/Deinstallieren bis 24 h kritischer Alarm (E-Mail/Teams alle 4 h) und ein Eintrag in „Ausfälle“.
+- **Optionen:** (a) Positivliste aktiver Probes (neue Probe ohne Regel-Neuschreiben hätte **keinen** Offline-Alarm – gefährlich); (b) Ausschlussliste `probe!~"…"` nicht-aktiver Probes.
+- **Gewählt:** (b) – Fehlerrichtung bleibt „Alarm zu viel“, nie „Alarm fehlt“. Regeln werden bei Aktivieren/Deaktivieren, Abmeldung und Wieder-Registrierung neu geschrieben; ein Fehler dabei bricht Registrierung/Abmeldung nicht ab.
+- **Shortcut:** gelöschte Probes alarmieren weiter bis 24 h (ID nicht mehr in der DB). Hartkodiertes `[24h]` statt `window_s` unverändert gelassen.
+- **Dateien:** `server/wachtl/services/alertgen.py`, `server/wachtl/api_probe.py`, `server/wachtl/web.py`, `server/tests/test_alertgen.py`
+- **Commit:** `2b3dea5` · **Risiko:** mittel (Alarmierung; Prober/Scheduler unberührt) · **Rückbau:** `git revert 2b3dea5`, danach `flask --app wachtl rules` bzw. Neustart schreibt Regeln neu
+
+## E-09 · 03:04 · Fokusring im Benutzermenü unsichtbar
+- **Anlass:** `.topbar :focus-visible` (fast weiß) galt auch im weißen Menü-Panel → Kontrast ≈ 1,1:1.
+- **Gewählt:** Panel nutzt `--focus`. Eine Zeile CSS.
+- **Dateien:** `server/wachtl/static/app.css` · **Commit:** `c13dbdd` · **Risiko:** niedrig · **Rückbau:** `git revert c13dbdd`
+
+## E-10 · 03:05 · Touch-Ziele ≥ 44 px
+- **Anlass:** Tabellen-Aktionen ≈ 22 px, Navigation ≈ 31 px, Buttons ≈ 36 px, Checkboxen 13 px.
+- **Optionen:** (a) überall 44 px (Desktop-Tabellen werden luftig, Layout-Tests „Gesetz der Nähe“ betroffen); (b) nur `@media (pointer: coarse)`.
+- **Gewählt:** (b). Geprüft mit iPhone-13-Emulation auf allen 21 Seiten aus `e2e/pages.js`: kein Ziel < 44 px, kein horizontales Scrollen.
+- **Dateien:** `server/wachtl/static/app.css` · **Commit:** `d070b1e` · **Risiko:** niedrig · **Rückbau:** `git revert d070b1e`
+
+## E-11 · 03:05 · „Aktivieren“ bei deinstallierter Probe scheitert immer
+- **Gewählt:** statt des Knopfs ein Hinweis „Deinstalliert – Setup neu installieren“. Server-Prüfung bleibt.
+- **Dateien:** `server/wachtl/templates/probe.html`, `server/tests/test_v04.py` · **Commit:** `0235bbc` · **Risiko:** niedrig · **Rückbau:** `git revert 0235bbc`
+
+## E-12 · 03:07 · Ungültiger Proxy beim „Setup herunterladen“
+- **Anlass:** Token wurde erst angelegt, dann `abort(400)` → verwaister Token, Fehlerseite ohne Rückweg.
+- **Gewählt:** Proxy vor dem Anlegen prüfen, Meldung im Formular-Abschnitt.
+- **Dateien:** `server/wachtl/web.py`, `server/tests/test_web.py` · **Commit:** `d582d1c` · **Risiko:** niedrig · **Rückbau:** `git revert d582d1c`
+
+## E-13 · 03:07 · Fehlerseiten 405/500 englisch, ohne nächsten Schritt
+- **Gewählt:** 405/500 nutzen die deutsche Fehlerseite; alle Fehlerseiten bieten „Zurück zur vorigen Seite“ (Referer, durch `Referrer-Policy: same-origin` nur eigene Seiten) und „Zur Übersicht“. API-Pfade bekommen JSON wie bisher bei 400/403/404.
+- **Dateien:** `server/wachtl/__init__.py`, `server/wachtl/templates/error.html`, `server/tests/test_web.py` · **Commit:** `2f2c1d6` · **Risiko:** niedrig · **Rückbau:** `git revert 2f2c1d6`
