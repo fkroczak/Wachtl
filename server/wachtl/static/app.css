@@ -244,7 +244,7 @@ details.pw-reset summary { cursor: pointer; color: var(--accent); }
 .lg-smoke { background: linear-gradient(var(--band-soft) 25%, var(--band) 25% 75%, var(--band-soft) 75%); }
 .lg-over { background: color-mix(in srgb, var(--warn) 20%, var(--surface)); }
 .lg-thrlat { border-top: 2px dashed var(--warn); height: 0 !important; }
-td.nowrap form + form { margin-left: 0.6rem; }
+td.nowrap form + form, td.nowrap a.link + form { margin-left: 0.6rem; }
 pre.copy { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.8rem;
   overflow-x: auto; user-select: all; }
 

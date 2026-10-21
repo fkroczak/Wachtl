@@ -20,7 +20,7 @@
       <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
         <td><form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?">Löschen</button></form></td></tr>
+          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td></tr>
     {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
     </tbody>
   </table>
@@ -47,7 +47,7 @@
     <tbody>{% for t in tokens %}
       <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
         <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger">Widerrufen</button></form></td></tr>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
     {% endfor %}</tbody>
   </table>
   {% endif %}
@@ -131,11 +131,11 @@
         <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
         <td>{{ onoff(c.enabled) }}</td>
         <td class="nowrap">
-          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}">Bearbeiten</a>
+          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}" aria-label="Bearbeiten: {{ c.name }}">Bearbeiten</a>
           <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Ausschalten' if c.enabled else 'Einschalten' }}</button></form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="{{ 'Ausschalten' if c.enabled else 'Einschalten' }}: {{ c.name }}">{{ 'Ausschalten' if c.enabled else 'Einschalten' }}</button></form>
           <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?">Löschen</button></form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?" aria-label="Löschen: {{ c.name }}">Löschen</button></form>
         </td>
       </tr>
     {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
@@ -219,14 +219,14 @@
     <thead><tr><th>Benutzer</th><th>Rolle</th><th>Letzte Anmeldung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for u in users %}
       <tr><td>{{ u.username }}</td><td>{{ ROLE_LABELS[u.role] }}</td><td>{{ u.last_login|dt }}</td>
-        <td>{% if u.id != user.id %}<details class="pw-reset"><summary>Passwort zurücksetzen</summary>
+        <td>{% if u.id != user.id %}<details class="pw-reset"><summary aria-label="Passwort zurücksetzen: {{ u.username }}">Passwort zurücksetzen</summary>
           <form method="post" action="{{ url_for('web.user_password', user_id=u.id) }}" class="row">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label>Neues Passwort für {{ u.username }} <input name="password" type="password" required autocomplete="new-password"></label>
             <button class="primary">Setzen</button>
           </form></details>
           <form method="post" action="{{ url_for('web.user_delete', user_id=u.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Benutzer {{ u.username }} löschen?">Löschen</button></form>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Benutzer {{ u.username }} löschen?" aria-label="Löschen: Benutzer {{ u.username }}">Löschen</button></form>
         {% else %}<a href="{{ url_for('web.account') }}">Eigenes Passwort ändern</a>{% endif %}</td></tr>
     {% endfor %}</tbody>
   </table>

@@ -120,7 +120,7 @@
       <td>{{ run.first_ts|dt if run else '–' }}</td>
       <td>{{ run.ts|ago if run else '–' }}</td>
       <td>{% if has_role(user, 'operator') %}<form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Neu ermitteln</button></form>{% endif %}</td>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="Neu ermitteln: {{ c.name }}">Neu ermitteln</button></form>{% endif %}</td>
     </tr>
   {% endfor %}</tbody>
 </table>
@@ -146,7 +146,7 @@
       <td>{% if has_role(user, 'operator') %}
         {% if pending %}<span class="muted small">beauftragt …</span>{% else %}
         <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Jetzt messen</button></form>{% endif %}
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="Jetzt messen: {{ c.name }}">Jetzt messen</button></form>{% endif %}
       {% endif %}</td>
     </tr>
   {% endfor %}</tbody>
