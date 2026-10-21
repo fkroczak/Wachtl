@@ -63,19 +63,30 @@ def try_login(username: str, password: str) -> tuple[dict | None, str | None]:
     return user, None
 
 
+def password_marker(pw_hash: str) -> str:
+    """Kennung des Passwortstands für die Sitzung – ändert sich das Passwort, endet jede alte Sitzung."""
+    return hash_token(pw_hash)[:16]
+
+
 def login_user(user: dict) -> None:
     session.clear()
     session["uid"] = user["id"]
+    session["pwv"] = password_marker(user["password_hash"])
     session["csrf"] = new_secret(16)
     session.permanent = True
 
 
 def current_user() -> dict | None:
     uid = session.get("uid")
-    if g.get("user_uid", "-") == uid:
+    key = (uid, session.get("pwv"))
+    if g.get("user_key") == key:
         return g.user
-    g.user_uid = uid
-    g.user = q1("SELECT id, username, role, theme, contrast FROM users WHERE id = ?", (uid,)) if uid else None
+    g.user_key = key
+    row = q1("SELECT id, username, role, theme, contrast, password_hash FROM users WHERE id = ?", (uid,)) if uid else None
+    if row and session.get("pwv") == password_marker(row.pop("password_hash")):
+        g.user = row
+    else:
+        g.user = None
     return g.user
 
 

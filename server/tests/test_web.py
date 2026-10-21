@@ -38,6 +38,20 @@ class WebTest(AppTestCase):
         r = self.client.post("/logout", headers={"X-CSRF-Token": "ä"})
         self.assertEqual(r.status_code, 400)
 
+    def test_password_change_ends_other_sessions(self):
+        self.make_user()
+        self.login()
+        other = self.app.test_client()
+        with other.session_transaction() as s:
+            s["csrf"] = "x"
+        other.post("/login", data={"username": "admin", "password": "sehr-geheimes-pw", "csrf_token": "x"})
+        self.assertEqual(other.get("/").status_code, 200)
+        r = self.client.post("/account", data={"csrf_token": self.session_csrf(), "old_password": "sehr-geheimes-pw",
+                                               "new_password": "neu-pw-123", "new_password2": "neu-pw-123"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.get("/").status_code, 200)   # eigene Sitzung bleibt
+        self.assertEqual(other.get("/").status_code, 302)         # andere Sitzung endet
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")

@@ -14,7 +14,7 @@ from flask import (Blueprint, abort, current_app, flash, g, redirect, render_tem
 from . import repo
 from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_ok, csrf_token, current_user, has_role,
-                       hash_password, hash_token, login_required, login_user, new_secret, password_problem,
+                       hash_password, hash_token, login_required, login_user, password_marker, password_problem,
                        try_login, verify_password)
 from . import checktypes, httperrors, rtp, standardpaket
 from . import findings as finding_service
@@ -233,7 +233,9 @@ def account():
         elif problem := password_problem(new):
             flash(problem, "error")
         else:
-            ex("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user["id"]))
+            new_hash = hash_password(new)
+            ex("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
+            session["pwv"] = password_marker(new_hash)  # diese Sitzung bleibt, alle anderen enden
             repo.audit(user["username"], "user.password")
             flash("Passwort geändert.", "ok")
         return redirect(url_for("web.account"))
@@ -248,7 +250,7 @@ def design():
         if theme not in THEMES or contrast not in CONTRASTS:
             abort(400)
         ex("UPDATE users SET theme = ?, contrast = ? WHERE id = ?", (theme, contrast, current_user()["id"]))
-        g.pop("user_uid", None)  # zwischengespeicherten Benutzer verwerfen
+        g.pop("user_key", None)  # zwischengespeicherten Benutzer verwerfen
         flash("Design gespeichert.", "ok")
         return redirect(url_for("web.design"))
     return render_template("design.html", themes=THEMES, contrasts=CONTRASTS)
