@@ -14,8 +14,9 @@ Komplett verwerfen: Branch löschen, `main` ist unberührt.
 - **Anlass:** Vorher/Nachher-Vergleich gefordert.
 - **Optionen:** (a) manuell; (b) kleines Skript auf Basis der vorhandenen Playwright-Seitenliste `e2e/pages.js`.
 - **Gewählt:** (b), 30 Zeilen, keine neue Abhängigkeit.
-- **Dateien:** `server/e2e/screens.js`, `docs/audit/screens/vorher/*`
-- **Commit:** siehe `git log --grep E-02` · **Risiko:** niedrig · **Rückbau:** `git revert <hash>`
+- **Dateien:** `server/e2e/screens.js`, `docs/audit/screens/vorher/*`, `docs/audit/screens/nachher/*`
+- **Nachtrag 03:39:** Vorher-Bilder neu erzeugt mit dem alten Stand (`9f379db`, eigener Server auf Port 5001, frische Demodaten) und Handy-Ansicht mit Touch-Emulation (iPhone 13), damit Vorher/Nachher vergleichbar sind. Messwerte in den Demodaten sind zufällig.
+- **Commits:** `265f2dd`, `832c00e` · **Risiko:** niedrig · **Rückbau:** `git revert 832c00e 265f2dd`
 
 ## E-03 · 02:53 · noindex fehlte
 - **Anlass:** Vorgabe „keine Indexierung (noindex beibehalten)“ – im Code gab es weder Meta-Tag noch Header.
@@ -135,3 +136,26 @@ Komplett verwerfen: Branch löschen, `main` ist unberührt.
 - **Gewählt:** (b), ~20 Zeilen JS, keine Server-Änderung. Suchbegriff steht in `?q=` und übersteht das Auto-Neuladen; Tippen im Suchfeld pausiert das Neuladen nicht dauerhaft. „Kein Treffer“-Hinweis. Neuer Browser-Test in `e2e/tests/layout.spec.js`.
 - **Shortcut:** Abteilung gibt es im Datenmodell nicht; gefiltert wird, was auf der Übersicht steht.
 - **Dateien:** `templates/overview.html`, `static/app.js`, `static/app.css`, `e2e/tests/layout.spec.js` · **Commit:** `d695193` · **Risiko:** niedrig · **Rückbau:** `git revert d695193`
+
+## E-23 · 03:28 · Knopf-Ränder kaum sichtbar
+- **Anlass:** Sekundär-Knöpfe hatten Rand `--border` (1,3:1 hell) – als Bedienelement schwer erkennbar (WCAG 1.4.11).
+- **Gewählt:** Rand wie Eingabefelder (`--field-border`, ≥ 3:1).
+- **Dateien:** `static/app.css` · **Commit:** `1872f16` · **Risiko:** niedrig · **Rückbau:** `git revert 1872f16`
+
+## E-24 · 03:29 · Ziel-Seite ohne Typ-Prüfung, doppelte Konstante
+- **Anlass:** `/probes/<p>/checks/<c>` renderte für Pfad-/Bandbreiten-/Sprach-Checks eine kaputte Graph-Seite (Pfad, Bandbreite, Sprache prüfen ihren Typ bereits). `OUTAGE_RANGES` = `BW_RANGES` doppelt.
+- **Gewählt:** vorhandene Helfer `_probe_or_404`/`_probe_check_or_404(…, ("ping",))` nutzen; Konstante als Alias. Alle Links im UI zeigen nur für Pings auf diese Seite (geprüft: `check_url`, `alert_refs`, Ausfälle, Meldungen).
+- **Dateien:** `web.py`, `tests/test_web.py` · **Commit:** `86f0c3f` · **Risiko:** niedrig · **Rückbau:** `git revert 86f0c3f`
+
+## E-25 · 03:36 · Doppelte CSS-Regeln; Lighthouse-Budgets — PRÜFEN
+- **Anlass:** Lighthouse nach den UX-Änderungen: alle Seiten 100/100/100 (Performance/Barrierefreiheit/Best Practices), SEO 63 nur wegen gewolltem noindex (E-03). Aber CSS-Budget 25 KB (jetzt ~25,1 KB + Header) und Seitengewicht 150 KB auf der Graph-Seite (vorher schon 152,9 von 153,6 KB, davon 90 KB Messdaten) gerissen.
+- **Optionen:** (a) UX-Verbesserungen zurücknehmen; (b) fremde Kommentare aus CSS löschen; (c) doppelte Regeln zusammenlegen (−0,5 KB) und Budgets um 1 KB bzw. 10 KB anheben, als Ausnahme in `docs/quality-guardrails.md` eingetragen.
+- **Gewählt:** (c). Die Guardrail-Doku verlangt Bestätigung im Review → **PRÜFEN**. Abbau: Textkompression in Traefik/Windows-Server (steht dort bereits als offener Punkt).
+- **Dateien:** `static/app.css`, `static/app.js`, `e2e/lighthouserc.cjs`, `docs/quality-guardrails.md` · **Commit:** `6e252e1` · **Risiko:** niedrig · **Rückbau:** `git revert 6e252e1`
+
+## E-26 · 03:43 · Login-Sperre je Konto statt je Gerät — PRÜFEN
+- **Anlass:** Vorgabe: „Login-Sperren sind sitzungs-/gerätebasiert“. Der Code sperrte das **Konto** nach 5 Fehlversuchen für 15 min – egal von wo. Reproduktion: frischer Browser, 5× falsches Passwort für `admin` → der echte Admin kommt an seinem eigenen PC 15 min nicht rein (beliebig wiederholbar).
+- **Optionen:** (a) nur dokumentieren; (b) IP-Sperre (verboten, 40 Nutzer hinter einer IP); (c) Sperre je Browser-Sitzung + Benutzername, Konto-Sperre als Rückhalt mit höherer Schwelle, vertraute Geräte (signiertes Cookie `wachtl_device`, 180 Tage, nach erfolgreicher Anmeldung) vom Konto-Rückhalt ausgenommen.
+- **Gewählt:** (c). Keine DB-Migration. 5 Fehlversuche → nur diese Sitzung für diesen Benutzernamen 15 min gesperrt; 20 Fehlversuche von nicht vertrauten Geräten → Konto 15 min gesperrt, aber nicht auf Geräten, auf denen sich der Benutzer schon angemeldet hat. Admin-„Passwort zurücksetzen“ hebt die Kontosperre weiter auf.
+- **Grenze:** Wer Cookies löscht, bekommt je neue Sitzung 5 Versuche – gedeckelt durch die Konto-Sperre (20 je 15 min, scrypt).
+- **Dateien:** `security.py`, `web.py`, `tests/test_web.py`, `docs/BETRIEB.md` · **Commit:** `b8714f1` · **Risiko:** mittel (Anmeldung) · **Rückbau:** `git revert b8714f1` (Cookie `wachtl_device` wird dann ignoriert)
