@@ -857,7 +857,8 @@ def admin():
     return render_template(
         "admin.html", sites=sites, checks=checks, assignments=assignments, tokens=tokens,
         rules=list(repo.alert_rules().values()), users=q("SELECT * FROM users ORDER BY username"),
-        roles=ROLES, notify_settings=notify.get_settings(),
+        roles=ROLES, notify_settings={**notify.get_settings(), **session.pop("notify_draft", {})},
+        user_draft=session.pop("user_draft", {}),
         probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]),
         notify_enabled=bool(current_app.config.get("AM_CONFIG")),
         check_types=checktypes.TYPES, summary=checktypes.summary,
@@ -1329,6 +1330,7 @@ def user_create():
     password = request.form.get("password", "")
     role = request.form.get("role", "readonly")
     problem = password_problem(password)
+    session["user_draft"] = {"username": username, "role": role}   # bei Fehler vorbelegen; Erfolg löscht es
     if not username or role not in ROLES:
         flash("Benutzername oder Rolle ungültig.", "error")
     elif problem:
@@ -1341,6 +1343,7 @@ def user_create():
             (username, hash_password(password), role, repo.now()),
         )
         repo.audit(current_user()["username"], "user.create", username, role)
+        session.pop("user_draft", None)
         flash(f"Benutzer {username} angelegt.", "ok")
     return redirect(url_for("web.admin") + "#benutzer")
 
@@ -1413,6 +1416,8 @@ def notify_update():
     if errors:
         for e in errors:
             flash(e, "error")
+        # Eingaben fürs erneute Anzeigen merken (ohne Passwort), sonst muss alles neu getippt werden
+        session["notify_draft"] = {k: v for k, v in values.items() if k not in notify.SECRET_FIELDS}
         return redirect(url_for("web.admin") + "#benachrichtigungen")
     notify.save_settings(values)
     changed = [k for k in notify.FIELDS if values[k] != current.get(k, "")]

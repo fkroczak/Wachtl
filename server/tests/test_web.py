@@ -99,6 +99,21 @@ class WebTest(AppTestCase):
         path = repo.create_check("Pfad", "1.1.1.1", "target", 5, 1000, "all", None, "path", {})
         self.assertEqual(self.client.get(f"/probes/{pid}/checks/{path}").status_code, 404)
 
+    def test_failed_forms_keep_input(self):
+        self.make_user()
+        self.login()
+        tok = self.session_csrf()
+        self.client.post("/admin/users", data={"csrf_token": tok, "username": "neu-kollege", "password": "",
+                                               "role": "operator"})
+        html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('value="neu-kollege"', html)
+        self.assertIn('value="operator" selected', html)
+        self.assertNotIn('value="neu-kollege"', self.client.get("/admin").get_data(as_text=True))  # nur einmal
+        self.client.post("/admin/notify", data={"csrf_token": tok, "email_to": "kein-mail", "smtp_password": "geheim"})
+        html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('value="kein-mail"', html)
+        self.assertNotIn("geheim", html)
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
