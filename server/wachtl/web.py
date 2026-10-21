@@ -1033,13 +1033,18 @@ def token_create():
     if s is None:
         flash("Bitte zuerst einen Standort anlegen und auswählen.", "error")
         return redirect(url_for("web.admin") + "#enrollment")
+    proxy = request.form.get("proxy", "").strip()
+    if proxy and not proxy.startswith(("http://", "https://")):
+        # vor dem Anlegen prüfen: sonst entsteht ein verwaister Token und eine Fehlerseite ohne Rückweg
+        flash("Proxy bitte mit Schema angeben, z. B. http://proxy.kunde.local:3128", "error")
+        return redirect(url_for("web.admin") + "#enrollment")
     days = min(max(request.form.get("days", 7, type=int), 1), 90)
     max_uses = min(max(request.form.get("max_uses", 1, type=int), 1), 500)
     token = repo.create_enrollment_token(site_id, max_uses, days, current_user()["username"],
                                          request.form.get("description", ""))
     if request.form.get("action") == "setup":
         # direkt das vorbelegte Setup – auf dem PC nur noch „Installieren“
-        return _prefilled_setup_response(token, s, request.form.get("proxy", "").strip())
+        return _prefilled_setup_response(token, s, proxy)
     setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
     return render_template(
         "token_created.html", token=token, site=s, days=days, max_uses=max_uses,

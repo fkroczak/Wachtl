@@ -63,6 +63,15 @@ class WebTest(AppTestCase):
         r = self.client.post("/api/probe/v1/heartbeat", headers={"Authorization": "Bearer \u00b2.x"})
         self.assertEqual(r.status_code, 401)
 
+    def test_token_bad_proxy_creates_no_token(self):
+        self.make_user()
+        self.login()
+        site = self.make_site()
+        r = self.client.post("/admin/tokens", data={"csrf_token": self.session_csrf(), "site_id": site,
+                                                    "action": "setup", "proxy": "proxy:3128"})
+        self.assertEqual(r.status_code, 302)
+        self.assertIsNone(q1("SELECT id FROM enrollment_tokens"))
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
