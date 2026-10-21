@@ -121,6 +121,8 @@
               {% elif c.type == 'path' %}{{ (st.values.hops ~ ' Hops') if st.values else '–' }}<br><span class="small">{{ st.label }}</span>
               {% elif c.type == 'rtp' %}{% set r = st.values.rtp %}MOS {{ (r.mos if r else None)|mos }}<br><span class="small">{{ (r.loss_pct if r else None)|pct }}</span>
               {% else %}↓ {{ (st.values.down.mbps if st.values.down else None)|mbps }}<br><span class="small">↑ {{ (st.values.up.mbps if st.values.up else None)|mbps }}</span>{% endif %}
+              {#- Zustand nicht nur über die Farbe (WCAG 1.4.1): Probleme als Wort, „ok“ nur für Screenreader #}
+              {% if c.type != 'path' %}{% if st.state in ('warn', 'down', 'stale') %}<br><span class="small">{{ st.label }}</span>{% else %}<span class="sr-only">, {{ st.label }}</span>{% endif %}{% endif %}
             </a>
           </td>
         {% else %}<td class="cell na">nicht zugewiesen</td>{% endif %}
