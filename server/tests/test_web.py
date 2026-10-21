@@ -80,6 +80,17 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 302)
         self.assertIsNone(q1("SELECT id FROM enrollment_tokens"))
 
+    def test_rules_update_all_or_nothing(self):
+        from wachtl import repo
+        self.make_user()
+        self.login()
+        rules = list(repo.alert_rules().values())
+        before = {r["kind"]: r["threshold"] for r in rules}
+        data = {"csrf_token": self.session_csrf(), f"threshold_{rules[0]['kind']}": "999"}
+        data[f"threshold_{rules[-1]['kind']}"] = "nan"
+        self.client.post("/admin/rules", data=data)
+        self.assertEqual({r["kind"]: r["threshold"] for r in repo.alert_rules().values()}, before)
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")

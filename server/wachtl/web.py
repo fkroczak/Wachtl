@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from collections import defaultdict
@@ -1295,6 +1296,9 @@ def check_delete(check_id: int):
 @bp.post("/admin/rules")
 @login_required("admin")
 def rules_update():
+    # erst alle Regeln prüfen, dann schreiben: sonst bleiben bei einem Fehler weiter unten die oberen gespeichert,
+    # obwohl die Meldung „ungültig“ sagt, und die Regeldatei passt nicht mehr zur Datenbank
+    updates = []
     for r in repo.alert_rules().values():
         k = r["kind"]
         try:
@@ -1302,18 +1306,17 @@ def rules_update():
             window_s = int(request.form.get(f"window_{k}", r["window_s"]))
             for_s = int(request.form.get(f"for_{k}", r["for_s"]))
         except ValueError:
-            flash(f"Ungültiger Wert bei {r['name']}.", "error")
-            return redirect(url_for("web.admin") + "#alarme")
+            threshold = -1.0
         enabled = request.form.get(f"enabled_{k}") == "on"
         severity = request.form.get(f"severity_{k}", r["severity"])
-        if severity not in ("warning", "critical", "info") or threshold < 0 or window_s < 0 or for_s < 0:
-            flash(f"Ungültiger Wert bei {r['name']}.", "error")
+        if (severity not in ("warning", "critical", "info") or not math.isfinite(threshold) or threshold < 0
+                or window_s < 0 or for_s < 0):
+            flash(f"Ungültiger Wert bei {r['name']} – nichts gespeichert. Bitte Zahlen ab 0 eingeben.", "error")
             return redirect(url_for("web.admin") + "#alarme")
-        ex(
-            "UPDATE alert_rules SET threshold = ?, window_s = ?, for_s = ?, severity = ?, enabled = ?, updated_at = ? "
-            "WHERE id = ?",
-            (threshold, window_s, for_s, severity, enabled, repo.now(), r["id"]),
-        )
+        updates.append((threshold, window_s, for_s, severity, enabled, repo.now(), r["id"]))
+    for u in updates:
+        ex("UPDATE alert_rules SET threshold = ?, window_s = ?, for_s = ?, severity = ?, enabled = ?, updated_at = ? "
+           "WHERE id = ?", u)
     repo.audit(current_user()["username"], "rules.update")
     _regen_rules()
     flash("Alarmregeln gespeichert und an vmalert übergeben.", "ok")
