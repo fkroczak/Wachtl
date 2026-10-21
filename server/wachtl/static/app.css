@@ -376,3 +376,12 @@ details > summary { cursor: pointer; margin: 1.6rem 0 0.6rem; }
 
 label.choice { flex-direction: row !important; align-items: center; gap: 0.5rem; padding: 0.2rem 0; }
 label.choice input { width: 1.1rem; height: 1.1rem; margin: 0; }
+
+/* Touch-Ziele ≥ 44 px (WCAG 2.5.5) auf Touch-Geräten; mit Maus bleibt die kompakte Darstellung */
+@media (pointer: coarse) {
+  button, a.button, select, input:not([type=checkbox]):not([type=radio]), .topbar nav a, .usermenu > summary,
+  .usermenu-panel a, details > summary, .crumbs a, .subnav a { min-height: 44px; }
+  a.button, .topbar nav a, .usermenu > summary, details > summary, .crumbs a, .subnav a { display: inline-flex; align-items: center; }
+  button.link { padding: 0 0.4rem; }
+  input[type=checkbox], input[type=radio], label.choice input { width: 1.6rem; height: 1.6rem; }
+}
