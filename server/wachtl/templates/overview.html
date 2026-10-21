@@ -75,11 +75,16 @@
 </table>
 {% else %}<p class="muted">Keine aktiven Alarme.</p>{% endif %}
 
+{% if sites|length + probes|length > 1 %}
+<p class="filter"><label for="filter">Standort oder Probe suchen</label>
+  <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
+<p class="muted" data-filter-empty role="status" hidden>Kein Standort und keine Probe passt zum Suchbegriff.</p>
+{% endif %}
 <h2>Standorte</h2>
 {% if sites %}
 <div class="cards">
   {% for s in sites %}
-  <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}">
+  <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}" data-filter-item="">
     <div><strong>{{ s.name }}</strong>{% if s.customer_no %} <span class="muted">· {{ s.customer_no }}</span>{% endif %}</div>
     <span>{{ site_stats[s.id].online }} / {{ site_stats[s.id].probes }} Probes online</span>
     {% if site_stats[s.id].problems %}<span class="down-t small">{{ site_stats[s.id].problems }} Messungen mit Problemen</span>{% endif %}
@@ -93,9 +98,10 @@
 <table>
   <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
   <tbody>
+  {% set site_cust = {} %}{% for s in sites %}{% set _ = site_cust.update({s.id: s.customer_no or ''}) %}{% endfor %}
   {% for p in probes %}
     {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
-    <tr>
+    <tr data-filter-item="{{ site_cust.get(p.site_id, '') }}">
       <td>
         {{ probe_state(p) }}
       </td>

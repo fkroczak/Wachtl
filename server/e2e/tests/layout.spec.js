@@ -84,3 +84,20 @@ test.describe("Auto-Refresh", () => {
     await expect(field).toHaveValue("10.0.0.99");
   });
 });
+
+test.describe("Suche auf der Übersicht", () => {
+  test("filtert Standorte und Probes und übersteht das Neuladen", async ({ page }) => {
+    await page.clock.install();
+    await page.goto("/");
+    await page.getByLabel("Standort oder Probe suchen").fill("K-1002");          // Kundennummer der Filiale
+    await expect(page.locator("a.card.site:visible")).toHaveCount(1);
+    await expect(page).toHaveURL(/\?q=K-1002/);
+    await page.getByRole("heading", { level: 1 }).click();
+    const reload = page.waitForEvent("load");
+    await page.clock.runFor(31_000);                                              // Auto-Refresh läuft weiter
+    await reload;
+    await expect(page.getByLabel("Standort oder Probe suchen")).toHaveValue("K-1002");
+    await page.getByLabel("Standort oder Probe suchen").fill("gibt-es-nicht");
+    await expect(page.getByText("Kein Standort und keine Probe passt")).toBeVisible();
+  });
+});
