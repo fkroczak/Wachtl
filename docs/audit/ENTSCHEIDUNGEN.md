@@ -171,3 +171,13 @@ Komplett verwerfen: Branch löschen, `main` ist unberührt.
 - **Optionen:** (a) Handy-Regel `table { display:block }` bis 1000 px ausdehnen (Tabellen würden schmaler als die Seite, Tabellen-Semantik leidet); (b) betroffene Tabellen in den vorhandenen `.scroll`-Container.
 - **Gewählt:** (b). Reflow-Test um 768 und 900 px erweitert; der Test schlägt mit dem alten Stand auf 7 Seiten fehl und ist jetzt grün.
 - **Dateien:** `templates/_findings.html`, `_reports.html`, `bandwidth.html`, `admin.html`, `e2e/tests/layout.spec.js` · **Commit:** `9d5098b` · **Risiko:** niedrig · **Rückbau:** `git revert 9d5098b`
+
+## E-29 · 04:04 · Befunde aus unabhängigem Review der eigenen Änderungen — PRÜFEN
+- **Anlass:** Ein zweiter, unabhängiger Review des Branch-Diffs fand 5 bestätigte Fehler in meinen Änderungen:
+  1. (mittel, E-26) Konto-Zähler las–erhöhte–schrieb in Python; parallele Fehlversuche überschrieben sich (30 parallel → Zähler 1, keine Sperre; Windows-Server hat 32 Threads). Der Fehler bestand schon vorher, wurde durch E-26 aber zum einzigen sitzungsübergreifenden Limit.
+  2. (niedrig, E-26) Benutzernamen > 64 Zeichen konnten sich nicht mehr anmelden (Kürzung vor der Suche).
+  3. (niedrig, E-27) Sehr langer Entwurf (6000 Zeichen) → Sitzungs-Cookie > 4 KB → Browser verwirft ihn → Abmeldung.
+  4. (niedrig, E-05) Admin setzt **eigenes** Passwort unter Verwaltung zurück → wurde abgemeldet.
+  5. (niedrig, E-20) `#%` in der Adresse → `URIError` stoppt das ganze `app.js` der Seite.
+- **Gewählt:** (1) Erhöhen und Sperren in SQL (`failed_logins = failed_logins + 1`, Sperre per `WHERE failed_logins >= 20`) – nachgeprüft: 30 parallele Versuche sperren das Konto. (2) nur den Cookie-Schlüssel kürzen. (3) Entwürfe auf 64/1000 Zeichen begrenzt. (4) Sitzungskennung beim eigenen Reset mitführen. (5) `decodeURIComponent` mit try/catch.
+- **Dateien:** `security.py`, `web.py`, `static/app.js`, `tests/test_web.py` · **Commit:** `d7e856e` · **Risiko:** niedrig · **Rückbau:** `git revert d7e856e` (vor E-26/E-27/E-20/E-05 zurücknehmen)

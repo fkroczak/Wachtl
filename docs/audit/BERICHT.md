@@ -1,7 +1,7 @@
 # Audit-Bericht Wachtl · 2026-10-21
 
 Branch `audit/2026-10-21`, Basis `main` @ `9f379db` (0.9.2). `main` ist unberührt, nichts deployt, keine Produktivdaten und keine Zugangsdaten angefasst.
-Details und Rückbau zu jeder Änderung: [ENTSCHEIDUNGEN.md](ENTSCHEIDUNGEN.md) (E-01 … E-28).
+Details und Rückbau zu jeder Änderung: [ENTSCHEIDUNGEN.md](ENTSCHEIDUNGEN.md) (E-01 … E-29).
 
 ## 0. Kurzfassung
 
@@ -9,13 +9,13 @@ Details und Rückbau zu jeder Änderung: [ENTSCHEIDUNGEN.md](ENTSCHEIDUNGEN.md) 
 2. **Bedienung:** 14 UX- und Barrierefreiheits-Verbesserungen: Touch-Ziele ≥ 44 px, einheitliches Ein/Aus, Suche auf der Übersicht, Meldungen am richtigen Ort, kein Seitwärts-Scrollen auf Tablets, Eingaben bleiben nach Fehlern erhalten.
 3. **Stand:** 197 Server-Tests und 164 Browser-Tests grün (vorher 182 + 121). Lighthouse: Performance, Barrierefreiheit und Best Practices auf allen 9 Seiten 100, SEO 63 nur wegen des gewollten noindex.
 4. **Offen:** Übernahme einer *aktiven* Probe mit einem gültigen Registrierungs-Token (Design-Frage). Passwort-Mindestlänge fehlt (seit 0.8.4 bewusst frei). Abweichungen des Codes von der Auftragsbeschreibung (Grafana, Kundenzugang, PWA, Rollen-Namen) → Abschnitt 5.
-5. **Zuerst prüfen:** E-26 (Login-Sperre je Gerät), E-05 (alle Sitzungen enden einmalig beim Einspielen), E-07 (Neuinstallation auf deaktiviertem PC wird abgelehnt), E-08 (Alarmregel), E-25 (Lighthouse-Budgets +1 KB / +10 KB).
+5. **Zuerst prüfen:** E-26 + E-29 (Login-Sperre je Gerät), E-05 (alle Sitzungen enden einmalig beim Einspielen), E-07 (Neuinstallation auf deaktiviertem PC wird abgelehnt), E-08 (Alarmregel), E-25 (Lighthouse-Budgets +1 KB / +10 KB).
 
 ## 1. Priorisierte Findings
 
 | # | Schwere | Fundstelle | Auswirkung | Reproduktion | Status |
 | --- | --- | --- | --- | --- | --- |
-| F-01 | hoch | `security.py` `try_login` | Sperre galt je **Konto**: 5 falsche Passwörter von irgendwem → der Admin ist an seinem eigenen PC 15 min ausgesperrt, beliebig wiederholbar. Widerspricht der Vorgabe „Sperre je Sitzung/Gerät“. | Frischer Browser, 5× `admin` + falsches Passwort, dann richtiges Passwort am Admin-PC → „Konto gesperrt“ | behoben E-26 |
+| F-01 | hoch | `security.py` `try_login` | Sperre galt je **Konto**; zusätzlich ging der Zähler bei parallelen Versuchen verloren: 5 falsche Passwörter von irgendwem → der Admin ist an seinem eigenen PC 15 min ausgesperrt, beliebig wiederholbar. Widerspricht der Vorgabe „Sperre je Sitzung/Gerät“. | Frischer Browser, 5× `admin` + falsches Passwort, dann richtiges Passwort am Admin-PC → „Konto gesperrt“ | behoben E-26, E-29 |
 | F-02 | hoch | `checktypes._convert` | „nan“/„inf“ in einem Zahlenfeld eines Checks (z. B. UDP-Rate) wurde gespeichert. Die Probe-Konfiguration enthielt dann `NaN` (ungültiges JSON), und .NET-Probes lehnen solche Konfigurationen ab. | Check bearbeiten, UDP-Rate `nan` → `/api/probe/v1/config` liefert `NaN` | behoben E-19 |
 | F-03 | mittel | `web.py` `login` | Login-CSRF: Ohne Sitzung war `None == None`, also konnte eine fremde Seite das Opfer in ein Angreiferkonto einloggen. | POST `/login` ohne Cookie und ohne Token → 302, angemeldet | behoben E-04 |
 | F-04 | mittel | `security.py` `current_user` | Nach „Passwort zurücksetzen“ oder eigenem Wechsel blieben alte (auch gestohlene) Sitzungen bis 12 h gültig, gleitend. | Zwei Browser angemeldet, in einem Passwort ändern → der andere bleibt drin | behoben E-05 |
@@ -79,8 +79,9 @@ Geprüft und sauber (Sicherheits-Audit):
 | E-26 | `b8714f1` | `security.py`, `web.py`, `BETRIEB.md` | Login-Sperre je Gerät | `test_lockout_is_per_device_not_per_account`, `test_account_backstop_spares_trusted_device` |
 | E-27 | `e8ff475` | `web.py`, `admin.html` | Eingaben bleiben erhalten | `test_failed_forms_keep_input` |
 | E-28 | `9d5098b` | 4 Templates, `layout.spec.js` | Tablet-Layout | Reflow 768/900 px (schlägt mit altem Stand fehl) |
+| E-29 | `d7e856e` | `security.py`, `web.py`, `app.js` | 5 Befunde eines unabhängigen Reviews meiner Änderungen (u. a. parallele Fehlversuche umgingen die Konto-Sperre) | `test_review_regressions`, Parallel-Skript: 30 Versuche → gesperrt |
 
-Nach jedem Commit lief `pytest` (am Ende 197 grün, 2 übersprungen wie auf `main`). Nach den UI-Blöcken lief die komplette Playwright-Suite (axe, Tastatur, Reflow, Nähe, Auto-Refresh). Probe-Code (C#), Scheduler und Messpfad wurden **nicht** geändert.
+Zum Schluss hat ein unabhängiger Review den gesamten Diff geprüft; seine 5 Befunde sind in E-29 behoben. Nach jedem Commit lief `pytest` (am Ende 197 grün, 2 übersprungen wie auf `main`). Nach den UI-Blöcken lief die komplette Playwright-Suite (axe, Tastatur, Reflow, Nähe, Auto-Refresh). Probe-Code (C#), Scheduler und Messpfad wurden **nicht** geändert.
 
 ## 3. UX-Verbesserungen mit Vorher/Nachher
 
@@ -142,6 +143,7 @@ Bilder: `docs/audit/screens/vorher/` (Stand `9f379db`) und `docs/audit/screens/n
 Einzeln (neueste zuerst, jede Zeile unabhängig):
 
 ```bash
+git revert d7e856e   # E-29 Review-Befunde (vor E-26/E-27/E-20/E-05 zurücknehmen)
 git revert 9d5098b   # E-28 Tablet-Layout
 git revert e8ff475   # E-27 Eingaben behalten
 git revert b8714f1   # E-26 Login-Sperre je Gerät (Cookie wachtl_device wird danach ignoriert)
