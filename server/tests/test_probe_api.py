@@ -36,6 +36,18 @@ class ProbeApiTest(AppTestCase):
         self.assertEqual(self.client.get("/api/probe/v1/config", headers=self.auth(first["token"])).status_code, 401)
         self.assertEqual(self.client.get("/api/probe/v1/config", headers=self.auth(second["token"])).status_code, 200)
 
+    def test_reenroll_refused_while_disabled_by_admin(self):
+        site = self.make_site()
+        self.make_token(site, token="multi", max_uses=5)
+        enroll = lambda: self.client.post("/api/probe/v1/enroll", json={"enrollment_token": "multi", "hostname": "PC-01"})
+        pid = enroll().get_json()["probe_id"]
+        ex("UPDATE probes SET status = 'disabled' WHERE id = ?", (pid,))
+        self.assertEqual(enroll().status_code, 403)
+        self.assertEqual(q1("SELECT status FROM probes WHERE id = ?", (pid,))["status"], "disabled")
+        # nach Deinstallation (abgemeldet) ist Neuinstallation erlaubt
+        ex("UPDATE probes SET deregistered_at = 1 WHERE id = ?", (pid,))
+        self.assertEqual(enroll().status_code, 201)
+
     def test_config_contains_default_checks_and_supports_etag(self):
         data = self.enroll()
         r = self.client.get("/api/probe/v1/config", headers=self.auth(data["token"]))

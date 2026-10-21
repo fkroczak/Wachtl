@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
 {% from "_reports.html" import report_table with context %}
-{% from "_links.html" import alert_links, check_target with context %}
+{% from "_links.html" import alert_links, check_target, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -42,7 +42,8 @@
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
+{% elif probes %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>
+{% else %}<p class="muted">Noch nichts gemessen – es ist keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
 <h2 id="hinweise">Hinweise von PCs</h2>
 {% if client_findings %}
@@ -74,11 +75,16 @@
 </table>
 {% else %}<p class="muted">Keine aktiven Alarme.</p>{% endif %}
 
+{% if sites|length + probes|length > 1 %}
+<p class="filter"><label for="filter">Standort oder Probe suchen</label>
+  <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
+<p class="muted" data-filter-empty role="status" hidden>Kein Standort und keine Probe passt zum Suchbegriff.</p>
+{% endif %}
 <h2>Standorte</h2>
 {% if sites %}
 <div class="cards">
   {% for s in sites %}
-  <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}">
+  <a class="card site" href="{{ url_for('web.site', site_id=s.id) }}" data-filter-item="">
     <div><strong>{{ s.name }}</strong>{% if s.customer_no %} <span class="muted">· {{ s.customer_no }}</span>{% endif %}</div>
     <span>{{ site_stats[s.id].online }} / {{ site_stats[s.id].probes }} Probes online</span>
     {% if site_stats[s.id].problems %}<span class="down-t small">{{ site_stats[s.id].problems }} Messungen mit Problemen</span>{% endif %}
@@ -92,14 +98,12 @@
 <table>
   <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
   <tbody>
+  {% set site_cust = {} %}{% for s in sites %}{% set _ = site_cust.update({s.id: s.customer_no or ''}) %}{% endfor %}
   {% for p in probes %}
     {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
-    <tr>
+    <tr data-filter-item="{{ site_cust.get(p.site_id, '') }}">
       <td>
-        {% if p.deregistered_at %}<span class="dot off"></span> deinstalliert
-        {% elif p.status != 'active' %}<span class="dot off"></span> deaktiviert
-        {% elif probe_online(p) %}<span class="dot ok"></span> online
-        {% else %}<span class="dot down"></span> offline{% endif %}
+        {{ probe_state(p) }}
       </td>
       <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</td>
       <td><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></td>

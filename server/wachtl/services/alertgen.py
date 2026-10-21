@@ -92,10 +92,15 @@ def build_rules() -> dict:
 
     if "probe_offline" in rules:
         thr = rules["probe_offline"]["threshold"]
+        # deaktivierte und deinstallierte Probes nicht als offline melden (sonst bis zu 24 h kritischer Alarm)
+        # shortcut: gelöschte Probes stehen nicht mehr in der DB und alarmieren weiter bis 24 h nach letztem Kontakt;
+        # Upgrade: gelöschte IDs merken oder Zeitreihe beim Löschen in VictoriaMetrics entfernen.
+        off = "|".join(str(p["id"]) for p in q("SELECT id FROM probes WHERE status != 'active' ORDER BY id"))
+        sel = f'{{probe!~"{off}"}}' if off else ""
         add(
             "WachtlProbeOffline",
             "probe_offline",
-            f"(time() - max by ({BY_PROBE}) (max_over_time(wachtl_probe_last_seen[24h]))) > {thr:g}",
+            f"(time() - max by ({BY_PROBE}) (max_over_time(wachtl_probe_last_seen{sel}[24h]))) > {thr:g}",
             "Probe {{ $labels.probe_name }} ({{ $labels.site_name }}) sendet seit {{ $value | humanizeDuration }} nichts mehr",
         )
 

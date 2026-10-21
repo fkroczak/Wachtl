@@ -48,6 +48,37 @@
   // Fehlerübersicht nach dem Absenden fokussieren, damit Screenreader sie vorlesen
   document.querySelector("[data-error-summary]")?.focus();
 
+  // Meldung nach Speichern am Sprungziel (/admin#benutzer) zeigen, oben wäre sie außer Sicht
+  let jumpId = location.hash.slice(1);
+  try { jumpId = decodeURIComponent(jumpId); } catch { /* kaputtes %-Zeichen: Rohwert */ }
+  const jumpTo = jumpId && document.getElementById(jumpId);
+  const flashes = document.querySelectorAll("main > .flash");
+  if (jumpTo && flashes.length) {
+    if (jumpTo.matches("h2, h3")) jumpTo.before(...flashes); else jumpTo.prepend(...flashes);
+    flashes[0].scrollIntoView();
+  }
+
+  // Übersicht: Suchfeld filtert Standorte/Probes; ?q= übersteht das Auto-Neuladen, das hier nicht pausiert
+  const filter = document.querySelector("[data-filter]");
+  if (filter) {
+    const items = document.querySelectorAll("[data-filter-item]");
+    const empty = document.querySelector("[data-filter-empty]");
+    const apply = () => {
+      const q = filter.value.trim().toLowerCase();
+      items.forEach((el) => {
+        el.hidden = !!q && !`${el.textContent} ${el.dataset.filterItem}`.toLowerCase().includes(q);
+      });
+      empty.hidden = !q || [...items].some((el) => !el.hidden);
+      const url = new URL(location.href);
+      if (q) url.searchParams.set("q", filter.value.trim()); else url.searchParams.delete("q");
+      history.replaceState(null, "", url);
+    };
+    filter.value = new URL(location.href).searchParams.get("q") || "";
+    filter.addEventListener("input", (ev) => { ev.stopPropagation(); apply(); });
+    filter.addEventListener("change", (ev) => ev.stopPropagation());
+    apply();
+  }
+
   // Übersichten automatisch aktualisieren – aber nie mitten in einer Eingabe:
   // ein Neuladen würde Eingaben verwerfen und Fokus/Leseposition zurücksetzen.
   const auto = document.querySelector("[data-autorefresh]");

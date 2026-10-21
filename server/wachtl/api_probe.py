@@ -18,6 +18,7 @@ from . import findings as finding_service
 from . import reports as report_service
 from .db import ex, ins, q1
 from .security import hash_token, new_secret, probe_auth
+from .services import alertgen
 from .services import alerts as alert_service
 from .services import ingest, vm
 
@@ -49,6 +50,14 @@ def _read_body() -> str:
     return raw.decode("utf-8", errors="replace")
 
 
+def _regen_rules() -> None:
+    """Alarmregeln neu schreiben (Offline-Alarm nur für aktive Probes); ein Fehler bricht die Anfrage nie ab."""
+    try:
+        alertgen.write_rules()
+    except Exception:  # noqa: BLE001 – Registrierung/Abmeldung darf daran nicht scheitern
+        log.exception("Alarmregeln konnten nicht neu geschrieben werden")
+
+
 @bp.post("/enroll")
 def enroll():
     data = request.get_json(silent=True) or {}
@@ -64,10 +73,17 @@ def enroll():
 
     site = q1("SELECT * FROM sites WHERE id = ?", (et["site_id"],))
     secret = new_secret()
-    existing = q1("SELECT id FROM probes WHERE site_id = ? AND hostname = ?", (site["id"], hostname))
+    existing = q1("SELECT id, status, deregistered_at FROM probes WHERE site_id = ? AND hostname = ?",
+                  (site["id"], hostname))
+    if existing and existing["status"] == "disabled" and not existing["deregistered_at"]:
+        # vom Admin deaktiviert: Token bleibt abgelehnt, auch bei Neuinstallation (sonst hebt jeder Token-Inhaber
+        # die Sperre auf). Nach Deinstallation (deregistered_at) ist Neuinstallation erlaubt.
+        log.warning("Enrollment abgelehnt für deaktivierte Probe %s von %s", hostname, _client_ip())
+        return jsonify(error="Probe ist im Web-UI deaktiviert – dort zuerst aktivieren, dann neu installieren"), 403
     if existing:
         probe_id = existing["id"]
         action = "probe.reenroll"
+        regen = existing["status"] != "active"   # deinstallierte Probe kommt zurück: Offline-Alarm wieder an
     else:
         probe_id = ins(
             "INSERT INTO probes (site_id, hostname, os, version, token_hash, status, kind, created_at) "
@@ -76,6 +92,7 @@ def enroll():
              et["probe_kind"] or "probe", ts),
         )
         action = "probe.enroll"
+        regen = False
     probe_token = f"{probe_id}.{secret}"
     ex(
         "UPDATE probes SET token_hash = ?, status = 'active', kind = ?, deregistered_at = NULL, os = ?, version = ?, "
@@ -85,6 +102,8 @@ def enroll():
     )
     ex("UPDATE enrollment_tokens SET uses = uses + 1 WHERE id = ?", (et["id"],))
     repo.audit(f"probe:{hostname}", action, f"probe:{probe_id}", f"Standort {site['name']}, IP {_client_ip()}")
+    if regen:
+        _regen_rules()
     return jsonify(probe_id=probe_id, token=probe_token, site_name=site["name"]), 201
 
 
@@ -177,6 +196,7 @@ def deregister():
     repo.audit(f"probe:{g.probe['hostname']}", "probe.deregister", f"probe:{g.probe['id']}",
                f"Deinstallation, IP {_client_ip()}")
     log.info("Probe %s (%s) hat sich abgemeldet", g.probe["id"], g.probe["hostname"])
+    _regen_rules()
     return "", 204
 
 

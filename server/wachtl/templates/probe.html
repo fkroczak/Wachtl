@@ -2,7 +2,7 @@
 {% block title %}{{ probe.hostname }}{% endblock %}
 {% from "_forms.html" import field %}
 {% from "_reports.html" import report_table with context %}
-{% from "_links.html" import alert_links, check_target with context %}
+{% from "_links.html" import alert_links, check_target, onoff, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -13,14 +13,11 @@
   <div class="card kv">
     <dl>
       <dt>Status</dt><dd>
-        {% if probe.deregistered_at %}<span class="dot off"></span> abgemeldet (deinstalliert am {{ probe.deregistered_at|dt }})
-        {% elif probe.status != 'active' %}<span class="dot off"></span> deaktiviert
-        {% elif probe_online(probe) %}<span class="dot ok"></span> online
-        {% else %}<span class="dot down"></span> offline{% endif %}</dd>
+        {{ probe_state(probe) }}{% if probe.deregistered_at %} am {{ probe.deregistered_at|dt }} (abgemeldet){% endif %}</dd>
       <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
       <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
-      <dt>Gegenstelle</dt><dd>{{ ('aktiv, iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server else 'aus' }}</dd>
+      <dt>Gegenstelle</dt><dd>{{ onoff(probe.iperf_server) }}{{ (' iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server }}</dd>
       <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
       <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
       <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>
@@ -32,6 +29,9 @@
 
 {% if has_role(user, 'admin') %}
 <div class="actions">
+  {% if probe.deregistered_at %}
+  <p class="muted">Deinstalliert – zum erneuten Messen das Setup auf dem PC neu installieren.</p>
+  {% else %}
   <form method="post" action="{{ url_for('web.probe_status', probe_id=probe.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if probe.status == 'active' %}
@@ -40,6 +40,7 @@
       <button name="action" value="enable">Aktivieren</button>
     {% endif %}
   </form>
+  {% endif %}
   <form method="post" action="{{ url_for('web.probe_delete', probe_id=probe.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="danger" data-confirm="Probe {{ probe.hostname }} endgültig löschen?">Löschen</button>
@@ -101,7 +102,7 @@
       <td>{{ (v.loss if v else None)|pct }}</td>
     </tr>
   {% else %}
-    <tr><td colspan="7" class="muted">Keine Checks zugewiesen.</td></tr>
+    <tr><td colspan="7" class="muted">Keine Ping-Checks zugewiesen.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.check_new', ctype='ping') }}">Ping-Check anlegen</a>{% endif %}</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -119,7 +120,7 @@
       <td>{{ run.first_ts|dt if run else '–' }}</td>
       <td>{{ run.ts|ago if run else '–' }}</td>
       <td>{% if has_role(user, 'operator') %}<form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Neu ermitteln</button></form>{% endif %}</td>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="Neu ermitteln: {{ c.name }}">Neu ermitteln</button></form>{% endif %}</td>
     </tr>
   {% endfor %}</tbody>
 </table>
@@ -145,7 +146,7 @@
       <td>{% if has_role(user, 'operator') %}
         {% if pending %}<span class="muted small">beauftragt …</span>{% else %}
         <form method="post" action="{{ url_for('web.check_run', probe_id=probe.id, check_id=c.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">Jetzt messen</button></form>{% endif %}
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="Jetzt messen: {{ c.name }}">Jetzt messen</button></form>{% endif %}
       {% endif %}</td>
     </tr>
   {% endfor %}</tbody>

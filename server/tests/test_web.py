@@ -1,4 +1,3 @@
-import json
 from unittest import mock
 
 from wachtl.db import ex, q, q1
@@ -23,6 +22,117 @@ class WebTest(AppTestCase):
         r = self.login()
         self.assertEqual(r.status_code, 302)
         self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_login_needs_csrf_from_session(self):
+        # Fremde Seite postet ohne Sitzung und ohne Token: kein Login (Login-CSRF)
+        self.make_user()
+        r = self.client.post("/login", data={"username": "admin", "password": "sehr-geheimes-pw"})
+        self.assertIn("/login", r.headers["Location"])
+        with self.client.session_transaction() as s:
+            self.assertNotIn("uid", s)
+
+    def test_csrf_non_ascii_is_400(self):
+        self.make_user()
+        self.login()
+        r = self.client.post("/logout", headers={"X-CSRF-Token": "ä"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_password_change_ends_other_sessions(self):
+        self.make_user()
+        self.login()
+        other = self.app.test_client()
+        with other.session_transaction() as s:
+            s["csrf"] = "x"
+        other.post("/login", data={"username": "admin", "password": "sehr-geheimes-pw", "csrf_token": "x"})
+        self.assertEqual(other.get("/").status_code, 200)
+        r = self.client.post("/account", data={"csrf_token": self.session_csrf(), "old_password": "sehr-geheimes-pw",
+                                               "new_password": "neu-pw-123", "new_password2": "neu-pw-123"})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.get("/").status_code, 200)   # eigene Sitzung bleibt
+        self.assertEqual(other.get("/").status_code, 302)         # andere Sitzung endet
+
+    def test_bad_numbers_no_500(self):
+        self.make_user()
+        self.login()
+        tok = self.session_csrf()
+        self.assertEqual(self.client.post("/admin/tokens", data={"csrf_token": tok, "site_id": "x"}).status_code, 302)
+        self.assertEqual(self.client.post("/admin/standard-package",
+                                          data={"csrf_token": tok, "scope": "site", "site_id": "x"}).status_code, 302)
+        self.assertLess(self.client.get("/api/v1/probes/1/bandwidth?since=x").status_code, 500)
+        r = self.client.post("/api/probe/v1/heartbeat", headers={"Authorization": "Bearer \u00b2.x"})
+        self.assertEqual(r.status_code, 401)
+
+    def test_error_pages_german_with_way_back(self):
+        self.make_user()
+        self.login()
+        r = self.client.get("/logout", headers={"Referer": "http://localhost/alerts"})
+        self.assertEqual(r.status_code, 405)
+        html = r.get_data(as_text=True)
+        self.assertIn("Aktion nicht möglich", html)
+        self.assertIn('href="http://localhost/alerts"', html)
+
+    def test_token_bad_proxy_creates_no_token(self):
+        self.make_user()
+        self.login()
+        site = self.make_site()
+        r = self.client.post("/admin/tokens", data={"csrf_token": self.session_csrf(), "site_id": site,
+                                                    "action": "setup", "proxy": "proxy:3128"})
+        self.assertEqual(r.status_code, 302)
+        self.assertIsNone(q1("SELECT id FROM enrollment_tokens"))
+
+    def test_rules_update_all_or_nothing(self):
+        from wachtl import repo
+        self.make_user()
+        self.login()
+        rules = list(repo.alert_rules().values())
+        before = {r["kind"]: r["threshold"] for r in rules}
+        data = {"csrf_token": self.session_csrf(), f"threshold_{rules[0]['kind']}": "999"}
+        data[f"threshold_{rules[-1]['kind']}"] = "nan"
+        self.client.post("/admin/rules", data=data)
+        self.assertEqual({r["kind"]: r["threshold"] for r in repo.alert_rules().values()}, before)
+
+    def test_target_page_only_for_ping(self):
+        from wachtl import repo
+        self.make_user()
+        self.login()
+        pid = self.enroll()["probe_id"]
+        path = repo.create_check("Pfad", "1.1.1.1", "target", 5, 1000, "all", None, "path", {})
+        self.assertEqual(self.client.get(f"/probes/{pid}/checks/{path}").status_code, 404)
+
+    def test_failed_forms_keep_input(self):
+        self.make_user()
+        self.login()
+        tok = self.session_csrf()
+        self.client.post("/admin/users", data={"csrf_token": tok, "username": "neu-kollege", "password": "",
+                                               "role": "operator"})
+        html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('value="neu-kollege"', html)
+        self.assertIn('value="operator" selected', html)
+        self.assertNotIn('value="neu-kollege"', self.client.get("/admin").get_data(as_text=True))  # nur einmal
+        self.client.post("/admin/notify", data={"csrf_token": tok, "email_to": "kein-mail", "smtp_password": "geheim"})
+        html = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('value="kein-mail"', html)
+        self.assertNotIn("geheim", html)
+
+    def test_review_regressions(self):
+        from wachtl.security import try_login
+        # lange Benutzernamen können sich weiter anmelden
+        self.make_user("u" * 70)
+        with self.app.test_request_context("/login", method="POST"):
+            self.assertIsNotNone(try_login("u" * 70, "sehr-geheimes-pw")[0])
+        # Admin setzt eigenes Passwort zurück und bleibt angemeldet
+        self.make_user()
+        self.login()
+        uid = q1("SELECT id FROM users WHERE username = 'admin'")["id"]
+        self.client.post(f"/admin/users/{uid}/password", data={"password": "neu-1234", "csrf_token": self.session_csrf()})
+        self.assertEqual(self.client.get("/").status_code, 200)
+        # Konto-Zähler zählt in SQL hoch (kein verlorenes Inkrement)
+        with self.app.test_request_context("/login", method="POST"):
+            try_login("admin", "falsch")
+        self.assertEqual(q1("SELECT failed_logins FROM users WHERE id = ?", (uid,))["failed_logins"], 1)
+
+        for path in ("/login", "/healthz", "/static/app.css"):
+            self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
 
     def test_user_menu_and_design(self):
         self.make_user()
@@ -68,6 +178,32 @@ class WebTest(AppTestCase):
         r = self.login()
         self.assertEqual(r.status_code, 200)  # Formular erneut, nicht angemeldet
         self.assertIn("gesperrt", r.get_data(as_text=True))
+
+    def _client_login(self, client, password):
+        with client.session_transaction() as s:
+            s["csrf"] = "t"
+        return client.post("/login", data={"username": "admin", "password": password, "csrf_token": "t"})
+
+    def test_lockout_is_per_device_not_per_account(self):
+        # Fremdes Gerät probiert 5× falsch: nur dieses Gerät ist gesperrt, der Admin kommt weiter rein
+        self.make_user()
+        attacker = self.app.test_client()
+        for _ in range(5):
+            self._client_login(attacker, "falsch")
+        self.assertIn("gesperrt", self._client_login(attacker, "sehr-geheimes-pw").get_data(as_text=True))
+        self.assertEqual(self.login().status_code, 302)
+
+    def test_account_backstop_spares_trusted_device(self):
+        self.make_user()
+        self.assertEqual(self.login().status_code, 302)          # dieses Gerät ist jetzt vertraut
+        self.client.post("/logout", data={"csrf_token": self.session_csrf()})
+        for _ in range(4):                                       # 20 Fehlversuche aus 4 frischen Sitzungen
+            c = self.app.test_client()
+            for _ in range(5):
+                self._client_login(c, "falsch")
+        self.assertIn("Konto vorübergehend gesperrt",
+                      self._client_login(self.app.test_client(), "sehr-geheimes-pw").get_data(as_text=True))
+        self.assertEqual(self.login().status_code, 302)          # vertrautes Gerät kommt rein
 
     def test_password_forgot_page_public_and_linked(self):
         self.assertIn("/passwort-vergessen", self.client.get("/login").get_data(as_text=True))

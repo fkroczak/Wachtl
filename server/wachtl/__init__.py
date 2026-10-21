@@ -82,6 +82,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         resp.headers.setdefault("X-Content-Type-Options", "nosniff")
         resp.headers.setdefault("X-Frame-Options", "DENY")
         resp.headers.setdefault("Referrer-Policy", "same-origin")
+        resp.headers.setdefault("X-Robots-Tag", "noindex, nofollow")  # internes Werkzeug, nie indexieren
         resp.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'",
@@ -91,9 +92,14 @@ def create_app(overrides: dict | None = None) -> Flask:
     @app.errorhandler(400)
     @app.errorhandler(403)
     @app.errorhandler(404)
+    @app.errorhandler(405)
+    @app.errorhandler(500)
     def error_page(err):
         if request.path.startswith("/api/"):
             return jsonify(error=getattr(err, "description", str(err))), err.code
-        return render_template("error.html", code=err.code, message=err.description), err.code
+        message = {405: "Diese Adresse lässt sich so nicht aufrufen – bitte über die Seite und ihre Schaltflächen gehen.",
+                   500: "Unerwarteter Fehler auf dem Server. Bitte erneut versuchen; bleibt der Fehler, steht die "
+                        "Ursache im Server-Log."}.get(err.code, err.description)
+        return render_template("error.html", code=err.code, message=message), err.code
 
     return app

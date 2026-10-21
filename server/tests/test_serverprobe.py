@@ -11,7 +11,7 @@ from unittest import mock
 from werkzeug.serving import make_server
 
 from wachtl import bootstrap, checktypes, repo
-from wachtl.db import ex, q, q1
+from wachtl.db import ex, q1
 from wachtl.serverprobe import api as probe_api
 from wachtl.serverprobe import icmp, net
 from wachtl.serverprobe.probe import ENROLL_FILE, STATE_FILE, ServerProbe

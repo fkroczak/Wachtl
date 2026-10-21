@@ -20,6 +20,17 @@ class AlertGenTest(AppTestCase):
         self.assertIn("wachtl:ping_loss_ratio_1m", names)
         self.assertIn("wachtl:hop_rtt_ms:quantiles_1m", names)
 
+    def test_probe_offline_skips_inactive_probes(self):
+        expr = lambda: next(r["expr"] for r in self.rules()["wachtl-alerts"] if r["alert"] == "WachtlProbeOffline")
+        self.assertIn("wachtl_probe_last_seen[24h]", expr())
+        site = self.make_site()
+        self.make_token(site, max_uses=2)
+        for host in ("PC-01", "PC-02"):
+            self.client.post("/api/probe/v1/enroll", json={"enrollment_token": "tok-1", "hostname": host})
+        b = 2
+        ex("UPDATE probes SET status = 'disabled' WHERE id = ?", (b,))
+        self.assertIn(f'wachtl_probe_last_seen{{probe!~"{b}"}}[24h]', expr())
+
     def test_target_down_one_rule_per_interval(self):
         repo.create_check("Server", "10.0.0.5", "target", 5, 1000, "all", None)
         alerts = [r for r in self.rules()["wachtl-alerts"] if r["alert"] == "WachtlTargetDown"]

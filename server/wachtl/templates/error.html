@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Fehler {{ code }}{% endblock %}
 {% block content %}
-<h1>{{ {403: 'Keine Berechtigung', 404: 'Nicht gefunden', 400: 'Ungültige Anfrage'}.get(code, 'Fehler') }}</h1>
+<h1>{{ {403: 'Keine Berechtigung', 404: 'Nicht gefunden', 400: 'Ungültige Anfrage', 405: 'Aktion nicht möglich',
+        500: 'Interner Fehler'}.get(code, 'Fehler') }}</h1>
 <p>{{ message }}</p>
-<p><a href="{{ url_for('web.overview') }}">Zur Übersicht</a></p>
+<p>{% if request.referrer %}<a href="{{ request.referrer }}">Zurück zur vorigen Seite</a> · {% endif %}<a href="{{ url_for('web.overview') }}">Zur Übersicht</a></p>
 {% endblock %}

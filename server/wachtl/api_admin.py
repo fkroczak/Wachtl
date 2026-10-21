@@ -66,7 +66,7 @@ def checks():
 @bp.get("/probes/<int:probe_id>/bandwidth")
 @login_required(api=True)
 def bandwidth(probe_id: int):
-    since = int(request.args.get("since", repo.now() - 30 * 86400) or 0)
+    since = request.args.get("since", repo.now() - 30 * 86400, type=int)
     return jsonify(q("SELECT * FROM bandwidth_runs WHERE probe_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 5000",
                      (probe_id, since)))
 
@@ -74,7 +74,7 @@ def bandwidth(probe_id: int):
 @bp.get("/probes/<int:probe_id>/rtp")
 @login_required(api=True)
 def rtp_runs(probe_id: int):
-    since = int(request.args.get("since", repo.now() - 30 * 86400) or 0)
+    since = request.args.get("since", repo.now() - 30 * 86400, type=int)
     return jsonify(q("SELECT * FROM rtp_runs WHERE probe_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 5000",
                      (probe_id, since)))
 
@@ -202,7 +202,8 @@ def ack(event_id: int):
     if event is None:
         return jsonify(error="Alarm nicht gefunden"), 404
     data = request.get_json(silent=True) or {}
-    hours = min(max(int(data.get("hours", 4)), 1), 168)
+    hours = data.get("hours", 4)
+    hours = min(max(hours if isinstance(hours, int) else 4, 1), 168)
     user = current_user()
     try:
         silence = alert_service.acknowledge(event, user["username"], hours, str(data.get("comment", ""))[:500])

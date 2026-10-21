@@ -7,6 +7,7 @@ werden nur hier ergänzt.
 from __future__ import annotations
 
 import ipaddress
+import math
 import re
 from dataclasses import dataclass, field, replace
 
@@ -277,6 +278,8 @@ def _convert(f: Field, raw: str):
             v = int(raw) if f.kind == "int" else float(raw.replace(",", "."))
         except ValueError:
             raise ValueError("keine Zahl") from None
+        if not math.isfinite(v):  # „nan“/„inf“ ergäbe NaN im JSON der Probe-Konfiguration (ungültiges JSON)
+            raise ValueError("keine Zahl")
         if f.min is not None and v < f.min:
             raise ValueError(f"mindestens {f.min:g}")
         if f.max is not None and v > f.max:

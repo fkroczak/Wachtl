@@ -3,7 +3,7 @@ from datetime import datetime
 from unittest import mock
 
 from wachtl import checktypes, repo, schedule, standardpaket
-from wachtl.db import ex, ins, q, q1
+from wachtl.db import ex, q, q1
 from wachtl.services import checkstatus
 
 from .helpers import AppTestCase
@@ -175,7 +175,8 @@ class DeregisterTest(AppTestCase):
                                                                        "action": "enable"})
         self.assertEqual(q1("SELECT status FROM probes WHERE id = ?", (probe["probe_id"],))["status"], "disabled")
         html = self.client.get(f"/probes/{probe['probe_id']}").get_data(as_text=True)
-        self.assertIn("abgemeldet", html)
+        self.assertIn("deinstalliert am", html)
+        self.assertNotIn('value="enable"', html)   # kein Aktivieren-Knopf, der nur scheitern kann
         token = self.make_token(site, token="neu")
         r = self.client.post("/api/probe/v1/enroll", json={"enrollment_token": token, "hostname": "PC-weg"})
         self.assertEqual(r.get_json()["probe_id"], probe["probe_id"])

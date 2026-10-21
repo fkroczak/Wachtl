@@ -6,6 +6,7 @@ import ipaddress
 import json
 import re
 import time
+from pathlib import Path
 
 from .db import ex, ins, q, q1
 
@@ -372,7 +373,7 @@ def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, hi
     ex("DELETE FROM incident_reports WHERE occurred_at < ?", (ts - alert_days * 86400,))
 
 
-def probe_setup_file(probe_dir: str) -> "Path | None":
+def probe_setup_file(probe_dir: str) -> Path | None:
     """Neuestes Setup im Probe-Ordner (WachtlSetup-*.exe, ältere Server: WachtlProbeSetup-*.exe)."""
     from .setupfile import find_setup
 

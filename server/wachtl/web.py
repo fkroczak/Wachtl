@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import time
 from collections import defaultdict
@@ -13,9 +14,9 @@ from flask import (Blueprint, abort, current_app, flash, g, redirect, render_tem
 
 from . import repo
 from .db import ex, ins, q, q1
-from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_token, current_user, has_role, hash_password,
-                       hash_token, login_required, login_user, new_secret, password_problem, try_login,
-                       verify_password)
+from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_ok, csrf_token, current_user, has_role,
+                       hash_password, hash_token, login_required, login_user, password_marker, password_problem,
+                       trust_device, try_login, verify_password)
 from . import checktypes, httperrors, rtp, standardpaket
 from . import findings as finding_service
 from . import reports as report_service
@@ -189,7 +190,7 @@ def _regen_rules() -> None:
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        if request.form.get("csrf_token") != session.get("csrf"):
+        if not csrf_ok():
             flash("Sitzung abgelaufen, bitte erneut versuchen.", "error")
             return redirect(url_for("web.login"))
         user, error = try_login(request.form.get("username", "").strip(), request.form.get("password", ""))
@@ -197,7 +198,8 @@ def login():
             login_user(user)
             repo.audit(user["username"], "login")
             nxt = request.args.get("next", "")
-            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.overview"))
+            return trust_device(redirect(nxt if nxt.startswith("/") and not nxt.startswith("//")
+                                         else url_for("web.overview")), user["username"])
         repo.audit(request.form.get("username", "")[:64], "login.failed", detail=request.remote_addr or "")
         flash(error, "error")
     return render_template("login.html")
@@ -233,7 +235,9 @@ def account():
         elif problem := password_problem(new):
             flash(problem, "error")
         else:
-            ex("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user["id"]))
+            new_hash = hash_password(new)
+            ex("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
+            session["pwv"] = password_marker(new_hash)  # diese Sitzung bleibt, alle anderen enden
             repo.audit(user["username"], "user.password")
             flash("Passwort geändert.", "ok")
         return redirect(url_for("web.account"))
@@ -248,7 +252,7 @@ def design():
         if theme not in THEMES or contrast not in CONTRASTS:
             abort(400)
         ex("UPDATE users SET theme = ?, contrast = ? WHERE id = ?", (theme, contrast, current_user()["id"]))
-        g.pop("user_uid", None)  # zwischengespeicherten Benutzer verwerfen
+        g.pop("user_key", None)  # zwischengespeicherten Benutzer verwerfen
         flash("Design gespeichert.", "ok")
         return redirect(url_for("web.design"))
     return render_template("design.html", themes=THEMES, contrasts=CONTRASTS)
@@ -653,7 +657,7 @@ def rtp_view(probe_id: int, check_id: int):
                            codec=rtp.CODECS.get(params["codec"]))
 
 
-OUTAGE_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
+OUTAGE_RANGES = BW_RANGES
 
 
 @bp.get("/outages")
@@ -765,6 +769,7 @@ def probe_status(probe_id: int):
         return redirect(url_for("web.probe", probe_id=probe_id))
     ex("UPDATE probes SET status = ? WHERE id = ?", (new, probe_id))
     repo.audit(current_user()["username"], f"probe.{new}", f"probe:{probe_id}")
+    _regen_rules()  # Offline-Alarm folgt dem Status
     flash("Probe deaktiviert – ihr Token wird abgelehnt." if new == "disabled" else "Probe aktiviert.", "ok")
     return redirect(url_for("web.probe", probe_id=probe_id))
 
@@ -783,10 +788,8 @@ def probe_delete(probe_id: int):
 @bp.get("/probes/<int:probe_id>/checks/<int:check_id>")
 @login_required()
 def target(probe_id: int, check_id: int):
-    p = q1(
-        "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?", (probe_id,)
-    ) or abort(404)
-    c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, ("ping",))   # Pfad, Bandbreite, Sprache haben eigene Seiten
     return render_template("target.html", probe=p, check=c, hop=None, hop_ip=None, ranges=list(vm.RANGES),
                            windows=vm.STAT_WINDOWS, **_chart_reports(probe_id))
 
@@ -819,7 +822,7 @@ def alerts():
 @login_required("operator")
 def alert_ack(event_id: int):
     event = q1("SELECT * FROM alert_events WHERE id = ?", (event_id,)) or abort(404)
-    hours = min(max(int(request.form.get("hours", 4) or 4), 1), 168)
+    hours = min(max(request.form.get("hours", 4, type=int), 1), 168)
     try:
         alert_service.acknowledge(event, current_user()["username"], hours, request.form.get("comment", "")[:500])
         repo.audit(current_user()["username"], "alert.ack", f"alert:{event_id}", f"{hours} h")
@@ -852,12 +855,13 @@ def admin():
         (repo.now(),),
     )
     return render_template(
-        "admin.html", sites=sites, probes=probes, checks=checks, assignments=assignments, tokens=tokens,
+        "admin.html", sites=sites, checks=checks, assignments=assignments, tokens=tokens,
         rules=list(repo.alert_rules().values()), users=q("SELECT * FROM users ORDER BY username"),
-        intervals=repo.ALLOWED_INTERVALS, roles=ROLES, notify_settings=notify.get_settings(),
+        roles=ROLES, notify_settings={**notify.get_settings(), **session.pop("notify_draft", {})},
+        user_draft=session.pop("user_draft", {}),
         probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]),
         notify_enabled=bool(current_app.config.get("AM_CONFIG")),
-        check_types=checktypes.TYPES, summary=checktypes.summary, merged=checktypes.merged,
+        check_types=checktypes.TYPES, summary=checktypes.summary,
         measure=settings_service.get(), measure_fields=settings_service.FIELDS,
         package=standardpaket.preview(current_app.config["PUBLIC_URL"]),
     )
@@ -870,7 +874,7 @@ def standard_package():
     scope = request.form.get("scope", "all")
     scope_id = None
     if scope == "site":
-        scope_id = int(request.form.get("site_id", 0) or 0)
+        scope_id = request.form.get("site_id", 0, type=int)
         if not q1("SELECT id FROM sites WHERE id = ?", (scope_id,)):
             flash("Bitte einen Standort auswählen.", "error")
             return redirect(url_for("web.admin") + "#standardpaket")
@@ -963,7 +967,7 @@ def setup_wizard():
             setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
             return render_template(
                 "token_created.html", token=token, site=site, days=days, max_uses=max_uses, proxy=proxy,
-                server_url=public_url, server_urls=repo.server_urls(), pin=current_app.config["SPKI_PIN"],
+                server_urls=repo.server_urls(), pin=current_app.config["SPKI_PIN"],
                 setup_name=setup.name if setup else None,
             )
     return render_template(
@@ -1025,22 +1029,27 @@ def site_delete(site_id: int):
 @bp.post("/admin/tokens")
 @login_required("admin")
 def token_create():
-    site_id = int(request.form.get("site_id", 0) or 0)
+    site_id = request.form.get("site_id", 0, type=int)
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,))
     if s is None:
         flash("Bitte zuerst einen Standort anlegen und auswählen.", "error")
         return redirect(url_for("web.admin") + "#enrollment")
-    days = min(max(int(request.form.get("days", 7) or 7), 1), 90)
-    max_uses = min(max(int(request.form.get("max_uses", 1) or 1), 1), 500)
+    proxy = request.form.get("proxy", "").strip()
+    if proxy and not proxy.startswith(("http://", "https://")):
+        # vor dem Anlegen prüfen: sonst entsteht ein verwaister Token und eine Fehlerseite ohne Rückweg
+        flash("Proxy bitte mit Schema angeben, z. B. http://proxy.kunde.local:3128", "error")
+        return redirect(url_for("web.admin") + "#enrollment")
+    days = min(max(request.form.get("days", 7, type=int), 1), 90)
+    max_uses = min(max(request.form.get("max_uses", 1, type=int), 1), 500)
     token = repo.create_enrollment_token(site_id, max_uses, days, current_user()["username"],
                                          request.form.get("description", ""))
     if request.form.get("action") == "setup":
         # direkt das vorbelegte Setup – auf dem PC nur noch „Installieren“
-        return _prefilled_setup_response(token, s, request.form.get("proxy", "").strip())
+        return _prefilled_setup_response(token, s, proxy)
     setup = repo.probe_setup_file(current_app.config["PROBE_DIR"])
     return render_template(
         "token_created.html", token=token, site=s, days=days, max_uses=max_uses,
-        server_url=current_app.config["PUBLIC_URL"], server_urls=repo.server_urls(),
+        server_urls=repo.server_urls(),
         pin=current_app.config["SPKI_PIN"], setup_name=setup.name if setup else None,
     )
 
@@ -1270,6 +1279,7 @@ def check_toggle(check_id: int):
     ex("UPDATE checks SET enabled = ?, updated_at = ? WHERE id = ?", (not c["enabled"], repo.now(), check_id))
     repo.audit(current_user()["username"], "check.toggle", f"check:{check_id}", "aus" if c["enabled"] else "an")
     _regen_rules()
+    flash(f"Check {c['name']} {'ausgeschaltet' if c['enabled'] else 'eingeschaltet'}.", "ok")
     return redirect(url_for("web.admin") + "#checks")
 
 
@@ -1286,6 +1296,9 @@ def check_delete(check_id: int):
 @bp.post("/admin/rules")
 @login_required("admin")
 def rules_update():
+    # erst alle Regeln prüfen, dann schreiben: sonst bleiben bei einem Fehler weiter unten die oberen gespeichert,
+    # obwohl die Meldung „ungültig“ sagt, und die Regeldatei passt nicht mehr zur Datenbank
+    updates = []
     for r in repo.alert_rules().values():
         k = r["kind"]
         try:
@@ -1293,18 +1306,17 @@ def rules_update():
             window_s = int(request.form.get(f"window_{k}", r["window_s"]))
             for_s = int(request.form.get(f"for_{k}", r["for_s"]))
         except ValueError:
-            flash(f"Ungültiger Wert bei {r['name']}.", "error")
-            return redirect(url_for("web.admin") + "#alarme")
+            threshold = -1.0
         enabled = request.form.get(f"enabled_{k}") == "on"
         severity = request.form.get(f"severity_{k}", r["severity"])
-        if severity not in ("warning", "critical", "info") or threshold < 0 or window_s < 0 or for_s < 0:
-            flash(f"Ungültiger Wert bei {r['name']}.", "error")
+        if (severity not in ("warning", "critical", "info") or not math.isfinite(threshold) or threshold < 0
+                or window_s < 0 or for_s < 0):
+            flash(f"Ungültiger Wert bei {r['name']} – nichts gespeichert. Bitte Zahlen ab 0 eingeben.", "error")
             return redirect(url_for("web.admin") + "#alarme")
-        ex(
-            "UPDATE alert_rules SET threshold = ?, window_s = ?, for_s = ?, severity = ?, enabled = ?, updated_at = ? "
-            "WHERE id = ?",
-            (threshold, window_s, for_s, severity, enabled, repo.now(), r["id"]),
-        )
+        updates.append((threshold, window_s, for_s, severity, enabled, repo.now(), r["id"]))
+    for u in updates:
+        ex("UPDATE alert_rules SET threshold = ?, window_s = ?, for_s = ?, severity = ?, enabled = ?, updated_at = ? "
+           "WHERE id = ?", u)
     repo.audit(current_user()["username"], "rules.update")
     _regen_rules()
     flash("Alarmregeln gespeichert und an vmalert übergeben.", "ok")
@@ -1318,6 +1330,7 @@ def user_create():
     password = request.form.get("password", "")
     role = request.form.get("role", "readonly")
     problem = password_problem(password)
+    session["user_draft"] = {"username": username[:64], "role": role[:20]}   # bei Fehler vorbelegen; Erfolg löscht es
     if not username or role not in ROLES:
         flash("Benutzername oder Rolle ungültig.", "error")
     elif problem:
@@ -1330,6 +1343,7 @@ def user_create():
             (username, hash_password(password), role, repo.now()),
         )
         repo.audit(current_user()["username"], "user.create", username, role)
+        session.pop("user_draft", None)
         flash(f"Benutzer {username} angelegt.", "ok")
     return redirect(url_for("web.admin") + "#benutzer")
 
@@ -1343,8 +1357,11 @@ def user_password(user_id: int):
         flash(problem, "error")
     else:
         # neues Passwort hebt auch eine Sperre nach Fehlversuchen auf
+        new_hash = hash_password(password)
         ex("UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
-           (hash_password(password), user_id))
+           (new_hash, user_id))
+        if user_id == current_user()["id"]:
+            session["pwv"] = password_marker(new_hash)   # eigenes Passwort: diese Sitzung bleibt
         repo.audit(current_user()["username"], "user.password_reset", u["username"])
         flash(f"Passwort für {u['username']} zurückgesetzt. Bitte das neue Passwort sicher weitergeben.", "ok")
     return redirect(url_for("web.admin") + "#benutzer")
@@ -1402,6 +1419,8 @@ def notify_update():
     if errors:
         for e in errors:
             flash(e, "error")
+        # Eingaben fürs erneute Anzeigen merken (ohne Passwort), sonst muss alles neu getippt werden
+        session["notify_draft"] = {k: v[:1000] for k, v in values.items() if k not in notify.SECRET_FIELDS}
         return redirect(url_for("web.admin") + "#benachrichtigungen")
     notify.save_settings(values)
     changed = [k for k in notify.FIELDS if values[k] != current.get(k, "")]

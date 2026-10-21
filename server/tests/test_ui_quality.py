@@ -319,7 +319,7 @@ PAIRS = [
     ("--loss-low", "--surface", 3.0),
 ]
 # Badges: Schrift auf 12 % der eigenen Farbe über --surface (siehe .badge.* in app.css)
-BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12)]
+BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12), ("--ok", 0.12), ("--text-muted", 0.12)]
 
 
 def _tokens(block: str, dark: bool = False) -> dict[str, str]:

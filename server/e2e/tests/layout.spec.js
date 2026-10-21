@@ -2,8 +2,8 @@
 const { test, expect } = require("@playwright/test");
 const { PAGES, ids } = require("../pages");
 
-// 320 CSS-px ≙ 1280 px bei 400 % Zoom (WCAG 1.4.10), 640 px ≙ 200 %
-for (const width of [320, 640]) {
+// 320 CSS-px ≙ 1280 px bei 400 % Zoom (WCAG 1.4.10), 640 px ≙ 200 %, 768/900 px = Tablet (Audit 2026-10-21)
+for (const width of [320, 640, 768, 900]) {
   test.describe(`Reflow ${width}px`, () => {
     test.use({ viewport: { width, height: 800 } });
     for (const [name, url] of PAGES) {
@@ -82,5 +82,22 @@ test.describe("Auto-Refresh", () => {
     await page.clock.runFor(95_000);
     expect(reloaded).toBe(false);
     await expect(field).toHaveValue("10.0.0.99");
+  });
+});
+
+test.describe("Suche auf der Übersicht", () => {
+  test("filtert Standorte und Probes und übersteht das Neuladen", async ({ page }) => {
+    await page.clock.install();
+    await page.goto("/");
+    await page.getByLabel("Standort oder Probe suchen").fill("K-1002");          // Kundennummer der Filiale
+    await expect(page.locator("a.card.site:visible")).toHaveCount(1);
+    await expect(page).toHaveURL(/\?q=K-1002/);
+    await page.getByRole("heading", { level: 1 }).click();
+    const reload = page.waitForEvent("load");
+    await page.clock.runFor(31_000);                                              // Auto-Refresh läuft weiter
+    await reload;
+    await expect(page.getByLabel("Standort oder Probe suchen")).toHaveValue("K-1002");
+    await page.getByLabel("Standort oder Probe suchen").fill("gibt-es-nicht");
+    await expect(page.getByText("Kein Standort und keine Probe passt")).toBeVisible();
   });
 });
