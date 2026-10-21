@@ -656,7 +656,7 @@ def rtp_view(probe_id: int, check_id: int):
                            codec=rtp.CODECS.get(params["codec"]))
 
 
-OUTAGE_RANGES = {"24h": 86400, "7d": 7 * 86400, "30d": 30 * 86400, "90d": 90 * 86400, "365d": 365 * 86400}
+OUTAGE_RANGES = BW_RANGES
 
 
 @bp.get("/outages")
@@ -787,10 +787,8 @@ def probe_delete(probe_id: int):
 @bp.get("/probes/<int:probe_id>/checks/<int:check_id>")
 @login_required()
 def target(probe_id: int, check_id: int):
-    p = q1(
-        "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id WHERE p.id = ?", (probe_id,)
-    ) or abort(404)
-    c = q1("SELECT * FROM checks WHERE id = ?", (check_id,)) or abort(404)
+    p = _probe_or_404(probe_id)
+    c = _probe_check_or_404(p, check_id, ("ping",))   # Pfad, Bandbreite, Sprache haben eigene Seiten
     return render_template("target.html", probe=p, check=c, hop=None, hop_ip=None, ranges=list(vm.RANGES),
                            windows=vm.STAT_WINDOWS, **_chart_reports(probe_id))
 

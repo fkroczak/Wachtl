@@ -91,6 +91,14 @@ class WebTest(AppTestCase):
         self.client.post("/admin/rules", data=data)
         self.assertEqual({r["kind"]: r["threshold"] for r in repo.alert_rules().values()}, before)
 
+    def test_target_page_only_for_ping(self):
+        from wachtl import repo
+        self.make_user()
+        self.login()
+        pid = self.enroll()["probe_id"]
+        path = repo.create_check("Pfad", "1.1.1.1", "target", 5, 1000, "all", None, "path", {})
+        self.assertEqual(self.client.get(f"/probes/{pid}/checks/{path}").status_code, 404)
+
     def test_noindex_everywhere(self):
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
