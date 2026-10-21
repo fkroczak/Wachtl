@@ -148,6 +148,32 @@ class WebTest(AppTestCase):
         self.assertEqual(r.status_code, 200)  # Formular erneut, nicht angemeldet
         self.assertIn("gesperrt", r.get_data(as_text=True))
 
+    def _client_login(self, client, password):
+        with client.session_transaction() as s:
+            s["csrf"] = "t"
+        return client.post("/login", data={"username": "admin", "password": password, "csrf_token": "t"})
+
+    def test_lockout_is_per_device_not_per_account(self):
+        # Fremdes Gerät probiert 5× falsch: nur dieses Gerät ist gesperrt, der Admin kommt weiter rein
+        self.make_user()
+        attacker = self.app.test_client()
+        for _ in range(5):
+            self._client_login(attacker, "falsch")
+        self.assertIn("gesperrt", self._client_login(attacker, "sehr-geheimes-pw").get_data(as_text=True))
+        self.assertEqual(self.login().status_code, 302)
+
+    def test_account_backstop_spares_trusted_device(self):
+        self.make_user()
+        self.assertEqual(self.login().status_code, 302)          # dieses Gerät ist jetzt vertraut
+        self.client.post("/logout", data={"csrf_token": self.session_csrf()})
+        for _ in range(4):                                       # 20 Fehlversuche aus 4 frischen Sitzungen
+            c = self.app.test_client()
+            for _ in range(5):
+                self._client_login(c, "falsch")
+        self.assertIn("Konto vorübergehend gesperrt",
+                      self._client_login(self.app.test_client(), "sehr-geheimes-pw").get_data(as_text=True))
+        self.assertEqual(self.login().status_code, 302)          # vertrautes Gerät kommt rein
+
     def test_password_forgot_page_public_and_linked(self):
         self.assertIn("/passwort-vergessen", self.client.get("/login").get_data(as_text=True))
         r = self.client.get("/passwort-vergessen")

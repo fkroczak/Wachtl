@@ -16,7 +16,7 @@ from . import repo
 from .db import ex, ins, q, q1
 from .security import (ROLE_LABELS, ROLES, check_csrf, csrf_ok, csrf_token, current_user, has_role,
                        hash_password, hash_token, login_required, login_user, password_marker, password_problem,
-                       try_login, verify_password)
+                       trust_device, try_login, verify_password)
 from . import checktypes, httperrors, rtp, standardpaket
 from . import findings as finding_service
 from . import reports as report_service
@@ -198,7 +198,8 @@ def login():
             login_user(user)
             repo.audit(user["username"], "login")
             nxt = request.args.get("next", "")
-            return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("web.overview"))
+            return trust_device(redirect(nxt if nxt.startswith("/") and not nxt.startswith("//")
+                                         else url_for("web.overview")), user["username"])
         repo.audit(request.form.get("username", "")[:64], "login.failed", detail=request.remote_addr or "")
         flash(error, "error")
     return render_template("login.html")

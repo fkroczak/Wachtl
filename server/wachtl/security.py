@@ -14,8 +14,11 @@ from .db import ex, q1
 
 ROLES = ("readonly", "operator", "admin")
 ROLE_LABELS = {"readonly": "Nur lesen", "operator": "Operator", "admin": "Administrator"}
-MAX_FAILED_LOGINS = 5
+MAX_FAILED_LOGINS = 5          # je Gerät/Browser-Sitzung
+ACCOUNT_MAX_FAILED = 20        # je Konto, nur von nicht vertrauten Geräten
 LOCK_SECONDS = 15 * 60
+DEVICE_COOKIE = "wachtl_device"
+DEVICE_DAYS = 180
 
 
 # -- Passwörter und Tokens --------------------------------------------------
@@ -42,22 +45,62 @@ def password_problem(password: str) -> str | None:
 
 
 # -- Web-Login --------------------------------------------------------------
+def _device_serializer():
+    from flask import current_app
+    from itsdangerous import URLSafeSerializer
+
+    return URLSafeSerializer(current_app.secret_key, salt="wachtl-device")
+
+
+def trusted_users() -> list[str]:
+    """Benutzer, die sich auf diesem Gerät (Browser) schon erfolgreich angemeldet haben (signiertes Cookie)."""
+    try:
+        users = _device_serializer().loads(request.cookies.get(DEVICE_COOKIE, ""))
+    except Exception:  # noqa: BLE001 – fehlt, manipuliert oder alter Schlüssel: kein vertrautes Gerät
+        return []
+    return users if isinstance(users, list) else []
+
+
+def trust_device(resp, username: str):
+    """Gerät nach erfolgreicher Anmeldung als vertraut merken (für die Konto-Sperre, nicht für die Anmeldung)."""
+    from flask import current_app
+
+    users = [u for u in trusted_users() if u != username][-9:] + [username]
+    resp.set_cookie(DEVICE_COOKIE, _device_serializer().dumps(users), max_age=DEVICE_DAYS * 86400, httponly=True,
+                    secure=current_app.config["SESSION_COOKIE_SECURE"], samesite="Lax")
+    return resp
+
+
 def try_login(username: str, password: str) -> tuple[dict | None, str | None]:
-    """Prüft Zugangsdaten inkl. Sperre nach Fehlversuchen."""
+    """Prüft Zugangsdaten. Sperre je Gerät/Sitzung (bis zu 40 Nutzer teilen sich eine IP, daher nie je IP).
+
+    Fehlversuche sperren zuerst nur diese Browser-Sitzung. Rückhalt gegen Durchprobieren mit immer neuen Sitzungen:
+    das Konto sperrt nach ACCOUNT_MAX_FAILED Fehlversuchen – aber nicht für Geräte, auf denen sich der Benutzer
+    schon angemeldet hat. So kann niemand den Admin an seinem eigenen Rechner aussperren.
+    """
     now = int(time.time())
+    fails = dict(session.get("login_fails") or {})   # je Benutzername auf diesem Gerät: [Anzahl, gesperrt bis]
+    username = username[:64]
+    count, until = fails.get(username) or (0, 0)
+    if until > now:
+        return None, "Auf diesem Gerät vorübergehend gesperrt (zu viele Fehlversuche). Bitte in 15 Minuten erneut versuchen."
+    trusted = username in trusted_users()
     user = q1("SELECT * FROM users WHERE username = ?", (username,))
-    if user is None:
-        verify_password(hash_password("x"), password)  # gleiche Laufzeit wie bei Treffern
-        return None, "Benutzername oder Passwort falsch."
-    if user["locked_until"] and user["locked_until"] > now:
-        return None, "Konto vorübergehend gesperrt. Bitte später erneut versuchen."
-    if not verify_password(user["password_hash"], password):
-        failed = user["failed_logins"] + 1
-        locked = now + LOCK_SECONDS if failed >= MAX_FAILED_LOGINS else None
-        ex(
-            "UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?",
-            (0 if locked else failed, locked, user["id"]),
-        )
+    if user is not None and not trusted and user["locked_until"] and user["locked_until"] > now:
+        return None, ("Konto vorübergehend gesperrt. Bitte später erneut versuchen oder einen Admin bitten, "
+                      "das Passwort zurückzusetzen.")
+    if user is None or not verify_password(user["password_hash"], password):
+        if user is None:
+            verify_password(hash_password("x"), password)  # gleiche Laufzeit wie bei Treffern
+        count += 1
+        fails.pop(username, None)
+        fails[username] = (0, now + LOCK_SECONDS) if count >= MAX_FAILED_LOGINS else (count, 0)
+        session["login_fails"] = dict(list(fails.items())[-10:])   # Cookie klein halten
+        if user is not None and not trusted:
+            failed = user["failed_logins"] + 1
+            locked = now + LOCK_SECONDS if failed >= ACCOUNT_MAX_FAILED else None
+            ex("UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?",
+               (0 if locked else failed, locked, user["id"]))
         return None, "Benutzername oder Passwort falsch."
     ex("UPDATE users SET failed_logins = 0, locked_until = NULL, last_login = ? WHERE id = ?", (now, user["id"]))
     return user, None
