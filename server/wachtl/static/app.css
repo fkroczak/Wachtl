@@ -182,7 +182,7 @@ input:focus, select:focus, textarea:focus { outline: 3px solid var(--focus); out
 input:focus-within { outline: 3px solid var(--focus); outline-offset: 0; }
 input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--bad); border-width: 2px; }
 input.num { width: 7rem; }
-button { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem 0.9rem; cursor: pointer; }
+button { background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px; padding: 0.4rem 0.9rem; cursor: pointer; }
 button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -267,7 +267,7 @@ nav.crumbs { display: block; }
 code.copy { user-select: all; background: var(--accent-soft); padding: 0.1rem 0.35rem; border-radius: 4px; word-break: break-all; }
 
 /* 0.3: Check-Formulare, Pfade, Bandbreite, Ausfälle */
-a.button { display: inline-block; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+a.button { display: inline-block; background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px;
   padding: 0.4rem 0.9rem; color: var(--text); }
 a.button:hover { border-color: var(--accent); text-decoration: none; }
 a.button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
