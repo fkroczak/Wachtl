@@ -159,3 +159,15 @@ Komplett verwerfen: Branch löschen, `main` ist unberührt.
 - **Gewählt:** (c). Keine DB-Migration. 5 Fehlversuche → nur diese Sitzung für diesen Benutzernamen 15 min gesperrt; 20 Fehlversuche von nicht vertrauten Geräten → Konto 15 min gesperrt, aber nicht auf Geräten, auf denen sich der Benutzer schon angemeldet hat. Admin-„Passwort zurücksetzen“ hebt die Kontosperre weiter auf.
 - **Grenze:** Wer Cookies löscht, bekommt je neue Sitzung 5 Versuche – gedeckelt durch die Konto-Sperre (20 je 15 min, scrypt).
 - **Dateien:** `security.py`, `web.py`, `tests/test_web.py`, `docs/BETRIEB.md` · **Commit:** `b8714f1` · **Risiko:** mittel (Anmeldung) · **Rückbau:** `git revert b8714f1` (Cookie `wachtl_device` wird dann ignoriert)
+
+## E-27 · 03:46 · Eingaben gehen nach Fehlermeldung verloren
+- **Anlass:** „Benutzer anlegen“ und „Benachrichtigungen“ leiten bei Fehlern um – alles Getippte (Benutzername, Rolle, E-Mail, SMTP, Teams-URL) war weg.
+- **Optionen:** (a) Seite bei Fehler direkt rendern (Antwort auf POST, Neuladen sendet erneut); (b) Entwurf einmalig in der Sitzung merken und beim nächsten Aufruf vorbelegen.
+- **Gewählt:** (b), je 2–3 Zeilen. SMTP-Passwort wird nie zwischengespeichert. Messeinstellungen/Alarmregeln unverändert (Werte dort sind meist Zahlen, Fehler betreffen ein Feld).
+- **Dateien:** `web.py`, `templates/admin.html`, `tests/test_web.py` · **Commit:** `e8ff475` · **Risiko:** niedrig · **Rückbau:** `git revert e8ff475`
+
+## E-28 · 03:52 · Seitliches Scrollen auf Tablets
+- **Anlass:** Reflow-Tests prüften nur 320/640 px; zwischen 701 und ~960 px (iPad hochkant 768/810 px) waren Übersicht, Standort, Probe, Ziel, Hop, Bandbreite und Verwaltung breiter als der Bildschirm – Tabellen ohne Scroll-Container (Hinweise, Meldungen, Bandbreite, Verwaltung).
+- **Optionen:** (a) Handy-Regel `table { display:block }` bis 1000 px ausdehnen (Tabellen würden schmaler als die Seite, Tabellen-Semantik leidet); (b) betroffene Tabellen in den vorhandenen `.scroll`-Container.
+- **Gewählt:** (b). Reflow-Test um 768 und 900 px erweitert; der Test schlägt mit dem alten Stand auf 7 Seiten fehl und ist jetzt grün.
+- **Dateien:** `templates/_findings.html`, `_reports.html`, `bandwidth.html`, `admin.html`, `e2e/tests/layout.spec.js` · **Commit:** `9d5098b` · **Risiko:** niedrig · **Rückbau:** `git revert 9d5098b`
