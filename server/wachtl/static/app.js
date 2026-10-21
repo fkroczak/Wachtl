@@ -48,7 +48,7 @@
   // Fehlerübersicht nach dem Absenden fokussieren, damit Screenreader sie vorlesen
   document.querySelector("[data-error-summary]")?.focus();
 
-  // Meldung nach Speichern dort zeigen, wohin die Seite springt (z. B. /admin#benutzer) – oben wäre sie außer Sicht
+  // Meldung nach Speichern am Sprungziel (/admin#benutzer) zeigen, oben wäre sie außer Sicht
   const jumpTo = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
   const flashes = document.querySelectorAll("main > .flash");
   if (jumpTo && flashes.length) {
@@ -56,8 +56,7 @@
     flashes[0].scrollIntoView();
   }
 
-  // Übersicht: Standorte und Probes per Suchfeld filtern (Name, Standort, Kundennummer). Der Suchbegriff steht
-  // in der Adresse (?q=), damit er das automatische Neuladen übersteht; Tippen hier pausiert es nicht dauerhaft.
+  // Übersicht: Suchfeld filtert Standorte/Probes; ?q= übersteht das Auto-Neuladen, das hier nicht pausiert
   const filter = document.querySelector("[data-filter]");
   if (filter) {
     const items = document.querySelectorAll("[data-filter-item]");
