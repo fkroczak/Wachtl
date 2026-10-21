@@ -63,6 +63,15 @@ class WebTest(AppTestCase):
         r = self.client.post("/api/probe/v1/heartbeat", headers={"Authorization": "Bearer \u00b2.x"})
         self.assertEqual(r.status_code, 401)
 
+    def test_error_pages_german_with_way_back(self):
+        self.make_user()
+        self.login()
+        r = self.client.get("/logout", headers={"Referer": "http://localhost/alerts"})
+        self.assertEqual(r.status_code, 405)
+        html = r.get_data(as_text=True)
+        self.assertIn("Aktion nicht möglich", html)
+        self.assertIn('href="http://localhost/alerts"', html)
+
     def test_token_bad_proxy_creates_no_token(self):
         self.make_user()
         self.login()
