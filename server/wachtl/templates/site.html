@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ site.name }}{% endblock %}
 {% from "_reports.html" import report_table with context %}
-{% from "_links.html" import alert_links with context %}
+{% from "_links.html" import alert_links, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -104,7 +104,7 @@
     <tr><th>Ziel</th>
       {% for p in probes %}
       <th><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>
-        <br><span class="muted small">{{ 'online' if probe_online(p) else 'offline' }}</span></th>
+        <br><span class="muted small">{{ probe_state(p) }}</span></th>
       {% endfor %}
     </tr>
   </thead>

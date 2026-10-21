@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Verwaltung{% endblock %}
 {% from "_forms.html" import field %}
-{% from "_links.html" import check_target with context %}
+{% from "_links.html" import check_target, onoff with context %}
 {% block content %}
 <h1>Verwaltung</h1>
 <p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
@@ -129,11 +129,11 @@
         <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
         <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
         <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
-        <td>{{ 'aktiv' if c.enabled else 'pausiert' }}</td>
+        <td>{{ onoff(c.enabled) }}</td>
         <td class="nowrap">
           <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}">Bearbeiten</a>
           <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Pausieren' if c.enabled else 'Aktivieren' }}</button></form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link">{{ 'Ausschalten' if c.enabled else 'Einschalten' }}</button></form>
           <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?">Löschen</button></form>
         </td>
@@ -171,10 +171,10 @@
   <form method="post" action="{{ url_for('web.rules_update') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <table>
-      <thead><tr><th>Aktiv</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
+      <thead><tr><th>Ein</th><th>Regel</th><th>Schwellwert</th><th>Fenster (s)</th><th>Dauer bis Alarm (s)</th><th>Stufe</th></tr></thead>
       <tbody>{% for r in rules %}
         <tr>
-          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="{{ r.name }}: aktiv"></td>
+          <td><input type="checkbox" name="enabled_{{ r.kind }}" {{ 'checked' if r.enabled }} aria-label="{{ r.name }}: ein"></td>
           <th scope="row">{{ r.name }}</th>
           <td><input name="threshold_{{ r.kind }}" type="number" step="any" min="0" value="{{ '%g' % r.threshold }}" class="num" aria-label="{{ r.name }}: Schwellwert"></td>
           <td>{% if r.kind in ('target_down', 'wan_down', 'probe_offline', 'route_change', 'bandwidth_low', 'voip_quality') %}<span class="muted">automatisch</span><input type="hidden" name="window_{{ r.kind }}" value="{{ r.window_s }}">

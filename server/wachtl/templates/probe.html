@@ -2,7 +2,7 @@
 {% block title %}{{ probe.hostname }}{% endblock %}
 {% from "_forms.html" import field %}
 {% from "_reports.html" import report_table with context %}
-{% from "_links.html" import alert_links, check_target with context %}
+{% from "_links.html" import alert_links, check_target, onoff, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -13,14 +13,11 @@
   <div class="card kv">
     <dl>
       <dt>Status</dt><dd>
-        {% if probe.deregistered_at %}<span class="dot off"></span> abgemeldet (deinstalliert am {{ probe.deregistered_at|dt }})
-        {% elif probe.status != 'active' %}<span class="dot off"></span> deaktiviert
-        {% elif probe_online(probe) %}<span class="dot ok"></span> online
-        {% else %}<span class="dot down"></span> offline{% endif %}</dd>
+        {{ probe_state(probe) }}{% if probe.deregistered_at %} am {{ probe.deregistered_at|dt }} (abgemeldet){% endif %}</dd>
       <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
       <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
-      <dt>Gegenstelle</dt><dd>{{ ('aktiv, iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server else 'aus' }}</dd>
+      <dt>Gegenstelle</dt><dd>{{ onoff(probe.iperf_server) }}{{ (' iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server }}</dd>
       <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
       <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
       <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>

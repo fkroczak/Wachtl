@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
 {% from "_reports.html" import report_table with context %}
-{% from "_links.html" import alert_links, check_target with context %}
+{% from "_links.html" import alert_links, check_target, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -96,10 +96,7 @@
     {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
     <tr>
       <td>
-        {% if p.deregistered_at %}<span class="dot off"></span> deinstalliert
-        {% elif p.status != 'active' %}<span class="dot off"></span> deaktiviert
-        {% elif probe_online(p) %}<span class="dot ok"></span> online
-        {% else %}<span class="dot down"></span> offline{% endif %}
+        {{ probe_state(p) }}
       </td>
       <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</td>
       <td><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></td>

@@ -9,3 +9,16 @@
   {%- if p.peer == 'probe' and p.peer_probe_id %}<a href="{{ url_for('web.probe', probe_id=p.peer_probe_id) }}">{{ c.target }}</a>
   {%- else %}{{ c.target }}{% endif -%}
 {%- endmacro %}
+
+{#- Zustand einer Probe – überall dieselben Wörter und Farben (Übersicht, Standort-Matrix, Probe) -#}
+{% macro probe_state(p) -%}
+  {%- if p.deregistered_at %}<span class="dot"></span> deinstalliert
+  {%- elif p.status != 'active' %}<span class="dot"></span> deaktiviert
+  {%- elif probe_online(p) %}<span class="dot ok"></span> online
+  {%- else %}<span class="dot down"></span> offline{% endif -%}
+{%- endmacro %}
+
+{#- Ein/Aus-Schalter (Check, Gegenstelle): einheitlich „Ein“/„Aus“, farbig hinterlegt -#}
+{% macro onoff(on) -%}
+  <span class="badge {{ 'on' if on else 'off' }}">{{ 'Ein' if on else 'Aus' }}</span>
+{%- endmacro %}

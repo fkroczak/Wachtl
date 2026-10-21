@@ -1278,6 +1278,7 @@ def check_toggle(check_id: int):
     ex("UPDATE checks SET enabled = ?, updated_at = ? WHERE id = ?", (not c["enabled"], repo.now(), check_id))
     repo.audit(current_user()["username"], "check.toggle", f"check:{check_id}", "aus" if c["enabled"] else "an")
     _regen_rules()
+    flash(f"Check {c['name']}: {'Aus' if c['enabled'] else 'Ein'}.", "ok")
     return redirect(url_for("web.admin") + "#checks")
 
 
