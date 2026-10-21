@@ -32,6 +32,9 @@
 
 {% if has_role(user, 'admin') %}
 <div class="actions">
+  {% if probe.deregistered_at %}
+  <p class="muted">Deinstalliert – zum erneuten Messen das Setup auf dem PC neu installieren.</p>
+  {% else %}
   <form method="post" action="{{ url_for('web.probe_status', probe_id=probe.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if probe.status == 'active' %}
@@ -40,6 +43,7 @@
       <button name="action" value="enable">Aktivieren</button>
     {% endif %}
   </form>
+  {% endif %}
   <form method="post" action="{{ url_for('web.probe_delete', probe_id=probe.id) }}" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="danger" data-confirm="Probe {{ probe.hostname }} endgültig löschen?">Löschen</button>
