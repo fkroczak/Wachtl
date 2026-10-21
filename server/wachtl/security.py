@@ -80,8 +80,8 @@ def try_login(username: str, password: str) -> tuple[dict | None, str | None]:
     """
     now = int(time.time())
     fails = dict(session.get("login_fails") or {})   # je Benutzername auf diesem Gerät: [Anzahl, gesperrt bis]
-    username = username[:64]
-    count, until = fails.get(username) or (0, 0)
+    key = username[:64]   # nur der Schlüssel im Cookie wird gekürzt, nicht der Name für die Suche
+    count, until = fails.get(key) or (0, 0)
     if until > now:
         return None, "Auf diesem Gerät vorübergehend gesperrt (zu viele Fehlversuche). Bitte in 15 Minuten erneut versuchen."
     trusted = username in trusted_users()
@@ -93,14 +93,14 @@ def try_login(username: str, password: str) -> tuple[dict | None, str | None]:
         if user is None:
             verify_password(hash_password("x"), password)  # gleiche Laufzeit wie bei Treffern
         count += 1
-        fails.pop(username, None)
-        fails[username] = (0, now + LOCK_SECONDS) if count >= MAX_FAILED_LOGINS else (count, 0)
+        fails.pop(key, None)
+        fails[key] = (0, now + LOCK_SECONDS) if count >= MAX_FAILED_LOGINS else (count, 0)
         session["login_fails"] = dict(list(fails.items())[-10:])   # Cookie klein halten
         if user is not None and not trusted:
-            failed = user["failed_logins"] + 1
-            locked = now + LOCK_SECONDS if failed >= ACCOUNT_MAX_FAILED else None
-            ex("UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?",
-               (0 if locked else failed, locked, user["id"]))
+            # in SQL zählen: parallele Versuche (scrypt dauert) würden sich sonst gegenseitig überschreiben
+            ex("UPDATE users SET failed_logins = failed_logins + 1 WHERE id = ?", (user["id"],))
+            ex("UPDATE users SET failed_logins = 0, locked_until = ? WHERE id = ? AND failed_logins >= ?",
+               (now + LOCK_SECONDS, user["id"], ACCOUNT_MAX_FAILED))
         return None, "Benutzername oder Passwort falsch."
     ex("UPDATE users SET failed_logins = 0, locked_until = NULL, last_login = ? WHERE id = ?", (now, user["id"]))
     return user, None

@@ -114,7 +114,23 @@ class WebTest(AppTestCase):
         self.assertIn('value="kein-mail"', html)
         self.assertNotIn("geheim", html)
 
-    def test_noindex_everywhere(self):
+    def test_review_regressions(self):
+        from wachtl.security import try_login
+        # lange Benutzernamen können sich weiter anmelden
+        self.make_user("u" * 70)
+        with self.app.test_request_context("/login", method="POST"):
+            self.assertIsNotNone(try_login("u" * 70, "sehr-geheimes-pw")[0])
+        # Admin setzt eigenes Passwort zurück und bleibt angemeldet
+        self.make_user()
+        self.login()
+        uid = q1("SELECT id FROM users WHERE username = 'admin'")["id"]
+        self.client.post(f"/admin/users/{uid}/password", data={"password": "neu-1234", "csrf_token": self.session_csrf()})
+        self.assertEqual(self.client.get("/").status_code, 200)
+        # Konto-Zähler zählt in SQL hoch (kein verlorenes Inkrement)
+        with self.app.test_request_context("/login", method="POST"):
+            try_login("admin", "falsch")
+        self.assertEqual(q1("SELECT failed_logins FROM users WHERE id = ?", (uid,))["failed_logins"], 1)
+
         for path in ("/login", "/healthz", "/static/app.css"):
             self.assertEqual(self.client.get(path).headers["X-Robots-Tag"], "noindex, nofollow")
 

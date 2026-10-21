@@ -1330,7 +1330,7 @@ def user_create():
     password = request.form.get("password", "")
     role = request.form.get("role", "readonly")
     problem = password_problem(password)
-    session["user_draft"] = {"username": username, "role": role}   # bei Fehler vorbelegen; Erfolg löscht es
+    session["user_draft"] = {"username": username[:64], "role": role[:20]}   # bei Fehler vorbelegen; Erfolg löscht es
     if not username or role not in ROLES:
         flash("Benutzername oder Rolle ungültig.", "error")
     elif problem:
@@ -1357,8 +1357,11 @@ def user_password(user_id: int):
         flash(problem, "error")
     else:
         # neues Passwort hebt auch eine Sperre nach Fehlversuchen auf
+        new_hash = hash_password(password)
         ex("UPDATE users SET password_hash = ?, failed_logins = 0, locked_until = NULL WHERE id = ?",
-           (hash_password(password), user_id))
+           (new_hash, user_id))
+        if user_id == current_user()["id"]:
+            session["pwv"] = password_marker(new_hash)   # eigenes Passwort: diese Sitzung bleibt
         repo.audit(current_user()["username"], "user.password_reset", u["username"])
         flash(f"Passwort für {u['username']} zurückgesetzt. Bitte das neue Passwort sicher weitergeben.", "ok")
     return redirect(url_for("web.admin") + "#benutzer")
@@ -1417,7 +1420,7 @@ def notify_update():
         for e in errors:
             flash(e, "error")
         # Eingaben fürs erneute Anzeigen merken (ohne Passwort), sonst muss alles neu getippt werden
-        session["notify_draft"] = {k: v for k, v in values.items() if k not in notify.SECRET_FIELDS}
+        session["notify_draft"] = {k: v[:1000] for k, v in values.items() if k not in notify.SECRET_FIELDS}
         return redirect(url_for("web.admin") + "#benachrichtigungen")
     notify.save_settings(values)
     changed = [k for k in notify.FIELDS if values[k] != current.get(k, "")]

@@ -49,7 +49,9 @@
   document.querySelector("[data-error-summary]")?.focus();
 
   // Meldung nach Speichern am Sprungziel (/admin#benutzer) zeigen, oben wäre sie außer Sicht
-  const jumpTo = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  let jumpId = location.hash.slice(1);
+  try { jumpId = decodeURIComponent(jumpId); } catch { /* kaputtes %-Zeichen: Rohwert */ }
+  const jumpTo = jumpId && document.getElementById(jumpId);
   const flashes = document.querySelectorAll("main > .flash");
   if (jumpTo && flashes.length) {
     if (jumpTo.matches("h2, h3")) jumpTo.before(...flashes); else jumpTo.prepend(...flashes);
