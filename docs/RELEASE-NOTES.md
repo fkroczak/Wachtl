@@ -3,6 +3,11 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Unveröffentlicht
+
+- **Kurze Ausfälle bleiben sichtbar**: Übersicht und Standort zeigen eine Kachel **Ausfälle (24 h)** und den Abschnitt **Ausfälle der letzten 24 Stunden**. Bisher stand dort nur der aktuelle Zustand – ein Ausfall von 20–30 s war nach wenigen Minuten wieder „ok“ und nirgends mehr auf der Startseite zu sehen. Ein Klick aufs Ziel öffnet den Graphen zum Zeitpunkt des Ausfalls.
+- **Probe-Seite**: Unter „Alle Messungen“ steht bei jedem Check mit Ausfall in den letzten 24 h, wann und wie lange.
+
 ## Neu in 0.9.2
 
 - **Benutzermenü**: Oben rechts steht nur noch der Benutzername. Ein Klick öffnet das Menü mit **Konto** und **Design**, darunter abgesetzt **Abmelden**. Bedienbar auch per Tastatur (Escape schließt).

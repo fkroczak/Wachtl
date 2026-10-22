@@ -199,3 +199,37 @@ class CheckStatusApiTest(AppTestCase):
         self.assertEqual({r["state"] for r in rows if r["type"] == "speedtest"}, {"waiting"})
         probes = self.client.get("/api/v1/probes").get_json()
         self.assertEqual(probes[0]["kind"], "probe")
+
+
+class RecentOutageTest(AppTestCase):
+    """Kurzer, längst behobener Ausfall: Zustand ist wieder „ok“, Übersicht muss ihn trotzdem zeigen."""
+
+    def test_resolved_outage_visible(self):
+        import json
+
+        from wachtl.db import ins
+        probe = self.enroll("SRV21FilePrint")
+        pid = probe["probe_id"]
+        cid = repo.create_check("d.velop AG", "185.87.179.244", "target", 1, 1000, "all", None, "ping",
+                                checktypes.merged("ping", {}))
+        now = repo.now()
+        labels = {"alertname": "WachtlTargetDown", "probe": str(pid), "probe_name": "SRV21FilePrint",
+                  "site": "1", "site_name": "Zentrale", "check_id": str(cid), "target": "185.87.179.244",
+                  "role": "target"}
+        ins("INSERT INTO alert_events (fingerprint, alertname, severity, status, labels, summary, starts_at, ends_at, "
+            "updated_at, refined_at) VALUES ('f1', 'WachtlTargetDown', 'critical', 'resolved', ?, 'down', ?, ?, ?, ?)",
+            (json.dumps(labels), now - 600, now - 575, now - 575, now))
+        self.make_user()
+        self.login()
+        live = {(str(pid), str(cid)): {"up": 1, "rtt": 0.98, "loss": 0.0}}
+        with mock.patch("wachtl.services.vm.live_status", return_value=live):
+            html = self.client.get("/").get_data(as_text=True)
+            self.assertIn("Ausfälle der letzten 24 Stunden", html)
+            self.assertIn("185.87.179.244", html)
+            self.assertIn(f"/probes/{pid}/checks/{cid}?at={now - 600}", html)
+            site_html = self.client.get("/sites/1").get_data(as_text=True)
+            self.assertIn("Ausfälle der letzten 24 Stunden", site_html)
+            self.assertIn("185.87.179.244", site_html)
+            probe_html = self.client.get(f"/probes/{pid}").get_data(as_text=True)
+            self.assertIn("1 Ausfall in 24 h", probe_html)
+            self.assertIn("Ausfall vor", probe_html)

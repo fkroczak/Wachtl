@@ -3,6 +3,7 @@
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
+{% from "_outages.html" import outage_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
@@ -14,6 +15,7 @@
   <a class="card stat {{ 'bad' if kpi.online < kpi.active }}" href="#probes"><span class="num">{{ kpi.online }} / {{ kpi.active }}</span><span>Probes online</span></a>
   <a class="card stat {{ 'bad' if kpi.problems }}" href="#probes"><span class="num">{{ kpi.problems }}</span><span>Messungen mit Problemen</span></a>
   <a class="card stat {{ 'bad' if alerts }}" href="#alarme"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
+  <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="#ausfaelle"><span class="num">{{ recent_outages|length }}</span><span>Ausfälle (24 h)</span></a>
   <a class="card stat" href="{{ url_for('web.reports_view', site=site.id) }}"><span class="num">{{ kpi.reports }}</span><span>Offene Meldungen</span></a>
   <div class="card stat {{ {'gestört': 'bad', 'auffällig': 'warn'}.get(net, '') }}"><span class="num word">{{ net or '–' }}</span><span>Internet (Referenz-Pings)</span></div>
   {% if bw %}{% set p, st = bw %}
@@ -81,6 +83,14 @@
 </div>
 <p class="muted small"><a href="{{ url_for('web.alerts') }}">Alle Alarme und Verlauf</a></p>
 {% else %}<p class="muted">Keine aktiven Alarme an diesem Standort.</p>{% endif %}
+
+<h2 id="ausfaelle">Ausfälle der letzten 24 Stunden</h2>
+{% if recent_outages %}
+<p class="muted">Auch kurze, inzwischen behobene Ausfälle an diesem Standort.
+  {% if recent_outages|length > 10 %}Die neuesten 10 von {{ recent_outages|length }}.{% endif %}
+  <a href="{{ url_for('web.outages_view', range='24h', site=site.id) }}">Alle Ausfälle dieses Standorts</a></p>
+{{ outage_table(recent_outages, outage_causes, show_site=False) }}
+{% else %}<p class="muted">Keine Ausfälle an diesem Standort in den letzten 24 Stunden.</p>{% endif %}
 
 <h2 id="hinweise">Hinweise von PCs</h2>
 {% if client_findings %}

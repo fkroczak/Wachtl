@@ -53,7 +53,8 @@
 {% if states %}
 <p class="muted"><span class="ok-t">{{ state_counts.ok }} ok</span> · <span class="warn-t">{{ state_counts.warn }} auffällig</span> ·
   <span class="down-t">{{ state_counts.down }} gestört</span> · <span class="stale-t">{{ state_counts.stale }} ohne aktuelle Daten</span>
-  {% if state_counts.waiting %} · {{ state_counts.waiting }} warten auf die erste Messung{% endif %}</p>
+  {% if state_counts.waiting %} · {{ state_counts.waiting }} warten auf die erste Messung{% endif %}
+  {%- set n_out = last_outage.values()|map('last')|sum %}{% if n_out %} · <a class="warn-t" href="{{ url_for('web.outages_view', range='24h', site=probe.site_id, all=1) }}">{{ n_out }} {{ 'Ausfall' if n_out == 1 else 'Ausfälle' }} in 24 h</a>{% endif %}</p>
 <table>
   <thead><tr><th>Zustand</th><th>Art</th><th>Check</th><th>Ziel / Gegenstelle</th><th>Ergebnis</th><th>Letztes Ergebnis</th>{% if has_role(user, 'admin') %}<th><span class="sr-only">Aktionen</span></th>{% endif %}</tr></thead>
   <tbody>{% for st in states %}
@@ -62,7 +63,10 @@
       <td>{{ KIND_LABELS[st.kind] }}</td>
       <td><a href="{{ check_url(probe, st.check) }}">{{ st.check.name }}</a></td>
       <td>{{ check_target(st.check) }}</td>
-      <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}</td>
+      <td>{% if st.kind == 'ping' and st.state in ('ok', 'warn') %}{{ st.values.rtt|ms }}, Verlust {{ st.values.loss|pct }}{% else %}{{ st.detail or '–' }}{% endif %}
+        {%- if st.check.id in last_outage %}{% set o, n = last_outage[st.check.id] %}
+        <br><a class="small {{ 'down-t' if o.end is none else 'warn-t' }}" href="{{ url_for('web.target', probe_id=probe.id, check_id=st.check.id, at=o.start) }}" title="{{ o.start|dt }} · {{ o.cause_label }}">{{ 'Ausfall seit' if o.end is none else 'Ausfall' }} {{ o.start|ago }} ({{ o.duration|duration }}){% if n > 1 %} · {{ n }} × in 24 h{% endif %}</a>
+        {%- endif %}</td>
       <td>{{ st.ts|ago if st.ts else '–' }}</td>
       {% if has_role(user, 'admin') %}<td class="nowrap">
         <form method="post" action="{{ url_for('web.probe_check_remove', probe_id=probe.id, check_id=st.check.id) }}" class="inline">

@@ -1,0 +1,18 @@
+{#- Ausfälle der letzten 24 h (Übersicht, Standort). Import: with context -#}
+{% macro outage_table(items, causes, show_site=True, limit=10) -%}
+<div class="scroll">
+<table>
+  <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th>{% if show_site %}<th>Standort</th>{% endif %}<th>Probe</th><th>Ziel</th></tr></thead>
+  <tbody>{% for o in items[:limit] %}
+    <tr class="{{ 'firing' if o.end is none }}">
+      <td class="nowrap" title="{{ o.start|dt }}">{{ o.start|ago }}</td>
+      <td class="nowrap">{{ o.duration|duration }}{% if o.end is none %} <span class="badge critical">aktiv</span>{% endif %}</td>
+      <td><span class="cause cause-{{ o.cause }}" title="{{ causes[o.cause][1] }}">{{ o.cause_label }}</span></td>
+      {% if show_site %}<td>{% if o.site|int %}<a href="{{ url_for('web.site', site_id=o.site|int) }}">{{ o.site_name }}</a>{% else %}{{ o.site_name }}{% endif %}</td>{% endif %}
+      <td>{% if o.probe|int %}<a href="{{ url_for('web.probe', probe_id=o.probe|int) }}">{{ o.probe_name }}</a>{% else %}{{ o.probe_name }}{% endif %}</td>
+      <td>{% if o.cause not in ('probe', 'wan') %}{% if o.probe|int and o.check_id|int %}<a href="{{ url_for('web.target', probe_id=o.probe|int, check_id=o.check_id|int, at=o.start) }}" aria-label="{{ o.target }} von {{ o.probe_name }} zum Zeitpunkt des Ausfalls">{{ o.target }}</a>{% else %}{{ o.target }}{% endif %}{% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+</div>
+{%- endmacro %}
