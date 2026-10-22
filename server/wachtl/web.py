@@ -178,6 +178,16 @@ def _cell_state(v: dict | None) -> str:
     return "ok"
 
 
+RECENT_OUTAGES_S = 86400
+
+
+def _recent_outages(site_id: int | None = None, refine: bool = True) -> list:
+    """Ausfälle der letzten 24 h – auch kurze, längst behobene, die im aktuellen Zustand nicht mehr auffallen."""
+    min_s = settings_service.get()["outage_min_s"]
+    return outages.load(repo.now() - RECENT_OUTAGES_S, str(site_id) if site_id is not None else None, min_s,
+                        refine=refine)
+
+
 def _regen_rules() -> None:
     try:
         alertgen.write_rules()
@@ -294,9 +304,10 @@ def overview():
     since = repo.now() - 7 * 86400
     recent_reports = report_service.search("open", since=since, limit=5)
     client_findings = finding_service.search(since=repo.now() - 86400, limit=20)
+    recent_outages = _recent_outages(refine=live_ok)
     return render_template(
         "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
-        client_findings=client_findings,
+        client_findings=client_findings, recent_outages=recent_outages, outage_causes=outages.CAUSES,
         alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth, voice=voice,
         KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
         recent_reports_total=report_service.count("open", since=since) if recent_reports else 0,
@@ -398,6 +409,7 @@ def site(site_id: int):
     active = [p for p in probes if p["status"] == "active"]
     return render_template(
         "site.html", site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
+        recent_outages=_recent_outages(site_id, refine=live_ok), outage_causes=outages.CAUSES,
         kpi={"active": len(active), "online": sum(repo.probe_online(p) for p in active), "problems": problems,
              "reports": report_service.count("open", site_id=site_id)},
         checks=sorted(all_checks.values(), key=lambda c: (order.get(c["type"], 9), c["id"])),
@@ -453,8 +465,16 @@ def probe(probe_id: int):
     measure = settings_service.get()
     latest_paths, latest_bw = checkstatus.latest_runs([probe_id])
     states = checkstatus.probe_states(p, checks, live, latest_paths, latest_bw)
+    # letzter Ausfall je Check (24 h): ein kurzer Ausfall ist im aktuellen Zustand längst wieder „ok“
+    min_s = settings_service.get()["outage_min_s"]
+    check_outages: dict[int, list] = {}
+    for o in outages.load(repo.now() - RECENT_OUTAGES_S, min_duration=min_s, include_consequences=True,
+                          refine=live_ok):
+        if o.probe == str(probe_id) and o.check_id.isdigit():
+            check_outages.setdefault(int(o.check_id), []).append(o)
+    last_outage = {cid: (max(items, key=lambda o: o.start), len(items)) for cid, items in check_outages.items()}
     return render_template(
-        "probe.html", probe=p, rows=rows, paths=paths, bandwidth=bandwidth, voice=voice, cell_state=_cell_state,
+        "probe.html", last_outage=last_outage, probe=p, rows=rows, paths=paths, bandwidth=bandwidth, voice=voice, cell_state=_cell_state,
         states=states, state_counts=checkstatus.counts(states), KIND_LABELS=checkstatus.KIND_LABELS,
         live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
         default_iperf_port=measure["probe_iperf_port"], default_rtp_port=measure["probe_rtp_port"],

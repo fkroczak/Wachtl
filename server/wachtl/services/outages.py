@@ -154,8 +154,10 @@ def refine_pending(limit: int = REFINE_PER_LOAD) -> int:
     return done
 
 
-def load(since: int, site_id: str | None = None, min_duration: int = 0, include_consequences: bool = False) -> list[Outage]:
-    refine_pending()
+def load(since: int, site_id: str | None = None, min_duration: int = 0, include_consequences: bool = False,
+         refine: bool = True) -> list[Outage]:
+    if refine:
+        refine_pending()
     placeholders = ", ".join("?" for _ in OUTAGE_ALERTS)
     rows = q(
         f"SELECT * FROM alert_events WHERE alertname IN ({placeholders}) AND (ends_at IS NULL OR ends_at >= ?) "
