@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Störung' if is_incident else 'Zeitraum' }} {{ start|dt }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='dash.css') }}">{% endblock %}
+{% from "_timeline.html" import lane_svg, axis_row with context %}
+{% block content %}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview', site=site.id) }}">Übersicht</a> / <a href="{{ url_for('web.incidents_view', site=site.id) }}">Störungen</a> / {{ start|dt }}</nav>
+<h1>{% if is_incident %}Störung am {{ start|dt }}{% else %}Zeitraum {{ start|dt }} – {{ end|dt }}{% endif %}</h1>
+<p class="muted">Standort <a href="{{ url_for('web.site', site_id=site.id) }}">{{ site.name }}</a> ·
+  {% if active %}seit {{ (end - start)|duration }} <span class="badge critical">aktiv</span>{% else %}Dauer {{ (end - start)|duration }} ({{ start|dt }} bis {{ end|dt }}){% endif %}
+  {% if related %} · {{ related|length }} {{ 'Ausfall' if related|length == 1 else 'Ausfälle' }} aus den Alarmen{% endif %}</p>
+<p class="small inc-nav">
+  {% set span = end - start %}
+  <a href="{{ url_for('web.incident', site_id=site.id, start=start - span * 2, end=end + span * 2 if not active else 0) }}">Größeren Zeitraum zeigen</a>
+  {% if analysis %} · <a href="{{ url_for('web.incident_csv', site_id=site.id, start=start, end=0 if active else end) }}" download>Messwerte als CSV</a>{% endif %}
+</p>
+
+{% if error %}<div class="flash error">Die Messdaten sind gerade nicht abrufbar (VictoriaMetrics): {{ error }}</div>{% endif %}
+
+{% if analysis %}
+<h2 id="einordnung">Einordnung</h2>
+<div class="findings">
+  {% for p in analysis.probes %}
+  <div class="card finding-card">
+    <h3 class="card-title"><a href="{{ url_for('web.probe', probe_id=p.probe|int) }}">{{ p.name }}</a></h3>
+    <ul>{% for level, text in p.findings %}<li class="f-{{ level }}"><span class="dot {{ {'bad': 'down', 'warn': 'warn', 'ok': 'ok'}.get(level, 'waiting') }}"></span> {{ text }}</li>{% endfor %}</ul>
+  </div>
+  {% else %}<p class="muted">Für diesen Zeitraum liegen keine Messwerte vor – Rohdaten werden 30 Tage aufbewahrt.</p>{% endfor %}
+</div>
+
+{% if view.lanes %}
+<h2 id="ablauf">Ablauf</h2>
+<div class="legend small" aria-hidden="true">
+  <div class="lg-item"><span class="lg-sw s-ok"></span> Antwort</div>
+  <div class="lg-item"><span class="lg-sw s-loss"></span> teilweise Verlust</div>
+  <div class="lg-item"><span class="lg-sw s-down"></span> keine Antwort</div>
+  <div class="lg-item"><span class="lg-sw s-silent"></span> Router antwortet nie auf Ping</div>
+  <div class="lg-item"><span class="lg-sw tl-core"></span> Störungszeitraum</div>
+  <div class="lg-item"><span class="lg-line"></span> Laufzeit (je Zeile skaliert)</div>
+  <em class="muted">{{ "je Sekunde" if analysis.step == 1 else "je " ~ analysis.step ~ " s" }}</em>
+</div>
+<p class="sr-only">Die Tabelle „Messungen im Störungszeitraum“ unter dem Ablauf enthält dieselben Werte als Text.</p>
+<div class="tl tl-detail">
+  {% set ns = namespace(probe='', path='') %}
+  {% for row in view.lanes %}{% set ln = row.lane %}
+    {% if ln.probe_name != ns.probe %}{% set ns.probe = ln.probe_name %}{% set ns.path = '' %}
+    <div class="tl-group">{{ ln.probe_name }}</div>{% endif %}
+    {% if ln.hop is not none and ln.check_id != ns.path %}{% set ns.path = ln.check_id %}
+    <div class="tl-group tl-sub">Traceroute zu {{ ln.path_target }}</div>{% endif %}
+    <div class="tl-row st-{{ ln.status }}">
+      <div class="tl-label" title="{{ ln.label }} · {{ ln.role_label }}{% if ln.rtt_max %} · Laufzeit bis {{ ln.rtt_max|ms }}{% endif %}{% if ln.status == 'silent' %} · antwortet grundsätzlich nicht auf Ping{% endif %}">
+        {%- if ln.hop is not none %}<a href="{{ url_for('web.hop_view', probe_id=ln.probe|int, check_id=ln.check_id|int, hop=ln.hop) }}">{{ ln.label }}</a>
+        {%- else %}<a href="{{ url_for('web.target', probe_id=ln.probe|int, check_id=ln.check_id|int, at=start) }}">{{ ln.target }}</a>
+          <span class="muted small">{{ ln.role_label }}</span>{% endif %}
+        {%- if ln.status == 'silent' %} <span class="muted small">keine Ping-Antworten</span>{% endif %}</div>
+      {{ lane_svg(runs=row.runs, line=row.line, core=view.core) }}
+    </div>
+  {% endfor %}
+  {{ axis_row(view.ticks) }}
+</div>
+
+<h2 id="messungen">Messungen im Störungszeitraum</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Probe</th><th>Ziel</th><th>Art</th><th>Zustand</th><th>Verlust</th><th>Keine Antwort</th><th>Laufzeit vorher</th><th>Laufzeit währenddessen</th></tr></thead>
+  <tbody>{% for ln in analysis.lanes if ln.status not in ('nodata', 'silent') and (ln.hop is none or ln.status != 'ok') %}
+    <tr>
+      <td><a href="{{ url_for('web.probe', probe_id=ln.probe|int) }}">{{ ln.probe_name }}</a></td>
+      <td>{% if ln.hop is not none %}<a href="{{ url_for('web.hop_view', probe_id=ln.probe|int, check_id=ln.check_id|int, hop=ln.hop) }}">{{ ln.label }}</a>{% else %}<a href="{{ url_for('web.target', probe_id=ln.probe|int, check_id=ln.check_id|int, at=start) }}">{{ ln.target }}</a>{% endif %}</td>
+      <td>{{ ln.role_label }}</td>
+      <td><span class="dot {{ {'down': 'down', 'loss': 'warn', 'ok': 'ok'}[ln.status] }}"></span> {{ {'down': 'ausgefallen', 'loss': 'Verlust', 'ok': 'in Ordnung'}[ln.status] }}{% if ln.status == 'ok' and ln.loss_pct %} <span class="muted small">(einzelne Pakete)</span>{% endif %}</td>
+      <td>{{ ln.loss_pct|pct }}</td>
+      <td class="small">{% for s, e in ln.down if e > start - 60 and s < end + 60 %}{{ (s|dt)[-8:] }}–{{ (e|dt)[-8:] }} ({{ e - s }} s){% if not loop.last %}<br>{% endif %}{% else %}–{% endfor %}</td>
+      <td>{{ ln.rtt_before|ms }}</td>
+      <td>{{ ln.rtt_during|ms }}</td>
+    </tr>
+  {% else %}<tr><td colspan="8" class="muted">Keine Messwerte im Störungszeitraum.</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+<p class="muted small">Hops ohne Auffälligkeiten und Router, die auch sonst nicht auf Ping antworten, stehen nur im Ablauf.</p>
+{% endif %}
+{% endif %}
+
+{% if related %}
+<h2 id="ausfaelle">Ausfälle aus den Alarmen</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th><th>Probe</th><th>Ziel</th></tr></thead>
+  <tbody>{% for o in related|sort(attribute='start') %}
+    <tr class="{{ 'firing' if o.end is none }}">
+      <td class="nowrap">{{ o.start|dt }}</td>
+      <td class="nowrap">{{ o.duration|duration }}{% if o.end is none %} <span class="badge critical">aktiv</span>{% endif %}</td>
+      <td><span class="cause cause-{{ o.cause }}" title="{{ causes[o.cause][1] }}">{{ o.cause_label }}</span></td>
+      <td>{% if o.probe|int %}<a href="{{ url_for('web.probe', probe_id=o.probe|int) }}">{{ o.probe_name }}</a>{% else %}{{ o.probe_name }}{% endif %}</td>
+      <td>{{ o.target or '–' }}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+
+{% if text %}
+<h2 id="provider">Für den Provider</h2>
+<p class="muted">Zusammenfassung zum Kopieren in eine E-Mail oder ein Ticket. Die Messwerte je Sekunde gibt es als <a href="{{ url_for('web.incident_csv', site_id=site.id, start=start, end=0 if active else end) }}" download>CSV-Datei</a>.</p>
+<label for="provider-text" class="sr-only">Zusammenfassung für den Provider</label>
+<textarea id="provider-text" class="provider-text" readonly rows="{{ [text.count('\n') + 2, 24]|min }}">{{ text }}</textarea>
+{% endif %}
+{% endblock %}

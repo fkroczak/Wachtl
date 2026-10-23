@@ -1,0 +1,16 @@
+{#- Zeitleisten-Spuren (Dashboard, Störungsanalyse). SVG-Breite 1000 Einheiten, Höhe 20; Import: with context -#}
+{% macro lane_svg(cells=[], marks=[], now_x=none, runs=[], line='', core=none) -%}
+<svg class="tl-lane" viewBox="0 0 1000 20" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+  {%- if core %}<rect class="tl-core" x="{{ core[0] }}" y="0" width="{{ [core[1] - core[0], 1]|max }}" height="20"/>{% endif %}
+  {%- for x, w, cls in runs %}<rect class="{{ cls }}" x="{{ x }}" y="{{ 0 if cls in ('s-down', 's-loss') else 2 }}" width="{{ w }}" height="{{ 20 if cls in ('s-down', 's-loss') else 16 }}"/>{% endfor %}
+  {%- for c in cells %}<rect class="{{ c.cls }}"{% if c.href %} data-href="{{ c.href }}"{% endif %} x="{{ c.x }}" y="0" width="{{ c.w }}" height="20"><title>{{ c.title }}</title></rect>{% endfor %}
+  {%- if line %}<path class="tl-rtt" d="{{ line }}"/>{% endif %}
+  {%- for m in marks %}<rect class="{{ m.cls }}"{% if m.href %} data-href="{{ m.href }}"{% endif %} x="{{ m.x }}" y="2" width="{{ m.w }}" height="16"><title>{{ m.title }}</title></rect>{% endfor %}
+  {%- if now_x is not none %}<line class="tl-now" x1="{{ now_x }}" x2="{{ now_x }}" y1="0" y2="20"/>{% endif %}
+</svg>
+{%- endmacro %}
+
+{% macro axis_row(labels) -%}
+<div class="tl-row tl-axis-row" aria-hidden="true"><div class="tl-label"></div>
+  <div class="tl-axis cols-{{ labels|length }}">{% for l in labels %}<span>{{ l }}</span>{% endfor %}</div></div>
+{%- endmacro %}

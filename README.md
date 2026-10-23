@@ -42,6 +42,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Client-Hinweise (0.8) | Probe erkennt Kabel getrennt, Link-Geschwindigkeit, Treiberfehler, DHCP/Gateway, Paketfehler – Sprechblase mit Lösung auf dem PC, Anzeige im Web-UI ([docs/CLIENT-HINWEISE.md](docs/CLIENT-HINWEISE.md)) |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
 | Sprache (0.9) | RTP-Sprachtest wie ein Telefonat (G.711/G.729) zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor: MOS, Laufzeit, Jitter und Verlust je Richtung, Alarm bei schlechter Sprachqualität ([docs/MESSUNGEN.md](docs/MESSUNGEN.md#sprache-rtpvoip)) |
+| Störungen (unveröffentlicht) | Startseite ohne Scrollen mit Zeitleiste 24 h / 7 Tage; gleichzeitige Ausfälle als eine Störung; Analyse aller Ziele und Hops sekundengenau mit Einordnung, Text für den Provider und CSV; Rollen Provider-Netz und Rechenzentrum |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).

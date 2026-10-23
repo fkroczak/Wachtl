@@ -88,7 +88,7 @@ class CheckStatusTest(AppTestCase):
         self.make_user()
         self.login()
         with mock.patch("wachtl.services.vm.live_status", return_value={}):
-            html = self.client.get("/").get_data(as_text=True)
+            html = self.client.get("/zustand").get_data(as_text=True)
             self.assertIn("Messungen mit Problemen", html)
             self.assertIn("Zeitlimit erreicht", html)
             self.assertIn("noch kein Traceroute-Ergebnis", html)
@@ -106,7 +106,7 @@ class CheckStatusTest(AppTestCase):
         self.make_user()
         self.login()
         with mock.patch("wachtl.services.vm.live_status", return_value={}):
-            html = self.client.get("/").get_data(as_text=True)
+            html = self.client.get("/zustand").get_data(as_text=True)
         self.assertIn("Kein Heartbeat", html)
         self.assertNotIn("noch kein Traceroute-Ergebnis", html)
 
@@ -223,7 +223,10 @@ class RecentOutageTest(AppTestCase):
         self.login()
         live = {(str(pid), str(cid)): {"up": 1, "rtt": 0.98, "loss": 0.0}}
         with mock.patch("wachtl.services.vm.live_status", return_value=live):
-            html = self.client.get("/").get_data(as_text=True)
+            dash = self.client.get("/").get_data(as_text=True)
+            self.assertIn(f"/stoerungen/1/{now - 600}/{now - 575}", dash)
+            self.assertIn("25 s", dash)
+            html = self.client.get("/zustand").get_data(as_text=True)
             self.assertIn("Ausfälle der letzten 24 Stunden", html)
             self.assertIn("185.87.179.244", html)
             self.assertIn(f"/probes/{pid}/checks/{cid}?at={now - 600}", html)

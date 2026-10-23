@@ -5,6 +5,11 @@
 
 ## Unveröffentlicht
 
+- **Neue Übersicht (Startseite)**: passt am Bildschirm ohne Scrollen auf eine Seite. Oben Kennzahlen (Probleme jetzt, Störungen und Störungsdauer der letzten 24 h, längste Störung, Probes online), darunter eine **Zeitleiste über 24 Stunden oder 7 Tage**: je Bereich (Gateway/LAN, Provider-Netz, Internet, Rechenzentrum, weitere Ziele) rote Marken für Ausfälle – sekundengenau, auch 5 s bleiben sichtbar – und eine Hinterlegung für den höchsten Paketverlust je Minute. Daneben die letzten Störungen und was gerade nicht läuft. Bei mehreren Standorten zeigt die Zeitleiste je Standort eine Zeile; ein Klick auf den Standort öffnet seine Bereiche.
+- **Störungen**: gleichzeitige Ausfälle eines Standorts werden zu **einer Störung** zusammengefasst (neuer Menüpunkt, die bisherige Ansicht je Alarm heißt weiter „Ausfälle“).
+- **Störungsanalyse**: ein Klick auf eine Störung, eine Marke oder einen Verlust in der Zeitleiste zeigt **alle Ziele und alle Hops der Traceroutes** des Standorts sekundengenau nebeneinander (Antwort, Verlust, Laufzeit) und ordnet ein, bis wohin das Netz noch antwortete – z. B. „Gateway und Provider-Gateway erreichbar, Internet nicht – Übergang oder Upstream des Providers prüfen lassen“ oder „ab Hop 4 keine Antwort, Unterbrechung zwischen Hop 2 und Hop 4“. Dazu ein **Text für den Provider** zum Kopieren und die Messwerte als **CSV**.
+- **Neue Rollen für Ping-Ziele**: **Provider-Netz** (Gateway und bekannte Ziele im Netz des Providers) und **Rechenzentrum**. Sie ordnen Ausfälle genauer ein und bekommen in der Zeitleiste eine eigene Zeile.
+- Die bisherige Übersicht mit allen Tabellen steht unter **Zustand**.
 - **Kurze Ausfälle bleiben sichtbar**: Übersicht und Standort zeigen eine Kachel **Ausfälle (24 h)** und den Abschnitt **Ausfälle der letzten 24 Stunden**. Bisher stand dort nur der aktuelle Zustand – ein Ausfall von 20–30 s war nach wenigen Minuten wieder „ok“ und nirgends mehr auf der Startseite zu sehen. Ein Klick aufs Ziel öffnet den Graphen zum Zeitpunkt des Ausfalls.
 - **Probe-Seite**: Unter „Alle Messungen“ steht bei jedem Check mit Ausfall in den letzten 24 h, wann und wie lange.
 

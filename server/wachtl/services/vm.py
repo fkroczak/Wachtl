@@ -279,3 +279,60 @@ def site_sparklines(site_id: int) -> dict[tuple[str, str], dict]:
     for item in instant(f"avg_over_time(wachtl_ping_jitter_ms{{{sel}}}[5m])"):
         entry(item["metric"])["jitter"] = _num(item["value"][1])
     return out
+
+
+def _site_sel(site_id: int) -> str:
+    return f'site="{int(site_id)}"'
+
+
+def loss_lanes(site_id: int | None, start: int, end: int, step: int) -> dict[str, list[tuple[int, float]]]:
+    """Dashboard-Zeitleiste: je Rolle (bzw. je Standort ohne ``site_id``) der höchste Minutenverlust je Schritt.
+
+    Höchstwert statt Mittel, damit auch ein 5-s-Ausfall (≈ 8 % Verlust in seiner Minute) sichtbar bleibt.
+    Ergebnis: Schlüssel → [(Schrittbeginn, Verlust 0..1)]; Rolle bei Standortsicht, sonst Standort-ID.
+    """
+    sel = f"{{{_site_sel(site_id)}}}" if site_id is not None else ""
+    params = {"query": f"max_over_time(wachtl:ping_loss_ratio_1m{sel}[{int(step)}s])",
+              "start": int(start) + int(step), "end": int(end), "step": int(step)}
+    out: dict[str, dict[int, float]] = {}
+    for item in _get(_cfg("VM_AGG_URL"), "/api/v1/query_range", params):
+        key = item["metric"].get("role" if site_id is not None else "site", "")
+        lane = out.setdefault(key, {})
+        for ts, v in item["values"]:
+            val = _num(v)
+            if val is None:
+                continue
+            t = int(float(ts)) - int(step)  # Wert gilt für den Schritt davor
+            lane[t] = max(lane.get(t, 0.0), val)
+    return {k: sorted(v.items()) for k, v in out.items()}
+
+
+def window_series(site_id: int, start: int, end: int, step: int) -> dict[tuple, dict]:
+    """Störungsanalyse: Antwortquote und Laufzeit aller Ziel- und Hop-Pings eines Standorts im Zeitfenster.
+
+    Schlüssel ``(probe, check_id, hop)`` mit hop = "" für Ziel-Pings. Mehrere IPs eines Hops (Lastverteilung)
+    werden zusammengefasst: ein Schritt gilt als beantwortet, wenn irgendeine IP geantwortet hat.
+    Werte: ``up`` und ``rtt`` als {Schrittbeginn: Wert}, dazu die Labels der Reihe.
+    """
+    sel = _site_sel(site_id)
+    w = f"{int(step)}s"
+    out: dict[tuple, dict] = {}
+    for metric, key in (("wachtl_ping_up", "up"), ("wachtl_ping_rtt_ms", "rtt"),
+                        ("wachtl_hop_up", "up"), ("wachtl_hop_rtt_ms", "rtt")):
+        params = {"query": f"avg_over_time({metric}{{{sel}}}[{w}])", "start": int(start) + int(step),
+                  "end": int(end), "step": int(step)}
+        for item in _get(_cfg("VM_RAW_URL"), "/api/v1/query_range", params):
+            m = item["metric"]
+            k = (m.get("probe", ""), m.get("check_id", ""), m.get("hop", ""))
+            entry = out.setdefault(k, {"labels": m, "up": {}, "rtt": {}, "ips": set()})
+            if m.get("hop_ip"):
+                entry["ips"].add(m["hop_ip"])
+            for ts, v in item["values"]:
+                val = _num(v)
+                if val is None:
+                    continue
+                t = int(float(ts)) - int(step)
+                prev = entry[key].get(t)
+                # Hop-IPs: Antwort, wenn eine IP antwortete; Laufzeit der schnellsten
+                entry[key][t] = val if prev is None else (max(prev, val) if key == "up" else min(prev, val))
+    return out

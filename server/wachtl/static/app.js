@@ -8,6 +8,9 @@
   document.addEventListener("click", (ev) => {
     const btn = ev.target.closest("[data-confirm]");
     if (btn && !window.confirm(btn.dataset.confirm)) ev.preventDefault();
+    // Zeitleiste: Marken sind Grafik, die Liste daneben enthält dieselben Links für Tastatur und Screenreader
+    const mark = ev.target.closest("svg [data-href]");
+    if (mark) window.location.href = mark.dataset.href;
   });
 
   // Benutzermenü: schließt bei Klick daneben und mit Escape (Fokus zurück auf den Namen)

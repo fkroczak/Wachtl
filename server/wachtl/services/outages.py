@@ -21,11 +21,12 @@ CAUSES = {
     "probe": ("Probe / Standort offline", "Probe meldet sich nicht – Standort ohne Strom oder Netz, PC aus oder Dienst gestoppt."),
     "gateway": ("Gateway / LAN", "Das Default-Gateway antwortet nicht – Problem im lokalen Netz oder am Router."),
     "wan": ("WAN / Internet", "Gateway erreichbar, aber alle Internet-Referenzen gestört – Internetanschluss oder Provider."),
+    "provider": ("Provider-Netz", "Ein Ziel im Netz des Providers (z. B. dessen Gateway) ist nicht erreichbar."),
     "reference": ("Einzelne Internet-Referenz", "Nur eine Referenz gestört, das Internet insgesamt ist erreichbar."),
     "target": ("Ziel", "Ein überwachtes Ziel ist nicht erreichbar, Gateway und Internet sind in Ordnung."),
     "loss": ("Starker Paketverlust", "Ziel erreichbar, aber mit kritischem Paketverlust."),
 }
-PRIORITY = {"probe": 5, "gateway": 4, "wan": 3, "loss": 2, "reference": 1, "target": 1}
+PRIORITY = {"probe": 5, "gateway": 4, "provider": 3.5, "wan": 3, "loss": 2, "reference": 1, "target": 1}
 OUTAGE_ALERTS = ("WachtlProbeOffline", "WachtlTargetDown", "WachtlWanDown", "WachtlPacketLossCritical")
 
 # Alarme starten und enden versetzt: Auswertung alle 15 s, 30 s Verzögerung für spät hochgeladene Werte und
@@ -49,6 +50,7 @@ class Outage:
     end: int | None
     summary: str
     consequence_of: str | None = None
+    role: str = ""
 
     @property
     def duration(self) -> int:
@@ -67,7 +69,7 @@ def classify(alertname: str, labels: dict) -> str | None:
     if alertname == "WachtlPacketLossCritical":
         return "loss"
     if alertname == "WachtlTargetDown":
-        return {"gateway": "gateway", "reference": "reference"}.get(labels.get("role", ""), "target")
+        return {"gateway": "gateway", "provider": "provider", "reference": "reference"}.get(labels.get("role", ""), "target")
     return None
 
 
@@ -181,6 +183,7 @@ def load(since: int, site_id: str | None = None, min_duration: int = 0, include_
             id=r["id"], cause=cause, probe=labels.get("probe", ""), probe_name=labels.get("probe_name", "?"),
             site=labels.get("site", ""), site_name=labels.get("site_name", "?"), target=labels.get("target", ""),
             check_id=labels.get("check_id", ""), start=start, end=end, summary=r["summary"] or r["alertname"],
+            role=labels.get("role", ""),
         ))
     mark_consequences(items)
     out = [o for o in items

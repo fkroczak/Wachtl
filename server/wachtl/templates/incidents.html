@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Störungen{% endblock %}
+{% block content %}
+<h1>Störungen</h1>
+<p class="muted">Gleichzeitige Ausfälle eines Standorts sind zu einer Störung zusammengefasst – fällt die Leitung 10 s aus,
+  ist das eine Störung, auch wenn fünf Ziele betroffen waren. Ein Klick zeigt alle Ziele und Hops sekundengenau.
+  {% if min_s %}Störungen unter {{ min_s|duration }} werden nicht gezeigt.{% endif %}</p>
+
+<form method="get" class="row">
+  <label>Zeitraum <select name="range">{% for r in ranges %}<option {{ 'selected' if r == range_key }}>{{ r }}</option>{% endfor %}</select></label>
+  {% if sites|length > 1 %}<label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site_id == s.id }}>{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
+  <button>Anzeigen</button>
+</form>
+
+<section class="cards stats" aria-label="Kennzahlen">
+  <div class="card stat {{ 'bad' if summary.active }}"><span class="num">{{ summary.count }}</span><span>Störungen{% if summary.active %}, {{ summary.active }} aktiv{% endif %}</span></div>
+  <div class="card stat"><span class="num">{{ summary.seconds|duration }}</span><span>Dauer gesamt</span></div>
+  <div class="card stat"><span class="num">{{ summary.longest|duration if summary.count else '–' }}</span><span>Längste</span></div>
+</section>
+
+<h2 class="sr-only">Liste</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th>{% if sites|length > 1 %}<th>Standort</th>{% endif %}<th>Probe</th><th>Betroffen</th></tr></thead>
+  <tbody>{% for i in items %}
+    <tr class="{{ 'firing' if i.end is none }}">
+      <td class="nowrap"><a href="{{ url_for('web.incident', site_id=i.site|int, start=i.start, end=i.end_key) }}">{{ i.start|dt }}</a></td>
+      <td class="nowrap">{{ i.duration|duration }}{% if i.end is none %} <span class="badge critical">aktiv</span>{% endif %}</td>
+      <td><span class="cause cause-{{ i.main.cause }}" title="{{ causes[i.main.cause][1] }}">{{ i.cause_label }}</span></td>
+      {% if sites|length > 1 %}<td>{% if i.site|int %}<a href="{{ url_for('web.site', site_id=i.site|int) }}">{{ i.site_name }}</a>{% else %}{{ i.site_name }}{% endif %}</td>{% endif %}
+      <td>{% for pid, name in i.probe_refs %}{% if pid|int %}<a href="{{ url_for('web.probe', probe_id=pid|int) }}">{{ name }}</a>{% else %}{{ name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      <td>{{ i.targets[:6]|join(', ') }}{% if i.targets|length > 6 %} und {{ i.targets|length - 6 }} weitere{% endif %}</td>
+    </tr>
+  {% else %}<tr><td colspan="6" class="muted">Keine Störungen im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+<p class="muted small">Einzelne Alarme je Ziel mit Folgestörungen: <a href="{{ url_for('web.outages_view', range=range_key, site=site_id or '') }}">Ausfälle</a>.</p>
+{% endblock %}

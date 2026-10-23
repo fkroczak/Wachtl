@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Wachtl{% endblock %} · Wachtl</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  {% block head %}{% endblock %}
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='wachtl-icon-180.png') }}">
   <meta name="description" content="Wachtl – Netzwerk-Monitoring für Standorte, Probes und Alarme">
@@ -17,11 +18,12 @@
 <header class="topbar">
   <a class="brand" href="{{ url_for('web.overview') }}"><img src="{{ url_for('static', filename='wachtl-logo-dark.svg') }}" alt="" width="40" height="40">Wachtl</a>
   <nav aria-label="Hauptnavigation">
-    {% set nav = [('web.overview', 'Übersicht'), ('web.alerts', 'Alarme'), ('web.outages_view', 'Ausfälle'),
+    {% set nav = [('web.overview', 'Übersicht'), ('web.incidents_view', 'Störungen'), ('web.zustand', 'Zustand'),
+                  ('web.alerts', 'Alarme'),
                   ('web.reports_view', 'Meldungen')]
                  + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
     {% for endpoint, label in nav %}
-    <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% endif %}>{{ label }}
+    <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% elif endpoint == 'web.incidents_view' and request.endpoint in ('web.incident', 'web.outages_view') %} class="active"{% endif %}>{{ label }}
       {%- if endpoint == 'web.reports_view' and open_reports %} <span class="nav-count" aria-hidden="true">{{ open_reports }}</span><span class="sr-only"> ({{ open_reports }} offen)</span>{% endif %}</a>
     {% endfor %}
   </nav>

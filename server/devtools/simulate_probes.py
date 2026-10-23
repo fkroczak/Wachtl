@@ -14,7 +14,10 @@ import requests
 
 BASE, TOKEN = sys.argv[1].rstrip("/"), sys.argv[2]
 HOURS = float(sys.argv[3]) if len(sys.argv) > 3 else 2
-PROFILE = {"gateway": (0.4, 0.15, 0.0), "8.8.8.8": (12.0, 1.5, 0.004), "1.1.1.1": (9.5, 1.2, 0.002)}
+PROFILE = {"gateway": (0.4, 0.15, 0.0), "8.8.8.8": (12.0, 1.5, 0.004), "1.1.1.1": (9.5, 1.2, 0.002),
+           "100.64.0.1": (3.1, 0.4, 0.0)}
+# Demo-Störung wie beim Kunden: 14 s lang antwortet nichts hinter dem Provider-Gateway (seed_demo.OUTAGE_AGO)
+OUTAGE_AGO, OUTAGE_S = 1500, 14
 
 
 def enroll(hostname: str) -> str:
@@ -38,6 +41,8 @@ def run(hostname: str, extra_loss: float) -> None:
         for i, t in enumerate(range(now - int(HOURS * 3600), now, c["interval_s"])):
             spike = 40 if (t // 600) % 9 == 0 and c["role"] != "gateway" else 0  # alle 90 min Lastspitze
             lost = random.random() < loss + (extra_loss if c["role"] != "gateway" and spike else 0)
+            if c["role"] not in ("gateway", "provider") and now - OUTAGE_AGO <= t < now - OUTAGE_AGO + OUTAGE_S:
+                lost = True
             ts = t * 1000
             lines.append(f'wachtl_ping_up{{check_id="{c["id"]}"}} {0 if lost else 1} {ts}')
             if not lost:

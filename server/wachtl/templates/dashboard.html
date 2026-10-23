@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Übersicht{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='dash.css') }}">{% endblock %}
+{% from "_timeline.html" import lane_svg, axis_row with context %}
+{% block content %}
+<div data-autorefresh="60" hidden></div>
+<div class="dash">
+  <div class="dash-head">
+    <h1>Übersicht{% if site_id and sites|length > 1 %} <span class="muted">· {% for s in sites if s.id == site_id %}<a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a>{% endfor %}</span>{% endif %}</h1>
+    <nav class="dash-ranges" aria-label="Zeitraum">
+      {% for r in ranges %}<a class="button{{ ' active' if r == range_key }}" href="{{ url_for('web.overview', range=r, site=site_id) }}"{% if r == range_key %} aria-current="true"{% endif %}>{{ '24 Stunden' if r == '24h' else '7 Tage' }}</a>{% endfor %}
+      {% if sites|length > 1 %}<a class="button" href="{{ url_for('web.overview', range=range_key) }}"{% if not site_id %} aria-current="true"{% endif %}>Alle Standorte</a>{% endif %}
+    </nav>
+  </div>
+  {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Störungen aus den Alarmen werden trotzdem angezeigt.</div>{% endif %}
+
+  <section class="dash-kpis" aria-label="Kennzahlen">
+    {% set now_bad = offline or problems|selectattr('1.state', 'equalto', 'down')|list %}
+    <a class="card stat {{ 'bad' if now_bad else 'warn' if problems else 'good' }}" href="{{ url_for('web.zustand') }}">
+      <span class="num">{% if now_bad or problems %}{{ problems|length + offline|length }}{% else %}OK{% endif %}</span>
+      <span>{% if now_bad or problems %}Probleme jetzt{% else %}Alles in Ordnung{% endif %}</span></a>
+    <a class="card stat {{ 'bad' if inc_summary.active else 'warn' if inc_summary.count else 'good' }}" href="{{ url_for('web.incidents_view', range='24h', site=site_id) }}">
+      <span class="num">{{ inc_summary.count }}</span><span>Störungen (24 h){% if inc_summary.active %}, {{ inc_summary.active }} aktiv{% endif %}</span></a>
+    <div class="card stat"><span class="num">{{ inc_summary.seconds|duration }}</span><span>Störungsdauer (24 h)</span></div>
+    <div class="card stat"><span class="num">{{ inc_summary.longest|duration if inc_summary.count else '–' }}</span><span>Längste Störung (24 h)</span></div>
+    <a class="card stat {{ 'bad' if offline }}" href="{{ url_for('web.zustand') }}"><span class="num">{{ online|length }}/{{ active|length }}</span><span>Probes online</span></a>
+  </section>
+
+  <section class="card dash-timeline" aria-labelledby="tl-h">
+    <div class="tl-head">
+      <h2 id="tl-h">Verlauf {{ '24 Stunden' if range_key == '24h' else '7 Tage' }}</h2>
+      <div class="legend small" aria-hidden="true">
+        <div class="lg-item"><span class="lg-sw m-down"></span> Ausfall (sekundengenau)</div>
+        <div class="lg-item"><span class="lg-sw h1"></span><span class="lg-sw h2"></span><span class="lg-sw h3"></span> Paketverlust je Minute</div>
+      </div>
+    </div>
+    <p class="sr-only">Zeitleiste: {{ incidents|length }} Störungen im Zeitraum. Die Liste „Letzte Störungen“ enthält dieselben Störungen als Links.</p>
+    <div class="tl">
+      {% for lane in timeline.lanes %}
+      <div class="tl-row{{ ' tl-top' if loop.first }}">
+        <div class="tl-label">{% if lane.href %}<a href="{{ lane.href }}">{{ lane.label }}</a>{% else %}{{ lane.label }}{% endif %}
+          {%- if lane.marks %} <span class="tl-count" title="{{ lane.marks|length }} Ausfälle">{{ lane.marks|length }}</span>{% endif %}</div>
+        {{ lane_svg(lane.cells, lane.marks, timeline.now_x) }}
+      </div>
+      {% endfor %}
+      {{ axis_row(timeline.ticks|map(attribute='label')|list) }}
+    </div>
+    <p class="muted small tl-hint">Klick auf eine Marke oder einen Verlust zeigt alle Ziele in diesem Zeitraum sekundengenau.</p>
+  </section>
+
+  <section class="card dash-list" aria-labelledby="inc-h">
+    <h2 id="inc-h">Letzte Störungen</h2>
+    {% if incidents %}
+    <ol class="inc-list">
+      {% for i in incidents[:6] %}
+      <li><a href="{{ url_for('web.incident', site_id=i.site|int, start=i.start, end=i.end_key) }}">
+        <span class="inc-when">{{ i.start|dt }}</span>
+        <span class="inc-dur{{ ' active' if i.end is none }}">{{ i.duration|duration }}{% if i.end is none %} · aktiv{% endif %}</span>
+        <span class="cause cause-{{ i.main.cause }}">{{ i.cause_label }}</span>
+        <span class="inc-what">{{ i.targets[:4]|join(', ') }}{% if i.targets|length > 4 %} +{{ i.targets|length - 4 }}{% endif %}
+          <span class="muted"> · {{ i.probes|join(', ') }}{% if not site_id %} · {{ i.site_name }}{% endif %}</span></span>
+      </a></li>
+      {% endfor %}
+    </ol>
+    <p class="small"><a href="{{ url_for('web.incidents_view', range='7d' if range_key == '24h' else '30d', site=site_id) }}">Alle Störungen{% if incidents|length > 6 %} ({{ incidents|length }} im Zeitraum){% endif %}</a></p>
+    {% else %}<p class="muted">Keine Störungen im Zeitraum. Auch Ausfälle von wenigen Sekunden erscheinen hier, wenn sie längst vorbei sind.</p>{% endif %}
+  </section>
+
+  <section class="card dash-now" aria-labelledby="now-h">
+    <h2 id="now-h">Jetzt</h2>
+    {% if offline or problems %}
+    <ul class="now-list">
+      {% for p in offline[:3] %}<li><span class="dot down"></span> <a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> offline <span class="muted small">{{ p.last_seen|ago }}</span></li>{% endfor %}
+      {% for p, st in problems[:5 - offline[:3]|length] %}<li><span class="dot {{ st.state }}"></span> <a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ p.hostname }} · {{ st.detail or st.label }}</span></li>{% endfor %}
+    </ul>
+    {% else %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>{% endif %}
+    <p class="small now-more">
+      {% if alerts %}<a href="{{ url_for('web.alerts') }}">{{ alerts }} aktive Alarme</a> · {% endif %}
+      {% if findings %}<a href="{{ url_for('web.zustand') }}#hinweise">{{ findings }} Hinweise von PCs</a> · {% endif %}
+      <a href="{{ url_for('web.zustand') }}">Zustand aller Messungen</a></p>
+  </section>
+</div>
+{% endblock %}

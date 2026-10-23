@@ -13,6 +13,10 @@ const PASSWORD = process.env.WACHTL_E2E_PASSWORD || "e2e-admin-passwort";
 // [Name, Pfad] – Navigation, Dashboards, Detailseiten, Formulare
 const PAGES = [
   ["Übersicht", "/"],
+  ["Übersicht 7 Tage", "/?range=7d"],
+  ["Zustand", "/zustand"],
+  ["Störungen", "/stoerungen"],
+  ["Störung (Analyse)", ids.incident ? `/stoerungen/${ids.site}/${ids.incident[0]}/${ids.incident[1]}` : "/stoerungen"],
   ["Standort", `/sites/${ids.site}`],
   ["Probe", `/probes/${ids.probe}`],
   ["Ziel (Graph)", `/probes/${ids.probe}/checks/${ids.ping_check}`],

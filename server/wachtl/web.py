@@ -22,7 +22,7 @@ from . import findings as finding_service
 from . import reports as report_service
 from .services import alertgen
 from .services import alerts as alert_service
-from .services import checkstatus, notify, outages, pathanalysis, vm
+from .services import checkstatus, incidents, notify, outages, pathanalysis, vm
 from .services import settings as settings_service
 
 log = logging.getLogger(__name__)
@@ -272,6 +272,106 @@ def design():
 @bp.get("/")
 @login_required()
 def overview():
+    """Startseite ohne Scrollen: Zeitleiste der Störungen (24 h / 7 Tage), letzte Störungen, Zustand jetzt."""
+    sites = q("SELECT * FROM sites ORDER BY name")
+    site_ids = {s["id"] for s in sites}
+    site_id = _int_param("site")
+    site_id = site_id if site_id in site_ids else (sites[0]["id"] if len(sites) == 1 else None)
+    range_key = request.args.get("range", "24h")
+    range_key = range_key if range_key in incidents.DASH_RANGES else "24h"
+    start, end, tick, step = incidents.dash_window(range_key)
+    probes = q("SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY p.hostname")
+    live, live_ok = _live()
+    active = [p for p in probes if p["status"] == "active" and (site_id is None or p["site_id"] == site_id)]
+    states = checkstatus.overview(active, live)
+    online = [p for p in active if repo.probe_online(p)]
+    problems = [(p, st) for p in online for st in states[p["id"]] if st.problem]
+    problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
+    incs = incidents.load(start, site_id, refine=live_ok)
+    day = [i for i in incs if (i.end or repo.now()) >= repo.now() - 86400]
+    try:
+        heat = vm.loss_lanes(site_id, start, min(end, repo.now() + step), step) if live_ok else {}
+    except vm.VMError as exc:
+        log.warning("Zeitleiste ohne Verlustdaten: %s", exc)
+        heat = {}
+    timeline = _dash_timeline(incs, heat, sites, site_id, start, end, tick, step)
+    return render_template(
+        "dashboard.html", sites=sites, site_id=site_id, range_key=range_key, ranges=list(incidents.DASH_RANGES),
+        timeline=timeline, incidents=incs, inc_summary=incidents.summary(day), live_ok=live_ok,
+        problems=problems, offline=[p for p in active if p not in online], active=active, online=online,
+        alerts=q("SELECT COUNT(*) AS n FROM alert_events WHERE status = 'firing'")[0]["n"],
+        findings=len(finding_service.search(since=repo.now() - 86400, limit=100, site_id=site_id)),
+        KIND_LABELS=checkstatus.KIND_LABELS,
+    )
+
+
+def _dash_timeline(incs: list, heat: dict, sites: list, site_id: int | None, start: int, end: int, tick: int,
+                   step: int) -> dict:
+    """Spuren der Zeitleiste: oben alle Störungen, darunter je Rolle (ein Standort) bzw. je Standort (alle).
+
+    Hinterlegung = höchster Minutenverlust je Schritt, rote Marken = Ausfälle sekundengenau. Jede Marke und
+    jede Hinterlegung führt zur Analyse genau dieses Zeitraums.
+    """
+    thr = repo.graph_thresholds()
+    x = lambda t: incidents.x_of(t, start, end)  # noqa: E731
+    names = {str(s["id"]): s["name"] for s in sites}
+    lanes: dict[str, dict] = {}
+
+    def lane(key: str, label: str, href: str | None = None) -> dict:
+        return lanes.setdefault(key, {"key": key, "label": label, "href": href, "cells": [], "marks": []})
+
+    def mark(o_start: int, o_end: int | None, site: str, title: str, cls: str = "m-down") -> dict:
+        e = o_end or repo.now()
+        return {"x": x(o_start), "w": max(x(e) - x(o_start), 3.0), "cls": cls, "title": title,
+                "href": url_for("web.incident", site_id=int(site), start=o_start, end=o_end or 0)
+                if site.isdigit() else None}
+
+    top = lane("_all", "Alle Störungen")
+    if site_id is not None:
+        roles = set(heat) | {incidents.lane_of(o) for i in incs for o in i.items}
+        roles |= {c["role"] for c in q("SELECT role FROM checks WHERE enabled = TRUE AND type = 'ping'")}
+        for key in ("probe", *incidents.LAYERS):
+            if key in roles or key == "probe":
+                lane(key, incidents.LANE_LABELS[key])
+    else:
+        for s in sites:
+            lane(str(s["id"]), s["name"], url_for("web.overview", site=s["id"]))
+    for i in incs:
+        dur = fmt_duration(i.duration)
+        top["marks"].append(mark(i.start, i.end, i.site,
+                                 f"{fmt_dt(i.start)} · {dur} · {i.cause_label} · {', '.join(i.targets[:4])}",
+                                 "m-down" if i.duration >= 5 else "m-short"))
+        for o in i.items:
+            key = incidents.lane_of(o) if site_id is not None else o.site
+            if key in lanes:
+                lanes[key]["marks"].append(mark(o.start, o.end, o.site,
+                                                f"{fmt_dt(o.start)} · {fmt_duration(o.duration)} · {o.target or o.cause_label}"))
+    for key, cells in heat.items():
+        if key not in lanes:
+            continue
+        site = str(site_id) if site_id is not None else key
+        for t, loss in cells:
+            cls = incidents.heat_class(loss, thr)
+            if cls and t < end:
+                lanes[key]["cells"].append({
+                    "x": x(t), "w": max(x(t + step) - x(t), 1.0), "cls": cls,
+                    "title": f"{fmt_dt(t)[:-3]} – höchster Verlust je Minute {loss * 100:.1f} %",
+                    "href": url_for("web.incident", site_id=int(site), start=t, end=t + step) if site.isdigit() else None,
+                })
+    now_x = x(repo.now()) if repo.now() < end else None
+    ticks = [{"t": t, "label": datetime.fromtimestamp(t).strftime("%a %d.%m." if tick >= 86400 else "%H:%M")}
+             for t in range(start, end, tick)]
+    if tick >= 86400:
+        days = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+        for tk in ticks:
+            tk["label"] = days[datetime.fromtimestamp(tk["t"]).weekday()] + tk["label"][3:]
+    return {"lanes": list(lanes.values()), "ticks": ticks, "now_x": now_x, "start": start, "end": end}
+
+
+@bp.get("/zustand")
+@login_required()
+def zustand():
+    """Ausführlicher Zustand jetzt: alle Messungen mit Problemen, Alarme, Standorte, Probes, Bandbreite, Sprache."""
     sites = q("SELECT * FROM sites ORDER BY name")
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"
@@ -306,7 +406,7 @@ def overview():
     client_findings = finding_service.search(since=repo.now() - 86400, limit=20)
     recent_outages = _recent_outages(refine=live_ok)
     return render_template(
-        "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
+        "status.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
         client_findings=client_findings, recent_outages=recent_outages, outage_causes=outages.CAUSES,
         alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth, voice=voice,
         KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
@@ -700,6 +800,91 @@ def outages_view():
     )
 
 
+@bp.get("/stoerungen")
+@login_required()
+def incidents_view():
+    """Alle Störungen: gleichzeitige Ausfälle eines Standorts zu einer Störung gebündelt."""
+    range_key = request.args.get("range", "7d")
+    if range_key not in OUTAGE_RANGES:
+        range_key = "7d"
+    sites = q("SELECT * FROM sites ORDER BY name")
+    site_id = _int_param("site")
+    site_id = site_id if site_id in {s["id"] for s in sites} else None
+    items = incidents.load(repo.now() - OUTAGE_RANGES[range_key], site_id)
+    return render_template("incidents.html", items=items, summary=incidents.summary(items), sites=sites,
+                           site_id=site_id, range_key=range_key, ranges=list(OUTAGE_RANGES),
+                           min_s=settings_service.get()["outage_min_s"], causes=outages.CAUSES)
+
+
+def _incident_window(site_id: int, start: int, end: int) -> tuple[dict, int, int, list]:
+    s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
+    now = repo.now()
+    end = end or now   # 0 = Störung läuft noch
+    if not (now - 400 * 86400 <= start < end <= now + 300) or end - start > incidents.MAX_WINDOW_S:
+        abort(404)
+    # Ausfälle (Alarme), die das Fenster berühren – Grundlage für Titel und Liste
+    related = [o for o in outages.load(start - 7 * 86400, str(site_id), 0, include_consequences=True, refine=False)
+               if o.start <= end and (o.end or now) >= start]
+    return s, start, end, related
+
+
+@bp.get("/stoerungen/<int:site_id>/<int:start>/<int:end>")
+@login_required()
+def incident(site_id: int, start: int, end: int):
+    """Analyse eines Zeitraums: alle Ziele und Hops des Standorts sekundengenau, Einordnung, Text für den Provider."""
+    s, start, end, related = _incident_window(site_id, start, end)
+    try:
+        analysis = incidents.analyze(site_id, start, end)
+        error = None
+    except vm.VMError as exc:
+        log.warning("Störungsanalyse nicht möglich: %s", exc)
+        analysis, error = None, str(exc)
+    view = None
+    if analysis:
+        a0, a1 = analysis["start"], analysis["end"]
+        view = {
+            "lanes": [{"lane": ln, "runs": incidents.lane_runs(ln, a0, a1), "line": incidents.lane_line(ln, a0, a1)}
+                      for ln in analysis["lanes"]],
+            "core": (incidents.x_of(start, a0, a1), incidents.x_of(end, a0, a1)),
+            "ticks": [datetime.fromtimestamp(t).strftime("%H:%M:%S" if analysis["tick"] < 60 else "%H:%M")
+                      for t in incidents.axis(a0, a1, analysis["tick"])],
+        }
+    is_incident = bool(related)
+    return render_template(
+        "incident.html", site=s, start=start, end=end, related=related, analysis=analysis, view=view,
+        error=error, is_incident=is_incident, active=request.view_args["end"] == 0,
+        text=incidents.provider_text(s["name"], start, end, analysis, fmt_dt, fmt_duration) if analysis else "",
+        causes=outages.CAUSES,
+    )
+
+
+@bp.get("/stoerungen/<int:site_id>/<int:start>/<int:end>/daten.csv")
+@login_required()
+def incident_csv(site_id: int, start: int, end: int):
+    """Messwerte des Analysefensters je Schritt als CSV (zum Weitergeben an den Provider)."""
+    import csv
+    import io
+
+    s, start, end, _ = _incident_window(site_id, start, end)
+    try:
+        analysis = incidents.analyze(site_id, start, end)
+    except vm.VMError:
+        abort(503)
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";")
+    w.writerow(["Zeit", "Probe", "Ziel", "Rolle", "Hop", "Hop-IP", "Antwort (0..1)", "Laufzeit ms"])
+    for ln in analysis["lanes"]:
+        for t in sorted(set(ln.up) | set(ln.rtt)):
+            up, rtt = ln.up.get(t), ln.rtt.get(t)
+            w.writerow([fmt_dt(t), ln.probe_name, ln.path_target if ln.hop else ln.target, ln.role_label,
+                        ln.hop or "", ln.hop_ip, "" if up is None else f"{up:g}".replace(".", ","),
+                        "" if rtt is None else f"{rtt:g}".replace(".", ",")])
+    name = f"wachtl-stoerung-{s['name']}-{datetime.fromtimestamp(start).strftime('%Y%m%d-%H%M%S')}.csv"
+    safe = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in name)
+    return current_app.response_class("\ufeff" + buf.getvalue(), mimetype="text/csv",
+                                      headers={"Content-Disposition": f'attachment; filename="{safe}"'})
+
+
 # -- Störungsmeldungen --------------------------------------------------------
 REPORTS_PER_PAGE = 50
 REPORT_FILTERS = {"open": "offen", "done": "erledigt", "all": "alle"}
@@ -718,7 +903,7 @@ def report_graph_url(r: dict) -> str | None:
     if r["probe_id"] not in cache:
         probe = q1("SELECT * FROM probes WHERE id = ?", (r["probe_id"],))
         pings = [c for c in repo.checks_for_probe(probe) if c["type"] == "ping"] if probe else []
-        order = {"reference": 0, "gateway": 1, "target": 2}
+        order = {"reference": 0, "gateway": 1, "provider": 2, "datacenter": 3, "target": 4}
         pings.sort(key=lambda c: (order.get(c["role"], 9), c["id"]))
         cache[r["probe_id"]] = pings[0]["id"] if pings else None
     check_id = cache[r["probe_id"]]

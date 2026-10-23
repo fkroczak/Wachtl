@@ -200,14 +200,23 @@ class PageSemanticsTest(AppTestCase):
         self.client.post("/meldungen/2/status", data={"csrf_token": self.session_csrf(), "action": "done",
                                                         "note": "Router neu gestartet"})
         live = {(str(pid), "1"): {"up": 1, "rtt": 0.4, "loss": 0}, (str(pid), "2"): {"up": 0, "rtt": None, "loss": 100}}
-        for target, value in (("wachtl.services.vm.live_status", live), ("wachtl.services.vm.hop_table", {})):
+        from tests.test_incidents import series
+        w0 = now - 700
+        raw = dict([series(w0, now - 400, target="192.168.1.1", role="gateway", check_id="1"),
+                    series(w0, now - 400, down=[(now - 600, now - 590)], target="8.8.8.8", check_id="2"),
+                    series(w0, now - 400, down=[(now - 600, now - 590)], target="8.8.8.8", check_id="3", hop="02")])
+        for target, value in (("wachtl.services.vm.live_status", live), ("wachtl.services.vm.hop_table", {}),
+                              ("wachtl.services.vm.window_series", raw),
+                              ("wachtl.services.vm.loss_lanes", {"target": [(now - 900, 0.05)]})):
             p = mock.patch(target, return_value=value)
             p.start()
             self.addCleanup(p.stop)
 
     def pages(self):
         pid = self.probe["probe_id"]
-        return ["/", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
+        now = repo.now()
+        return ["/", "/?range=7d", "/zustand", "/stoerungen", f"/stoerungen/1/{now - 600}/{now - 590}",
+                f"/stoerungen/1/{now - 600}/0", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
                 "/admin", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
                 f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]

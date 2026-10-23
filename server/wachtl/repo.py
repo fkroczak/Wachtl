@@ -10,7 +10,9 @@ from pathlib import Path
 
 from .db import ex, ins, q, q1
 
-CHECK_ROLES = {"gateway": "Gateway", "reference": "Referenz (Internet)", "target": "Ziel"}
+# Reihenfolge = Weg vom Standort nach außen; Dashboard und Störungsanalyse ordnen danach ein
+CHECK_ROLES = {"gateway": "Gateway", "provider": "Provider-Netz", "reference": "Referenz (Internet)",
+               "datacenter": "Rechenzentrum", "target": "Ziel"}
 ALLOWED_INTERVALS = (1, 2, 5, 10, 15, 30, 60, 120, 300)
 HOSTNAME_RE = re.compile(r"^(?=.{1,253}$)([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$")
 PROBE_HOST_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$")

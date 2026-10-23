@@ -128,7 +128,7 @@ class ClientFindingApiTest(AppTestCase):
                                          solution="Kabel und Switch-Port prüfen."))
         self.make_user()
         self.login()
-        for url in ("/", f"/probes/{self.pid}", "/sites/1"):
+        for url in ("/zustand", f"/probes/{self.pid}", "/sites/1"):
             html = self.client.get(url).get_data(as_text=True)
             self.assertIn("Netzwerkkabel getrennt", html, url)
             self.assertIn("auf 100 Mbit/s gesunken", html, url)

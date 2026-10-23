@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Übersicht{% endblock %}
+{% block title %}Zustand{% endblock %}
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links, check_target, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% from "_outages.html" import outage_table with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<h1>Übersicht</h1>
+<h1>Zustand jetzt</h1>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
 
 <section class="cards stats" aria-label="Kennzahlen">

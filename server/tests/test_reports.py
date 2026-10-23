@@ -240,7 +240,7 @@ class ReportPagesTest(AppTestCase):
         # Navigation zeigt die offenen Meldungen barrierefrei
         self.assertRegex(html, r'aria-current="page">Meldungen <span class="nav-count" aria-hidden="true">1</span>'
                                r'<span class="sr-only"> \(1 offen\)</span>')
-        for url in ("/", f"/probes/{self.pid}", "/sites/1"):
+        for url in ("/zustand", f"/probes/{self.pid}", "/sites/1"):
             page = self.client.get(url).get_data(as_text=True)
             self.assertIn("WLAN bricht ab", page, url)
         target = self.client.get(f"/probes/{self.pid}/checks/2?at={self.now - 300}").get_data(as_text=True)
@@ -338,7 +338,7 @@ class ReportPagesTest(AppTestCase):
         ex("DELETE FROM incident_reports")
         self.make_user()
         self.login()
-        html = self.client.get("/").get_data(as_text=True)
+        html = self.client.get("/zustand").get_data(as_text=True)
         self.assertIn("Keine offenen Meldungen", html)
         self.assertNotIn('class="nav-count"', html)
         target = self.client.get(f"/probes/{self.pid}/checks/2").get_data(as_text=True)

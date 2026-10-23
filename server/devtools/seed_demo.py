@@ -40,6 +40,9 @@ def main(base: str) -> dict:
         ins("INSERT INTO enrollment_tokens (site_id, token_hash, expires_at, max_uses, uses, revoked, created_at) "
             "VALUES (?, ?, ?, 5, 0, FALSE, ?)", (site, hash_token(TOKEN), now + 86400, now))
 
+    with app.app_context():
+        repo.create_check("Provider-Gateway", "100.64.0.1", "provider", 1, 1000, "all", None)
+
     # Ping-Daten über die echte Probe-API (Enrollment, Config, Ingest, Heartbeat)
     subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "simulate_probes.py"), base, TOKEN, "1"],
                    check=True)
@@ -102,6 +105,32 @@ def main(base: str) -> dict:
              "labels": {"alertname": "WachtlProbeOffline", "severity": "critical", **who(1)},
              "annotations": {"summary": "Probe PC-EMPFANG offline"}},
         ]})
+        # Kurze Störung hinter dem Provider (Daten: simulate_probes.OUTAGE_AGO): Alarme wie von vmalert, schon
+        # sekundengenau nachgerechnet, dazu Hop-Pings des Pfad-Checks während der Störung
+        o_start, o_end = now - 1500, now - 1486
+        for probe_id in (1, 2):
+            refs = [("demo-wan", "WachtlWanDown", {"cause": "wan"}, "Alle Internet-Referenzen gestört")]
+            refs += [(f"demo-{t}", "WachtlTargetDown", {"check_id": str(cid), "target": t, "role": "reference"},
+                      f"{t} nicht erreichbar") for cid, t in ((2, "8.8.8.8"), (3, "1.1.1.1"))]
+            alerts.store_webhook({"alerts": [
+                {"status": "resolved", "fingerprint": f"{fp}-{probe_id}", "startsAt": iso(o_start + 12),
+                 "endsAt": iso(o_end + 20), "labels": {"alertname": name, "severity": "critical", **who(probe_id), **lb},
+                 "annotations": {"summary": text}} for fp, name, lb, text in refs]})
+        from wachtl.db import ex
+        ex("UPDATE alert_events SET exact_start = ?, exact_end = ?, refined_at = ? WHERE fingerprint LIKE 'demo-%-%'",
+           (o_start, o_end, now))
+        from wachtl.services import vm
+        lines = []
+        for t in range(now - 3600, now):
+            for hop, ip, rtt in ((1, "192.168.1.1", 0.5), (2, "100.64.0.1", 3.2), (3, "80.81.192.1", 0),
+                                 (4, "1.1.1.1", 9.6)):
+                answered = hop != 3 and not (hop >= 3 and o_start <= t < o_end)
+                lb = (f'probe="1",probe_name="PC-EMPFANG",site="{site}",site_name="Zentrale München",'
+                      f'check_id="{path}",target="1.1.1.1",role="target",hop="{hop:02d}",hop_ip="{ip}"')
+                lines.append(f"wachtl_hop_up{{{lb}}} {int(answered)} {t * 1000}")
+                if answered:
+                    lines.append(f"wachtl_hop_rtt_ms{{{lb}}} {rtt + random.random() * 0.4:.2f} {t * 1000}")
+        vm.import_lines(lines)
         # Störungsmeldungen über dieselbe Prüfung wie die Probe-API (Tray-Symbol → Dienst → Server)
         probes = {1: {"id": 1, "site_id": site, "hostname": "PC-EMPFANG"},
                   2: {"id": 2, "site_id": site, "hostname": "SRV-DC01"}}
@@ -133,7 +162,8 @@ def main(base: str) -> dict:
                 "message": msg, "solution": sol, "detected_at": now - ago,
                 "resolved_at": now - ago + dur if state == "resolved" else None}))
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
-    return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice}
+    return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice,
+            "incident": [o_start, o_end]}
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ den Server selbst entfällt.
 | Einstellung | Standard | Bedeutung |
 |---|---|---|
 | Ziel | – | IP-Adresse, Hostname oder `gateway` (das Default-Gateway ermittelt jede Probe selbst) |
-| Rolle | Ziel | **Gateway** und **Referenz (Internet)** steuern die Ursachenerkennung: Gateway weg = LAN-Problem, alle Referenzen weg = WAN-Problem |
+| Rolle | Ziel | **Gateway** und **Referenz (Internet)** steuern die Ursachenerkennung: Gateway weg = LAN-Problem, alle Referenzen weg = WAN-Problem. **Provider-Netz** für das Gateway und bekannte Ziele beim Provider, **Rechenzentrum** für eigene Server dort: die Störungsanalyse zeigt dann, bis wohin das Netz während einer Störung antwortete |
 | Intervall | 1 s | 1, 2, 5, 10, 15, 30, 60, 120 oder 300 s |
 | Timeout | 1000 ms | höchstens das Intervall |
 | Paketgröße | 32 Byte | Nutzdaten je ICMP-Paket |
