@@ -221,15 +221,21 @@ def _evaluate(lane: Lane, core_start: int, core_end: int, window_start: int, ste
         lane.status = "ok"
 
 
-def analyze(site_id: int, core_start: int, core_end: int) -> dict:
-    """Alle Messreihen des Standorts im Fenster um [core_start, core_end] auswerten und einordnen."""
-    w_start, w_end, tick = nice_window(core_start, core_end)
+def analyze(site_id: int, core_start: int, core_end: int, window: tuple[int, int, int] | None = None,
+            hops: bool = True) -> dict:
+    """Alle Messreihen des Standorts im Fenster um [core_start, core_end] auswerten und einordnen.
+
+    ``window`` = (von, bis, Teilung) legt das Fenster fest (Tagesansicht), sonst mit Rand um den Kern.
+    """
+    w_start, w_end, tick = window or nice_window(core_start, core_end)
     w_end = min(w_end, max(repo.now(), core_end))
     step = step_for(w_end - w_start)
     raw = vm.window_series(site_id, w_start, w_end, step)
     checks = {str(c["id"]): c for c in q("SELECT id, name, target, type FROM checks")}
     lanes: list[Lane] = []
     for (probe, check_id, hop), entry in raw.items():
+        if hop and not hops:
+            continue
         lb = entry["labels"]
         c = checks.get(check_id, {})
         lane = Lane(probe=probe, probe_name=lb.get("probe_name", probe), check_id=check_id,
@@ -371,8 +377,10 @@ def x_of(t: int, start: int, end: int) -> float:
 def lane_runs(lane: Lane, start: int, end: int) -> list[tuple[float, float, str]]:
     """Zusammenhängende Abschnitte gleichen Zustands als (x, Breite, Klasse) für die SVG-Spur."""
     runs: list[list] = []
+    # grobe Schritte (Tagesansicht): einzelne verlorene Pakete im Schritt nicht als Verlust färben
+    ok_min = 1.0 if lane.sample_s <= 1 else 0.97
     for t, v in sorted(lane.up.items()):
-        cls = "s-ok" if v >= 1 else "s-silent" if lane.status == "silent" else "s-down" if v <= 0 else "s-loss"
+        cls = "s-ok" if v >= ok_min else "s-silent" if lane.status == "silent" else "s-down" if v <= 0 else "s-loss"
         t_end = t + lane.sample_s
         if runs and runs[-1][2] == cls and t - runs[-1][1] <= lane.sample_s:
             runs[-1][1] = t_end

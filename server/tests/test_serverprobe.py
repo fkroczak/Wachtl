@@ -158,7 +158,7 @@ class ServerProbeEndToEndTest(AppTestCase):
         # Token der Server-Probe erscheint nicht unter „Probes registrieren“
         self.make_user()
         self.login()
-        self.assertNotIn("Server-Probe", self.client.get("/admin").get_data(as_text=True).split('id="checks"')[0]
+        self.assertNotIn("Server-Probe", self.client.get("/admin?tab=pcs").get_data(as_text=True)
                          .split('id="enrollment"')[1])
 
     def test_wrong_pin_is_rejected(self):

@@ -78,7 +78,7 @@
     </tr>
   {% endfor %}</tbody>
 </table>
-{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
+{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ admin_url('standardpaket') }}">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
 
 {% if excluded_checks %}
 <div class="muted excluded">Für diese Probe entfernt:

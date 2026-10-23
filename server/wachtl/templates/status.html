@@ -147,7 +147,7 @@
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p class="muted">Keine Bandbreiten-Checks. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung anlegen</a>.{% endif %}</p>{% endif %}
+{% else %}<p class="muted">Keine Bandbreiten-Checks. {% if has_role(user, 'admin') %}<a href="{{ admin_url('standardpaket') }}">Standardpaket anlegen</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung anlegen</a>.{% endif %}</p>{% endif %}
 
 {% if voice %}
 <h2 id="sprache">Sprachqualität</h2>

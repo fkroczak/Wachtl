@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Störungen{% endblock %}
 {% block content %}
+{% include "_verlauf_tabs.html" %}
 <h1>Störungen</h1>
 <p class="muted">Gleichzeitige Ausfälle eines Standorts sind zu einer Störung zusammengefasst – fällt die Leitung 10 s aus,
   ist das eine Störung, auch wenn fünf Ziele betroffen waren. Ein Klick zeigt alle Ziele und Hops sekundengenau.

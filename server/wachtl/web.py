@@ -44,6 +44,9 @@ def inject():
         "check_url": check_url,
         "report_graph_url": report_graph_url,
         "alert_refs": alert_refs,
+        "admin_url": admin_url,
+        "QUICK_TYPES": QUICK_TYPES,
+        "quick_sites": lambda: q("SELECT id, name FROM sites ORDER BY name") if user else [],
     }
 
 
@@ -800,6 +803,147 @@ def outages_view():
     )
 
 
+# -- Verlauf: ein Tag eines Standorts ---------------------------------------------
+def _site_choice(sites: list) -> int | None:
+    site_id = _int_param("site")
+    if site_id in {s["id"] for s in sites}:
+        return site_id
+    return sites[0]["id"] if sites else None
+
+
+def _day_start(value: str | None) -> int:
+    """Beginn des Tages (Ortszeit) aus JJJJ-MM-TT, sonst heute."""
+    try:
+        d = datetime.strptime(value or "", "%Y-%m-%d")
+    except ValueError:
+        d = datetime.now()
+    return int(d.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+
+
+@bp.get("/verlauf")
+@login_required()
+def day():
+    """Ein Tag eines Standorts: jede Messung als Spur, Störungen und Meldungen markiert, Bereich aufziehen = Analyse."""
+    sites = q("SELECT * FROM sites ORDER BY name")
+    site_id = _site_choice(sites)
+    start = _day_start(request.args.get("tag"))
+    end = start + 86400
+    now = repo.now()
+    if site_id is None:
+        return render_template("day.html", sites=sites, site=None, start=start)
+    site = next(s for s in sites if s["id"] == site_id)
+    tl_end = min(end, now) if start <= now else end
+    x = lambda t: incidents.x_of(t, start, end)  # noqa: E731
+    incs = [i for i in incidents.load(start - 86400, site_id, refine=False)
+            if i.start < end and (i.end or now) >= start]
+    reports = [r for r in report_service.search(site_id=site_id, since=start, until=end, limit=200)]
+    analysis, error = None, None
+    if start <= now:
+        try:
+            analysis = incidents.analyze(site_id, start, tl_end, window=(start, end, 3 * 3600), hops=False)
+        except vm.VMError as exc:
+            log.warning("Tagesansicht ohne Messdaten: %s", exc)
+            error = str(exc)
+
+    def mark(o_start, o_end, title, cls="m-down"):
+        return {"x": x(max(o_start, start)), "w": max(x(min(o_end or now, end)) - x(max(o_start, start)), 3.0),
+                "cls": cls, "title": title,
+                "href": url_for("web.incident", site_id=site_id, start=o_start, end=o_end or 0)}
+
+    top = {"label": "Störungen", "marks": [mark(i.start, i.end, f"{fmt_dt(i.start)} · {fmt_duration(i.duration)} · "
+                                                              f"{i.cause_label} · {', '.join(i.targets[:4])}")
+                                           for i in incs]}
+    rep = {"label": "Meldungen", "marks": [
+        {"x": x(r["occurred_at"]), "w": 4.0, "cls": "m-report", "title": f"{fmt_dt(r['occurred_at'])} · "
+         f"{r.get('probe_name') or ''} · {r.get('category_label') or ''} {r.get('description') or ''}".strip(),
+         "href": url_for("web.incident", site_id=site_id, start=r["occurred_at"] - 900, end=r["occurred_at"] + 900)}
+        for r in reports]}
+    rows = []
+    for ln in (analysis or {}).get("lanes", []):
+        marks = []
+        for i in incs:
+            for o in i.items:
+                same_probe = o.probe == ln.probe
+                hit = same_probe and (o.check_id == ln.check_id or o.cause == "probe"
+                                      or (o.cause == "wan" and ln.role == "reference"))
+                if hit:
+                    marks.append(mark(o.start, o.end, f"{fmt_dt(o.start)} · {fmt_duration(o.duration)} keine Antwort"))
+        rows.append({"lane": ln, "runs": incidents.lane_runs(ln, start, end), "marks": marks})
+    days = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
+    dstart = datetime.fromtimestamp(start)
+    return render_template(
+        "day.html", sites=sites, site=site, start=start, end=end, top=top, rep=rep, rows=rows, error=error,
+        incidents=incs, reports=reports, now_x=x(now) if start <= now < end else None,
+        day_label=f"{days[dstart.weekday()]}, {dstart.strftime('%d.%m.%Y')}",
+        prev=datetime.fromtimestamp(start - 43200).strftime("%Y-%m-%d"),
+        next=datetime.fromtimestamp(end + 43200).strftime("%Y-%m-%d") if end <= now else None,
+        tag=dstart.strftime("%Y-%m-%d"), ticks=[datetime.fromtimestamp(t).strftime("%H:%M")
+                                                 for t in range(start, end, 3 * 3600)],
+        future=start > now,
+    )
+
+
+@bp.get("/verlauf/zeitraum")
+@login_required()
+def day_zoom():
+    """Tastatur-Alternative zum Aufziehen: Uhrzeit von/bis eines Tages → Analyse dieses Zeitraums."""
+    site_id = _int_param("site") or abort(404)
+    start = _day_start(request.args.get("tag"))
+
+    def at(name: str, default: str) -> int:
+        try:
+            t = datetime.strptime(request.args.get(name) or default, "%H:%M")
+        except ValueError:
+            t = datetime.strptime(default, "%H:%M")
+        return start + t.hour * 3600 + t.minute * 60
+
+    t0, t1 = at("von", "00:00"), at("bis", "23:59")
+    if t1 <= t0:
+        t1 = t0 + 1800
+    return redirect(url_for("web.incident", site_id=site_id, start=t0, end=min(t1, start + 86400)))
+
+
+# -- Ziel schnell anlegen ---------------------------------------------------------
+QUICK_TYPES = {"ping": "Ping (dauerhaft)", "path": "Traceroute (Pfad + Hops)"}
+
+
+def _safe_next(value: str | None) -> str:
+    """Nur relative Pfade dieser Anwendung als Rücksprung (kein offener Redirect)."""
+    if value and value.startswith("/") and not value.startswith("//") and "\\" not in value:
+        return value
+    return url_for("web.overview")
+
+
+@bp.post("/ziele/neu")
+@login_required("admin")
+def quick_target():
+    """„+ Ziel“: Adresse, Art und Bereich – mit Standardwerten (1 s, alle PCs bzw. ein Standort)."""
+    f = request.form
+    back = _safe_next(f.get("next"))
+    target = f.get("target", "").strip()
+    ctype = f.get("type", "ping")
+    role = f.get("role", "target")
+    name = f.get("name", "").strip()[:80] or target
+    site_id = int(f.get("site_id", 0) or 0) or None
+    if ctype not in QUICK_TYPES or role not in repo.CHECK_ROLES:
+        abort(400)
+    if not repo.valid_target(target) or (ctype == "path" and target == "gateway"):
+        flash(f"„{target}“ ist keine gültige IP-Adresse und kein gültiger Hostname.", "error")
+        return redirect(back)
+    if site_id is not None and not q1("SELECT id FROM sites WHERE id = ?", (site_id,)):
+        abort(400)
+    if q1("SELECT id FROM checks WHERE type = ? AND target = ? AND enabled = TRUE", (ctype, target)):
+        flash(f"{target} wird bereits gemessen ({QUICK_TYPES[ctype]}).", "warn")
+        return redirect(back)
+    params = checktypes.merged(ctype, {}) if ctype == "path" else None
+    role = role if ctype == "ping" else "target"
+    check_id = repo.create_check(name, target, role, 1, 1000, "site" if site_id else "all", site_id, ctype, params)
+    repo.audit(current_user()["username"], "check.create", f"check:{check_id}", f"{ctype} {target} (schnell)")
+    _regen_rules()
+    flash(f"{name} angelegt – die PCs messen ab dem nächsten Heartbeat (spätestens in einer Minute).", "ok")
+    return redirect(back)
+
+
 @bp.get("/stoerungen")
 @login_required()
 def incidents_view():
@@ -1038,9 +1182,26 @@ def alert_ack(event_id: int):
 
 
 # -- Verwaltung --------------------------------------------------------------
+# Einstellungen als Reiter: Reiter -> (Beschriftung, Abschnitte)
+ADMIN_TABS = {
+    "ziele": ("Ziele & Tests", ("checks", "standardpaket")),
+    "pcs": ("PCs & Standorte", ("standorte", "enrollment")),
+    "alarme": ("Alarme & Benachrichtigung", ("alarme", "benachrichtigungen")),
+    "system": ("System & Benutzer", ("messung", "benutzer")),
+}
+SECTION_TAB = {sec: tab for tab, (_label, secs) in ADMIN_TABS.items() for sec in secs}
+
+
+def admin_url(section: str) -> str:
+    """Link auf einen Abschnitt der Einstellungen – im richtigen Reiter."""
+    return url_for("web.admin", tab=SECTION_TAB[section]) + "#" + section
+
+
 @bp.get("/admin")
 @login_required("admin")
 def admin():
+    tab = request.args.get("tab", "ziele")
+    tab = tab if tab in ADMIN_TABS else "ziele"
     sites = q("SELECT * FROM sites ORDER BY name")
     probes = q("SELECT id, hostname, site_id FROM probes ORDER BY hostname")
     site_map = {s["id"]: s for s in sites}
@@ -1060,7 +1221,7 @@ def admin():
         (repo.now(),),
     )
     return render_template(
-        "admin.html", sites=sites, checks=checks, assignments=assignments, tokens=tokens,
+        "admin.html", tab=tab, admin_tabs=ADMIN_TABS, sites=sites, checks=checks, assignments=assignments, tokens=tokens,
         rules=list(repo.alert_rules().values()), users=q("SELECT * FROM users ORDER BY username"),
         roles=ROLES, notify_settings={**notify.get_settings(), **session.pop("notify_draft", {})},
         user_draft=session.pop("user_draft", {}),
@@ -1082,13 +1243,13 @@ def standard_package():
         scope_id = request.form.get("site_id", 0, type=int)
         if not q1("SELECT id FROM sites WHERE id = ?", (scope_id,)):
             flash("Bitte einen Standort auswählen.", "error")
-            return redirect(url_for("web.admin") + "#standardpaket")
+            return redirect(admin_url("standardpaket"))
     elif scope != "all":
         abort(400)
     keys = request.form.getlist("items")
     if not keys:
         flash("Bitte mindestens einen Check auswählen.", "error")
-        return redirect(url_for("web.admin") + "#standardpaket")
+        return redirect(admin_url("standardpaket"))
     created, skipped = standardpaket.apply(keys, scope, scope_id, current_app.config["PUBLIC_URL"])
     user = current_user()["username"]
     for cid, item in created:
@@ -1099,7 +1260,7 @@ def standard_package():
               "Die Probes übernehmen sie mit dem nächsten Heartbeat.", "ok")
     if skipped:
         flash("Nicht angelegt: " + "; ".join(skipped) + ".", "ok" if created else "error")
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.route("/admin/einrichtung", methods=["GET", "POST"])
@@ -1195,7 +1356,7 @@ def measure_update():
         changed = settings_service.save(values)
         repo.audit(current_user()["username"], "measure.update", detail=", ".join(f"{k}={values[k]}" for k in changed))
         flash("Messeinstellungen gespeichert." if changed else "Keine Änderungen.", "ok")
-    return redirect(url_for("web.admin") + "#messung")
+    return redirect(admin_url("messung"))
 
 
 @bp.post("/admin/sites")
@@ -1214,7 +1375,7 @@ def site_create():
         )
         repo.audit(current_user()["username"], "site.create", name)
         flash(f"Standort {name} angelegt.", "ok")
-    return redirect(url_for("web.admin") + "#standorte")
+    return redirect(admin_url("standorte"))
 
 
 @bp.post("/admin/sites/<int:site_id>/delete")
@@ -1228,7 +1389,7 @@ def site_delete(site_id: int):
         repo.audit(current_user()["username"], "site.delete", f"site:{site_id}")
         flash("Standort gelöscht.", "ok")
         _regen_rules()
-    return redirect(url_for("web.admin") + "#standorte")
+    return redirect(admin_url("standorte"))
 
 
 @bp.post("/admin/tokens")
@@ -1238,12 +1399,12 @@ def token_create():
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,))
     if s is None:
         flash("Bitte zuerst einen Standort anlegen und auswählen.", "error")
-        return redirect(url_for("web.admin") + "#enrollment")
+        return redirect(admin_url("enrollment"))
     proxy = request.form.get("proxy", "").strip()
     if proxy and not proxy.startswith(("http://", "https://")):
         # vor dem Anlegen prüfen: sonst entsteht ein verwaister Token und eine Fehlerseite ohne Rückweg
         flash("Proxy bitte mit Schema angeben, z. B. http://proxy.kunde.local:3128", "error")
-        return redirect(url_for("web.admin") + "#enrollment")
+        return redirect(admin_url("enrollment"))
     days = min(max(request.form.get("days", 7, type=int), 1), 90)
     max_uses = min(max(request.form.get("max_uses", 1, type=int), 1), 500)
     token = repo.create_enrollment_token(site_id, max_uses, days, current_user()["username"],
@@ -1350,7 +1511,7 @@ def token_revoke(token_id: int):
     ex("UPDATE enrollment_tokens SET revoked = TRUE WHERE id = ?", (token_id,))
     repo.audit(current_user()["username"], "token.revoke", f"token:{token_id}")
     flash("Enrollment-Token widerrufen.", "ok")
-    return redirect(url_for("web.admin") + "#enrollment")
+    return redirect(admin_url("enrollment"))
 
 
 def _probe_names() -> dict[int, str]:
@@ -1474,7 +1635,7 @@ def check_create():
         repo.audit(user, "check.create", f"check:{check_id}", f"{ctype} {target} alle {interval} s")
         flash(f"Check {name} angelegt. Probes übernehmen ihn mit dem nächsten Heartbeat.", "ok")
     _regen_rules()
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.post("/admin/checks/<int:check_id>/toggle")
@@ -1485,7 +1646,7 @@ def check_toggle(check_id: int):
     repo.audit(current_user()["username"], "check.toggle", f"check:{check_id}", "aus" if c["enabled"] else "an")
     _regen_rules()
     flash(f"Check {c['name']} {'ausgeschaltet' if c['enabled'] else 'eingeschaltet'}.", "ok")
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.post("/admin/checks/<int:check_id>/delete")
@@ -1495,7 +1656,7 @@ def check_delete(check_id: int):
     repo.audit(current_user()["username"], "check.delete", f"check:{check_id}")
     flash("Check gelöscht.", "ok")
     _regen_rules()
-    return redirect(url_for("web.admin") + "#checks")
+    return redirect(admin_url("checks"))
 
 
 @bp.post("/admin/rules")
@@ -1517,7 +1678,7 @@ def rules_update():
         if (severity not in ("warning", "critical", "info") or not math.isfinite(threshold) or threshold < 0
                 or window_s < 0 or for_s < 0):
             flash(f"Ungültiger Wert bei {r['name']} – nichts gespeichert. Bitte Zahlen ab 0 eingeben.", "error")
-            return redirect(url_for("web.admin") + "#alarme")
+            return redirect(admin_url("alarme"))
         updates.append((threshold, window_s, for_s, severity, enabled, repo.now(), r["id"]))
     for u in updates:
         ex("UPDATE alert_rules SET threshold = ?, window_s = ?, for_s = ?, severity = ?, enabled = ?, updated_at = ? "
@@ -1525,7 +1686,7 @@ def rules_update():
     repo.audit(current_user()["username"], "rules.update")
     _regen_rules()
     flash("Alarmregeln gespeichert und an vmalert übergeben.", "ok")
-    return redirect(url_for("web.admin") + "#alarme")
+    return redirect(admin_url("alarme"))
 
 
 @bp.post("/admin/users")
@@ -1550,7 +1711,7 @@ def user_create():
         repo.audit(current_user()["username"], "user.create", username, role)
         session.pop("user_draft", None)
         flash(f"Benutzer {username} angelegt.", "ok")
-    return redirect(url_for("web.admin") + "#benutzer")
+    return redirect(admin_url("benutzer"))
 
 
 @bp.post("/admin/users/<int:user_id>/password")
@@ -1569,7 +1730,7 @@ def user_password(user_id: int):
             session["pwv"] = password_marker(new_hash)   # eigenes Passwort: diese Sitzung bleibt
         repo.audit(current_user()["username"], "user.password_reset", u["username"])
         flash(f"Passwort für {u['username']} zurückgesetzt. Bitte das neue Passwort sicher weitergeben.", "ok")
-    return redirect(url_for("web.admin") + "#benutzer")
+    return redirect(admin_url("benutzer"))
 
 
 @bp.post("/admin/users/<int:user_id>/delete")
@@ -1582,7 +1743,7 @@ def user_delete(user_id: int):
         ex("DELETE FROM users WHERE id = ?", (user_id,))
         repo.audit(current_user()["username"], "user.delete", u["username"])
         flash(f"Benutzer {u['username']} gelöscht.", "ok")
-    return redirect(url_for("web.admin") + "#benutzer")
+    return redirect(admin_url("benutzer"))
 
 
 @bp.get("/admin/audit")
@@ -1626,7 +1787,7 @@ def notify_update():
             flash(e, "error")
         # Eingaben fürs erneute Anzeigen merken (ohne Passwort), sonst muss alles neu getippt werden
         session["notify_draft"] = {k: v[:1000] for k, v in values.items() if k not in notify.SECRET_FIELDS}
-        return redirect(url_for("web.admin") + "#benachrichtigungen")
+        return redirect(admin_url("benachrichtigungen"))
     notify.save_settings(values)
     changed = [k for k in notify.FIELDS if values[k] != current.get(k, "")]
     shown = ", ".join("smtp_password" if k in notify.SECRET_FIELDS else f"{k}={values[k]}" for k in changed)
@@ -1637,7 +1798,7 @@ def notify_update():
     except OSError as exc:
         log.error("Alertmanager-Konfiguration nicht geschrieben: %s", exc)
         flash("Gespeichert, aber die Alertmanager-Datei konnte nicht geschrieben werden (siehe Log).", "error")
-    return redirect(url_for("web.admin") + "#benachrichtigungen")
+    return redirect(admin_url("benachrichtigungen"))
 
 
 @bp.post("/admin/notify/test")
@@ -1649,4 +1810,4 @@ def notify_test():
         flash("Testnachricht ausgelöst – sie kommt nach etwa 30 Sekunden bei allen Empfängern an.", "ok")
     except notify.NotifyError as exc:
         flash(str(exc), "error")
-    return redirect(url_for("web.admin") + "#benachrichtigungen")
+    return redirect(admin_url("benachrichtigungen"))

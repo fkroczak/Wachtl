@@ -1,71 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Verwaltung{% endblock %}
+{% block title %}Einstellungen{% endblock %}
 {% from "_forms.html" import field %}
 {% from "_links.html" import check_target, onoff with context %}
 {% block content %}
-<h1>Verwaltung</h1>
-<p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
-  <span class="muted small">Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten – mit Standards vorbelegt.</span></p>
-<nav class="subnav" aria-label="Abschnitte der Verwaltung">
-  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#standardpaket">Standardpaket</a><a href="#checks">Checks</a><a href="#messung">Messung</a>
-  <a href="#alarme">Alarmregeln</a><a href="#benachrichtigungen">Benachrichtigungen</a><a href="#benutzer">Benutzer</a><a href="{{ url_for('web.audit') }}">Audit-Log</a>
+<h1>Einstellungen</h1>
+<nav class="tabs" aria-label="Bereiche der Einstellungen">
+  {% for key, (label, _sections) in admin_tabs.items() %}<a href="{{ url_for('web.admin', tab=key) }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  <a href="{{ url_for('web.audit') }}">Audit-Log</a>
 </nav>
 
-<section id="standorte">
-  <h2>Standorte</h2>
+{% if tab == 'ziele' %}
+<section id="checks">
+  <h2>Alle Ziele und Tests</h2>
+  <p class="muted">Was die PCs messen. Schneller geht es mit „+ Ziel“ auf der Übersicht, im Verlauf und in der Störungsanalyse. Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt.
+    Änderungen erreichen die Probes mit dem nächsten Heartbeat.</p>
+  <div class="actions">
+    {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
+  </div>
   <div class="scroll"><table>
-    <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
-    <tbody>
-    {% for s in sites %}
-      <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
-        <td><form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td></tr>
-    {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
-    </tbody>
+    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+    <tbody>{% for c in checks %}
+      <tr class="{{ '' if c.enabled else 'disabled' }}">
+        <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
+        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
+        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
+        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
+        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
+        <td>{{ onoff(c.enabled) }}</td>
+        <td class="nowrap">
+          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}" aria-label="Bearbeiten: {{ c.name }}">Bearbeiten</a>
+          <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="{{ 'Ausschalten' if c.enabled else 'Einschalten' }}: {{ c.name }}">{{ 'Ausschalten' if c.enabled else 'Einschalten' }}</button></form>
+          <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?" aria-label="Löschen: {{ c.name }}">Löschen</button></form>
+        </td>
+      </tr>
+    {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
   </table></div>
-  <form method="post" action="{{ url_for('web.site_create') }}" class="row">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Name <input name="name" required maxlength="100"></label>
-    <label>Kundennummer <input name="customer_no" maxlength="20"></label>
-    <label class="grow">Beschreibung <input name="description" maxlength="200"></label>
-    <button class="primary">Standort anlegen</button>
-  </form>
 </section>
-
-<section id="enrollment">
-  <h2>Probes registrieren</h2>
-  <p class="muted">Standort wählen und <strong>Setup herunterladen</strong>: Die Datei enthält alle Adressen dieses Servers (Name und IP),
-    den Pin und einen Token für den Standort. Auf dem PC starten und nur noch <em>Installieren</em> klicken – auch per Softwareverteilung mit <code>/VERYSILENT</code>.
-    Ein Token gilt für die eingestellte Anzahl PCs und Tage.
-    {% if probe_setup %}Setup ohne Vorbelegung: <a href="{{ url_for('web.probe_setup_download') }}">{{ probe_setup.name }}</a>.{% endif %}</p>
-  {% if not probe_setup %}<p class="flash warn">Auf diesem Server liegt noch kein Setup. Windows-Server: wird beim Installieren abgelegt.
-    Linux: <code>WachtlSetup-*.exe</code> in den Ordner <code>deploy/probe</code> legen.</p>{% endif %}
-  {% if tokens %}
-  <div class="scroll"><table>
-    <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
-    <tbody>{% for t in tokens %}
-      <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
-        <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
-    {% endfor %}</tbody>
-  </table></div>
-  {% else %}<p class="muted">Keine offenen Tokens. Unten Standort wählen und Setup herunterladen – das legt einen Token an.</p>
-  {% endif %}
-  <form method="post" action="{{ url_for('web.token_create') }}" class="row">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Standort
-      <select name="site_id" required>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
-    </label>
-    <label>Für wie viele PCs <input name="max_uses" type="number" min="1" max="500" value="25"></label>
-    <label>Gültig (Tage) <input name="days" type="number" min="1" max="90" value="30"></label>
-    <label>Proxy (optional) <input name="proxy" maxlength="200" placeholder="http://proxy:3128"></label>
-    <label class="grow">Beschreibung <input name="description" maxlength="200" placeholder="z. B. Rollout Erdgeschoss"></label>
-    <button class="primary" name="action" value="setup" {{ 'disabled' if not sites or not probe_setup }}>Setup herunterladen</button>
-    <button name="action" value="token" {{ 'disabled' if not sites }}>Nur Token anzeigen</button>
-  </form>
-</section>
-
 <section id="standardpaket">
   <h2>Standardpaket</h2>
   <p class="muted">Fertige Checks für einen neuen Kunden: anhaken, Zuweisung wählen, anlegen – fertig. Danach nur noch die Probes installieren.
@@ -113,60 +85,65 @@
     <button class="primary">Standardpaket anlegen</button>
   </form>
 </section>
-
-<section id="checks">
-  <h2>Checks</h2>
-  <p class="muted">Was die Probes messen. Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt.
-    Änderungen erreichen die Probes mit dem nächsten Heartbeat.</p>
-  <div class="actions">
-    {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
-  </div>
+{% endif %}
+{% if tab == 'pcs' %}
+<p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
+  <span class="muted small">Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten – mit Standards vorbelegt.</span></p>
+<section id="standorte">
+  <h2>Standorte</h2>
   <div class="scroll"><table>
-    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
-    <tbody>{% for c in checks %}
-      <tr class="{{ '' if c.enabled else 'disabled' }}">
-        <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
-        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
-        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
-        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
-        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
-        <td>{{ onoff(c.enabled) }}</td>
-        <td class="nowrap">
-          <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}" aria-label="Bearbeiten: {{ c.name }}">Bearbeiten</a>
-          <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="{{ 'Ausschalten' if c.enabled else 'Einschalten' }}: {{ c.name }}">{{ 'Ausschalten' if c.enabled else 'Einschalten' }}</button></form>
-          <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?" aria-label="Löschen: {{ c.name }}">Löschen</button></form>
-        </td>
-      </tr>
-    {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+    <tbody>
+    {% for s in sites %}
+      <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
+        <td><form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td></tr>
+    {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
+    </tbody>
   </table></div>
-</section>
-
-<section id="messung">
-  <h2>Messung</h2>
-  <p class="muted">Allgemeine Einstellungen für alle Probes. Was gemessen wird, steht in den Checks; ob eine Probe iperf3-Gegenstelle ist, auf der Seite der Probe.</p>
-  <form method="post" action="{{ url_for('web.measure_update') }}" class="settings-form">
+  <form method="post" action="{{ url_for('web.site_create') }}" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% for group in measure_fields|groupby('group') %}
-    <fieldset>
-      <legend>{{ group.grouper }}</legend>
-      <div class="grid-form">
-      {% for f in group.list %}
-        {% set v = measure[f.key] %}
-        {% call(attrs) field(f.key, f.label, help=f.help, unit=f.unit if f.kind == 'int' else None, check=f.kind == 'bool') %}
-          {%- if f.kind == 'bool' %}<input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }} {{ attrs }}>
-          {%- elif f.kind == 'int' %}<input name="{{ f.key }}" type="number" min="{{ f.min }}" max="{{ f.max }}" value="{{ v }}" {{ attrs }}>
-          {%- else %}<input name="{{ f.key }}" value="{{ v }}" maxlength="253" {{ attrs }}>{% endif -%}
-        {% endcall %}
-      {% endfor %}
-      </div>
-    </fieldset>
-    {% endfor %}
-    <button class="primary">Messeinstellungen speichern</button>
+    <label>Name <input name="name" required maxlength="100"></label>
+    <label>Kundennummer <input name="customer_no" maxlength="20"></label>
+    <label class="grow">Beschreibung <input name="description" maxlength="200"></label>
+    <button class="primary">Standort anlegen</button>
   </form>
 </section>
-
+<section id="enrollment">
+  <h2>Probes registrieren</h2>
+  <p class="muted">Standort wählen und <strong>Setup herunterladen</strong>: Die Datei enthält alle Adressen dieses Servers (Name und IP),
+    den Pin und einen Token für den Standort. Auf dem PC starten und nur noch <em>Installieren</em> klicken – auch per Softwareverteilung mit <code>/VERYSILENT</code>.
+    Ein Token gilt für die eingestellte Anzahl PCs und Tage.
+    {% if probe_setup %}Setup ohne Vorbelegung: <a href="{{ url_for('web.probe_setup_download') }}">{{ probe_setup.name }}</a>.{% endif %}</p>
+  {% if not probe_setup %}<p class="flash warn">Auf diesem Server liegt noch kein Setup. Windows-Server: wird beim Installieren abgelegt.
+    Linux: <code>WachtlSetup-*.exe</code> in den Ordner <code>deploy/probe</code> legen.</p>{% endif %}
+  {% if tokens %}
+  <div class="scroll"><table>
+    <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+    <tbody>{% for t in tokens %}
+      <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
+        <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">Keine offenen Tokens. Unten Standort wählen und Setup herunterladen – das legt einen Token an.</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('web.token_create') }}" class="row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Standort
+      <select name="site_id" required>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Für wie viele PCs <input name="max_uses" type="number" min="1" max="500" value="25"></label>
+    <label>Gültig (Tage) <input name="days" type="number" min="1" max="90" value="30"></label>
+    <label>Proxy (optional) <input name="proxy" maxlength="200" placeholder="http://proxy:3128"></label>
+    <label class="grow">Beschreibung <input name="description" maxlength="200" placeholder="z. B. Rollout Erdgeschoss"></label>
+    <button class="primary" name="action" value="setup" {{ 'disabled' if not sites or not probe_setup }}>Setup herunterladen</button>
+    <button name="action" value="token" {{ 'disabled' if not sites }}>Nur Token anzeigen</button>
+  </form>
+</section>
+{% endif %}
+{% if tab == 'alarme' %}
 <section id="alarme">
   <h2>Alarmregeln</h2>
   <form method="post" action="{{ url_for('web.rules_update') }}">
@@ -188,7 +165,6 @@
     <button class="primary">Alarmregeln speichern</button>
   </form>
 </section>
-
 <section id="benachrichtigungen">
   <h2>Benachrichtigungen</h2>
   {% if not notify_enabled %}<div class="flash error">Alertmanager-Datei ist nicht konfiguriert (WACHTL_AM_CONFIG).</div>{% endif %}
@@ -213,7 +189,31 @@
     <button {{ 'disabled' if not (n.email_to or n.teams_webhook_url) }}>Testnachricht senden</button>
   </form>
 </section>
-
+{% endif %}
+{% if tab == 'system' %}
+<section id="messung">
+  <h2>Messung</h2>
+  <p class="muted">Allgemeine Einstellungen für alle Probes. Was gemessen wird, steht in den Checks; ob eine Probe iperf3-Gegenstelle ist, auf der Seite der Probe.</p>
+  <form method="post" action="{{ url_for('web.measure_update') }}" class="settings-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% for group in measure_fields|groupby('group') %}
+    <fieldset>
+      <legend>{{ group.grouper }}</legend>
+      <div class="grid-form">
+      {% for f in group.list %}
+        {% set v = measure[f.key] %}
+        {% call(attrs) field(f.key, f.label, help=f.help, unit=f.unit if f.kind == 'int' else None, check=f.kind == 'bool') %}
+          {%- if f.kind == 'bool' %}<input type="checkbox" name="{{ f.key }}" {{ 'checked' if v }} {{ attrs }}>
+          {%- elif f.kind == 'int' %}<input name="{{ f.key }}" type="number" min="{{ f.min }}" max="{{ f.max }}" value="{{ v }}" {{ attrs }}>
+          {%- else %}<input name="{{ f.key }}" value="{{ v }}" maxlength="253" {{ attrs }}>{% endif -%}
+        {% endcall %}
+      {% endfor %}
+      </div>
+    </fieldset>
+    {% endfor %}
+    <button class="primary">Messeinstellungen speichern</button>
+  </form>
+</section>
 <section id="benutzer">
   <h2>Benutzer</h2>
   <div class="scroll"><table>
@@ -239,4 +239,5 @@
     <button class="primary">Benutzer anlegen</button>
   </form>
 </section>
+{% endif %}
 {% endblock %}

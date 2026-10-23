@@ -70,7 +70,7 @@ Streuung auf GitHub-Runnern.
 | `render-blocking-*`, `network-dependency-tree-insight`, `document-latency-insight` | aus | Eine kleine CSS-Datei, server-gerendertes HTML; LCP liegt trotzdem bei ~1,1 s mobil. | – |
 | SEO | nur Warnung | Internes Werkzeug hinter Anmeldung, wird nicht indexiert. Seit Audit 2026-10-21 `X-Robots-Tag: noindex` → Score 63 (`is-crawlable`), gewollt. | – |
 | Budgets CSS 25 → 26 KB, Seitengewicht 150 → 160 KB | angehoben (Audit 2026-10-21, **zu bestätigen**) | Touch-Ziele ≥ 44 px, Ein/Aus-Badges, Suche und Meldungen am Sprungziel brachten ~0,7 KB CSS und ~1,5 KB JS; doppelte Regeln wurden dafür entfernt. Die Graph-Seite lag vorher schon bei ~152 von 153,6 KB (90 KB davon Messdaten-JSON). | Mit Textkompression (siehe oben) fallen beide Werte weit unter die alten Grenzen; dann zurücksetzen. |
-| Budget CSS 26 → 32 KB | angehoben (2026-10-23, **zu bestätigen**) | Neues Dashboard und Störungsanalyse brauchen die Zeitleiste (`dash.css`, ~6 KB). Sie wird nur auf diesen Seiten geladen; alle anderen Seiten bleiben bei ~25 KB. | Mit Textkompression zurücksetzen. |
+| Budget CSS 26 → 34 KB | angehoben (2026-10-23, **zu bestätigen**) | Übersicht, Verlauf (Tagesansicht) und Störungsanalyse brauchen die Zeitleiste (`dash.css`, ~7,5 KB); Reiter und „+ Ziel“ ~0,9 KB in `app.css`. Sie wird nur auf diesen Seiten geladen; alle anderen Seiten bleiben bei ~25 KB. | Mit Textkompression zurücksetzen. |
 
 ## Formulare
 

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Verlauf{% if site %} {{ day_label }}{% endif %}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='dash.css') }}">{% endblock %}
+{% from "_timeline.html" import lane_svg, axis_row with context %}
+{% from "_quickadd.html" import quick_add with context %}
+{% block content %}
+{% include "_verlauf_tabs.html" %}
+{% if not site %}
+<h1>Verlauf</h1>
+<p class="muted">Noch kein Standort angelegt.</p>
+{% else %}
+<div class="day-head">
+  <h1>{{ day_label }}{% if sites|length > 1 %} <span class="muted">· <a href="{{ url_for('web.site', site_id=site.id) }}">{{ site.name }}</a></span>{% endif %}</h1>
+  {{ quick_add(site_id=site.id, id='qa-day') }}
+</div>
+<form method="get" class="row day-nav" aria-label="Tag wählen">
+  <a class="button" href="{{ url_for('web.day', tag=prev, site=site.id) }}" aria-label="Vortag">‹ Vortag</a>
+  <label>Tag <input type="date" name="tag" value="{{ tag }}" id="day-tag"></label>
+  {% if sites|length > 1 %}<label>Standort <select name="site" id="day-site">{% for s in sites %}<option value="{{ s.id }}"{{ ' selected' if s.id == site.id }}>{{ s.name }}</option>{% endfor %}</select></label>
+  {% else %}<input type="hidden" name="site" value="{{ site.id }}">{% endif %}
+  <button>Anzeigen</button>
+  {% if next %}<a class="button" href="{{ url_for('web.day', tag=next, site=site.id) }}" aria-label="Folgetag">Folgetag ›</a>
+  <a class="button" href="{{ url_for('web.day', site=site.id) }}">Heute</a>{% endif %}
+</form>
+
+{% if error %}<div class="flash error">Die Messdaten sind gerade nicht abrufbar (VictoriaMetrics): {{ error }}</div>{% endif %}
+{% if future %}<p class="muted">Dieser Tag liegt in der Zukunft.</p>
+{% else %}
+<section class="card day-card" aria-labelledby="day-h">
+  <div class="tl-head">
+    <h2 id="day-h">Alle Messungen am {{ day_label }}</h2>
+    <div class="legend small" aria-hidden="true">
+      <div class="lg-item"><span class="lg-sw m-down"></span> keine Antwort (sekundengenau)</div>
+      <div class="lg-item"><span class="lg-sw s-loss"></span> Paketverlust</div>
+      <div class="lg-item"><span class="lg-sw m-report"></span> Meldung vom PC</div>
+    </div>
+  </div>
+  <p class="muted small tl-hint">Mit der Maus einen Bereich aufziehen – oder auf eine Stelle klicken (±15 min) – zeigt diesen Zeitraum sekundengenau mit allen Hops.</p>
+  <div class="tl tl-day" data-zoom="{{ url_for('web.incident', site_id=site.id, start=0, end=0)[:-3] }}" data-start="{{ start }}" data-end="{{ end }}">
+    <div class="tl-row tl-top"><div class="tl-label">{{ top.label }}{% if top.marks %} <span class="tl-count">{{ top.marks|length }}</span>{% endif %}</div>
+      {{ lane_svg(marks=top.marks, now_x=now_x) }}</div>
+    <div class="tl-row"><div class="tl-label">{{ rep.label }}{% if rep.marks %} <span class="tl-count tl-count-report">{{ rep.marks|length }}</span>{% endif %}</div>
+      {{ lane_svg(marks=rep.marks, now_x=now_x) }}</div>
+    {% set ns = namespace(probe='') %}
+    {% for row in rows %}{% set ln = row.lane %}
+      {% if ln.probe_name != ns.probe %}{% set ns.probe = ln.probe_name %}<div class="tl-group"><a href="{{ url_for('web.probe', probe_id=ln.probe|int) }}">{{ ln.probe_name }}</a></div>{% endif %}
+      <div class="tl-row st-{{ 'down' if row.marks else 'ok' }}">
+        <div class="tl-label" title="{{ ln.target }} · {{ ln.role_label }}"><a href="{{ url_for('web.target', probe_id=ln.probe|int, check_id=ln.check_id|int, at=start + 43200) }}">{{ ln.target }}</a> <span class="muted small">{{ ln.role_label }}</span></div>
+        {{ lane_svg(runs=row.runs, marks=row.marks, now_x=now_x) }}
+      </div>
+    {% else %}<p class="muted tl-empty">Keine Messwerte an diesem Tag – Rohdaten werden 30 Tage aufbewahrt.</p>{% endfor %}
+    {{ axis_row(ticks) }}
+  </div>
+  <form method="get" action="{{ url_for('web.day_zoom') }}" class="row day-zoom">
+    <input type="hidden" name="site" value="{{ site.id }}"><input type="hidden" name="tag" value="{{ tag }}">
+    <label>Zeitraum genauer ansehen: von <input type="time" name="von" id="zoom-von" value="14:00" required></label>
+    <label>bis <input type="time" name="bis" id="zoom-bis" value="14:30" required></label>
+    <button>Sekundengenau anzeigen</button>
+  </form>
+</section>
+
+<div class="day-lists">
+<section aria-labelledby="day-inc">
+  <h2 id="day-inc">Störungen an diesem Tag</h2>
+  {% if incidents %}
+  <ol class="inc-list">{% for i in incidents %}
+    <li><a href="{{ url_for('web.incident', site_id=site.id, start=i.start, end=i.end_key) }}">
+      <span class="inc-when">{{ (i.start|dt)[-8:] }}</span>
+      <span class="inc-dur{{ ' active' if i.end is none }}">{{ i.duration|duration }}{% if i.end is none %} · aktiv{% endif %}</span>
+      <span class="cause cause-{{ i.main.cause }}">{{ i.cause_label }}</span>
+      <span class="inc-what">{{ i.targets[:4]|join(', ') }} <span class="muted">· {{ i.probes|join(', ') }}</span></span></a></li>
+  {% endfor %}</ol>
+  {% else %}<p class="muted">Keine Störungen erkannt. Kurze Aussetzer unter der Alarmschwelle erscheinen trotzdem orange in den Spuren.</p>{% endif %}
+</section>
+<section aria-labelledby="day-rep">
+  <h2 id="day-rep">Meldungen von PCs</h2>
+  {% if reports %}
+  <ol class="inc-list">{% for r in reports %}
+    <li><a href="{{ url_for('web.incident', site_id=site.id, start=r.occurred_at - 900, end=r.occurred_at + 900) }}">
+      <span class="inc-when">{{ (r.occurred_at|dt)[-8:] }}</span>
+      <span class="inc-dur">{{ r.category_label }}</span>
+      <span class="badge{{ " report-open" if r.status == "open" }}">{{ r.status_label }}</span>
+      <span class="inc-what">{{ r.description or r.duration_label }} <span class="muted">· {{ r.probe_name or '' }}{% if r.reported_user %} · {{ r.reported_user }}{% endif %}</span></span></a></li>
+  {% endfor %}</ol>
+  {% else %}<p class="muted">Keine Meldungen. Benutzer melden Störungen über das Wachtl-Symbol neben der Uhr – auch nachträglich mit Uhrzeit.</p>{% endif %}
+</section>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

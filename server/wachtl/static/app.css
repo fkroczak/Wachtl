@@ -264,10 +264,10 @@ nav.crumbs { display: block; }
 code.copy { user-select: all; background: var(--accent-soft); padding: 0.1rem 0.35rem; border-radius: 4px; word-break: break-all; }
 
 /* 0.3: Check-Formulare, Pfade, Bandbreite, Ausfälle */
-a.button { display: inline-block; background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px;
+a.button, summary.button { display: inline-block; background: var(--surface); border: 1px solid var(--field-border); border-radius: 6px;
   padding: 0.4rem 0.9rem; color: var(--text); }
-a.button:hover { border-color: var(--accent); text-decoration: none; }
-a.button.primary, a.button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+a.button:hover, summary.button:hover { border-color: var(--accent); text-decoration: none; }
+a.button.primary, a.button.active, summary.button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .actions .range-buttons { margin-bottom: 0; }
 .settings-form fieldset { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 0.6rem 1rem 1rem; margin: 0 0 0.9rem; }
@@ -380,3 +380,15 @@ label.choice input { width: 1.1rem; height: 1.1rem; margin: 0; }
   button.link { padding: 0 0.4rem; }
   input[type=checkbox], input[type=radio], label.choice input { width: 1.6rem; height: 1.6rem; }
 }
+/* Reiter (Einstellungen, Verlauf) und „+ Ziel“ */
+.tabs { display: flex; flex-wrap: wrap; gap: 0.2rem 1.2rem; border-bottom: 1px solid var(--border); margin: 0 0 1rem; }
+.tabs a { padding: 0.4rem 0; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--text-muted); }
+.tabs a[aria-current] { color: var(--text); border-color: var(--accent); font-weight: 600; }
+.quickadd { position: relative; }
+.quickadd > summary { list-style: none; cursor: pointer; }
+.quickadd > summary::-webkit-details-marker { display: none; }
+.quickadd-form { position: absolute; right: 0; z-index: 15; width: min(92vw, 26rem); display: grid; gap: 0.6rem; margin-top: 0.4rem;
+  padding: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
+.quickadd-form label { display: grid; gap: 0.2rem; font-size: 0.85rem; }
+.quickadd-hint { margin: 0; }

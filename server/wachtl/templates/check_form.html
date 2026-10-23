@@ -4,7 +4,7 @@
 {% block content %}
 {% set fv = form or {} %}
 {% set fe = field_errors or {} %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / <a href="{{ url_for('web.admin') }}#checks">Checks</a> / {{ 'Bearbeiten' if check else 'Neu' }}</nav>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Einstellungen</a> / <a href="{{ admin_url('checks') }}">Checks</a> / {{ 'Bearbeiten' if check else 'Neu' }}</nav>
 <h1>{{ ctype.label }}{% if check %} <span class="muted">· {{ check.name }}</span>{% endif %}</h1>
 <p class="muted">{{ ctype.description }}</p>
 
@@ -79,7 +79,7 @@
     {% endfor %}
     </div>
     {% if group == 'Gegenstelle' and ctype.key in ('iperf', 'rtp') %}
-      <p class="muted small">Eine Probe wird zur Gegenstelle unter Probe › Einstellungen „Gegenstelle für andere Probes“. Der Wachtl-Server ist unter Verwaltung › Messung einstellbar.</p>
+      <p class="muted small">Eine Probe wird zur Gegenstelle unter Probe › Einstellungen „Gegenstelle für andere Probes“. Der Wachtl-Server ist unter Einstellungen › Messung einstellbar.</p>
     {% endif %}
     {% if group == 'Gegenstelle' and ctype.key == 'rtp' %}
       <p class="muted small">Tipp: Für Telefonie über die Zentrale eine Probe nahe der Telefonanlage als Gegenstelle wählen. Firewall: UDP zum Port der Gegenstelle (Standard 5004) freigeben.</p>
@@ -114,7 +114,7 @@
 
   <div class="actions">
     <button class="primary">{{ 'Speichern' if check else 'Check anlegen' }}</button>
-    <a class="button" href="{{ url_for('web.admin') }}#checks">Abbrechen</a>
+    <a class="button" href="{{ admin_url('checks') }}">Abbrechen</a>
   </div>
 </form>
 {% endblock %}

@@ -33,7 +33,7 @@ module.exports = {
         "total-blocking-time": ["error", { maxNumericValue: 200, aggregationMethod: "median" }],
         "total-byte-weight": ["error", { maxNumericValue: 160 * 1024, aggregationMethod: "median" }],  // Audit 2026-10-21: Graph-Seite mit 1 h Demodaten ~152 KB
         "resource-summary:script:size": ["error", { maxNumericValue: 30 * 1024 }],
-        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 32 * 1024 }],  // 2026-10-23: dash.css (Zeitleiste) nur auf Übersicht und Störung
+        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 34 * 1024 }],  // 2026-10-23: dash.css (Zeitleisten) nur auf Übersicht, Verlauf, Störung
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
         // nur Warnung
         "first-contentful-paint": ["warn", { maxNumericValue: 1500, aggregationMethod: "median" }],

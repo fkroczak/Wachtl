@@ -1,0 +1,21 @@
+{#- „+ Ziel“: neues Ziel in einer Zeile anlegen. Import: with context -#}
+{% macro quick_add(site_id=none, target='', role='target', ctype='ping', label='+ Ziel', id='qa') -%}
+{% if has_role(user, 'admin') %}
+<details class="quickadd"{% if target %} data-prefilled{% endif %}>
+  <summary class="button{{ ' primary' if not target }}">{{ label }}</summary>
+  <form method="post" action="{{ url_for('web.quick_target') }}" class="quickadd-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}">
+    <label>Adresse <input name="target" id="{{ id }}-target" required value="{{ target }}" placeholder="z. B. 100.64.0.1" autocomplete="off"></label>
+    <label>Name <span class="muted">(optional)</span> <input name="name" id="{{ id }}-name" autocomplete="off"></label>
+    <label>Test <select name="type" id="{{ id }}-type">{% for k, v in QUICK_TYPES.items() %}<option value="{{ k }}"{{ ' selected' if k == ctype }}>{{ v }}</option>{% endfor %}</select></label>
+    <label>Bereich <select name="role" id="{{ id }}-role">{% for k, v in CHECK_ROLES.items() %}<option value="{{ k }}"{{ ' selected' if k == role }}>{{ v }}</option>{% endfor %}</select></label>
+    {% set qs = quick_sites() %}{% if qs|length > 1 %}
+    <label>Gilt für <select name="site_id" id="{{ id }}-site"><option value="">alle PCs</option>{% for s in qs %}<option value="{{ s.id }}"{{ ' selected' if s.id == site_id }}>{{ s.name }}</option>{% endfor %}</select></label>
+    {% endif %}
+    <button class="primary">Anlegen</button>
+    <p class="muted small quickadd-hint">Ping jede Sekunde von allen PCs. Weitere Testarten und Feineinstellungen: <a href="{{ admin_url('checks') }}">Einstellungen › Ziele &amp; Tests</a>.</p>
+  </form>
+</details>
+{% endif %}
+{%- endmacro %}

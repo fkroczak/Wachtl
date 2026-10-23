@@ -188,3 +188,57 @@ class PagesTest(AnalyzeTest):
             html = self.client.get(f"/stoerungen/{self.site}/{self.core[0]}/{self.core[1]}").get_data(as_text=True)
         self.assertIn("nicht abrufbar", html)
         self.assertIn("1.1.1.1", html)   # Ausfälle aus den Alarmen bleiben sichtbar
+
+
+class SimplerUiTest(PagesTest):
+    """Drei Menüpunkte, Tagesansicht, „+ Ziel“ und Einstellungen als Reiter."""
+
+    def test_navigation_has_three_items(self):
+        html = self.client.get("/").get_data(as_text=True)
+        nav = html[html.index('aria-label="Hauptnavigation"'):html.index("</nav>")]
+        self.assertEqual([lbl for lbl in ("Übersicht", "Verlauf", "Einstellungen") if f">{lbl}" in nav],
+                         ["Übersicht", "Verlauf", "Einstellungen"])
+        self.assertNotIn(">Alarme<", nav)
+        alerts = self.client.get("/alerts").get_data(as_text=True)
+        self.assertIn('href="/verlauf" class="active">Verlauf', alerts)
+
+    def test_day_view(self):
+        from datetime import datetime
+        tag = datetime.fromtimestamp(self.core[0]).strftime("%Y-%m-%d")
+        html = self.client.get(f"/verlauf?tag={tag}&site={self.site}").get_data(as_text=True)
+        self.assertIn('data-zoom="/stoerungen/', html)
+        self.assertIn(f"/stoerungen/{self.site}/{self.core[0]}/{self.core[1]}", html)  # Störung des Tages
+        self.assertIn("1.1.1.1", html)
+        self.assertIn('class="m-down"', html)
+        self.assertEqual(self.client.get("/verlauf?tag=quatsch").status_code, 200)
+        r = self.client.get(f"/verlauf/zeitraum?site={self.site}&tag={tag}&von=14:00&bis=14:30")
+        start = int(datetime.strptime(tag + " 14:00", "%Y-%m-%d %H:%M").timestamp())
+        self.assertTrue(r.headers["Location"].endswith(f"/stoerungen/{self.site}/{start}/{start + 1800}"))
+
+    def test_quick_add_target(self):
+        from wachtl.db import q1
+        tok = self.session_csrf()
+        r = self.client.post("/ziele/neu", data={"csrf_token": tok, "target": "100.64.0.9", "type": "ping",
+                                                 "role": "provider", "next": "/verlauf?tag=x"})
+        self.assertEqual(r.headers["Location"], "/verlauf?tag=x")
+        c = q1("SELECT * FROM checks WHERE target = '100.64.0.9'")
+        self.assertEqual((c["type"], c["role"], c["interval_s"], c["name"]), ("ping", "provider", 1, "100.64.0.9"))
+        # doppelt, ungültig, fremder Rücksprung
+        self.client.post("/ziele/neu", data={"csrf_token": tok, "target": "100.64.0.9", "type": "ping", "role": "provider"})
+        self.assertEqual(q1("SELECT COUNT(*) AS n FROM checks WHERE target = '100.64.0.9'")["n"], 1)
+        r = self.client.post("/ziele/neu", data={"csrf_token": tok, "target": "nicht gültig!", "type": "path",
+                                                 "role": "target", "next": "//evil.example/"})
+        self.assertEqual(r.headers["Location"], "/")
+        self.assertIsNone(q1("SELECT * FROM checks WHERE target = 'nicht gültig!'"))
+        self.client.post("/ziele/neu", data={"csrf_token": tok, "target": "1.2.3.4", "type": "path", "role": "provider"})
+        self.assertEqual(q1("SELECT type, role FROM checks WHERE target = '1.2.3.4'"), {"type": "path", "role": "target"})
+        self.assertIn("+ Ziel", self.client.get("/").get_data(as_text=True))
+
+    def test_settings_tabs(self):
+        default = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('id="checks"', default)
+        self.assertNotIn('id="benutzer"', default)
+        self.assertIn('id="benutzer"', self.client.get("/admin?tab=system").get_data(as_text=True))
+        tok = self.session_csrf()
+        r = self.client.post("/admin/users", data={"csrf_token": tok, "username": "x", "password": "", "role": "operator"})
+        self.assertTrue(r.headers["Location"].endswith("/admin?tab=system#benutzer"))

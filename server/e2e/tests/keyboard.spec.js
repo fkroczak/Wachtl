@@ -31,12 +31,12 @@ test("Anmelden nur mit Tastatur, Fehler wird angesagt", async ({ browser }) => {
 });
 
 test("Hauptnavigation: aktuelle Seite markiert, per Tastatur erreichbar", async ({ page }) => {
-  await page.goto("/alerts");
+  await page.goto("/verlauf");
   const nav = page.getByRole("navigation", { name: "Hauptnavigation" });
-  await expect(nav.getByRole("link", { name: "Alarme" })).toHaveAttribute("aria-current", "page");
-  await nav.getByRole("link", { name: "Störungen" }).focus();
+  await expect(nav.getByRole("link", { name: /^Verlauf/ })).toHaveAttribute("aria-current", "page");
+  await nav.getByRole("link", { name: "Einstellungen" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/stoerungen/);
+  await expect(page).toHaveURL(/\/admin/);
 });
 
 test("Fokus ist auf jedem Bedienelement sichtbar", async ({ page }) => {

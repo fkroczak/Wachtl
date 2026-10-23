@@ -2,6 +2,7 @@
 {% block title %}Übersicht{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='dash.css') }}">{% endblock %}
 {% from "_timeline.html" import lane_svg, axis_row with context %}
+{% from "_quickadd.html" import quick_add with context %}
 {% block content %}
 <div data-autorefresh="60" hidden></div>
 <div class="dash">
@@ -10,6 +11,8 @@
     <nav class="dash-ranges" aria-label="Zeitraum">
       {% for r in ranges %}<a class="button{{ ' active' if r == range_key }}" href="{{ url_for('web.overview', range=r, site=site_id) }}"{% if r == range_key %} aria-current="true"{% endif %}>{{ '24 Stunden' if r == '24h' else '7 Tage' }}</a>{% endfor %}
       {% if sites|length > 1 %}<a class="button" href="{{ url_for('web.overview', range=range_key) }}"{% if not site_id %} aria-current="true"{% endif %}>Alle Standorte</a>{% endif %}
+      <a class="button" href="{{ url_for('web.day', site=site_id) }}">Tag ansehen</a>
+      {{ quick_add(site_id=site_id, id='qa-dash') }}
     </nav>
   </div>
   {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Störungen aus den Alarmen werden trotzdem angezeigt.</div>{% endif %}

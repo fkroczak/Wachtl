@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Ausfälle{% endblock %}
 {% block content %}
+{% include "_verlauf_tabs.html" %}
 <h1>Ausfälle</h1>
 <p class="muted">Hier stehen alle Störungen aus den Alarmen, nach Ursache sortiert. Folgestörungen sind {{ 'eingeblendet' if show_all else 'ausgeblendet' }}.
   Beispiel: Fällt das Gateway aus, ist auch das Internet weg. Das zählt nur einmal.

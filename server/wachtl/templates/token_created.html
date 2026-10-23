@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Enrollment-Token{% endblock %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}#enrollment">Verwaltung</a> / Enrollment-Token</nav>
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ admin_url('enrollment') }}">Einstellungen</a> / Enrollment-Token</nav>
 <h1>Enrollment-Token für {{ site.name }}</h1>
 <div class="flash warn">Der Token wird nur jetzt angezeigt. Er gilt {{ days }} Tage für {{ max_uses }} Probe{{ 'n' if max_uses > 1 }}.</div>
 {% if not pin %}<p class="flash error">WACHTL_SPKI_PIN ist nicht gesetzt – bitte das Server-Setup bzw. <code>setup.sh</code> erneut ausführen.</p>{% endif %}
@@ -44,5 +44,5 @@
     <p class="muted small">Exit-Code 0 = Probe installiert und angemeldet (oder Anmeldung folgt automatisch, sobald der Server erreichbar ist).</p>
   </div>
 </section>
-<p><a href="{{ url_for('web.admin') }}#enrollment">Zurück zur Verwaltung</a></p>
+<p><a href="{{ admin_url('enrollment') }}">Zurück zur Verwaltung</a></p>
 {% endblock %}

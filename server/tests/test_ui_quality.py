@@ -218,7 +218,8 @@ class PageSemanticsTest(AppTestCase):
         return ["/", "/?range=7d", "/zustand", "/stoerungen", f"/stoerungen/1/{now - 600}/{now - 590}",
                 f"/stoerungen/1/{now - 600}/0", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
-                "/admin", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
+                "/admin", "/admin?tab=pcs", "/admin?tab=alarme", "/admin?tab=system", "/verlauf",
+                "/verlauf?tag=2020-01-01", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
                 f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
 
     def test_all_pages_pass_lint(self):
@@ -262,7 +263,7 @@ class PageSemanticsTest(AppTestCase):
         self.assertIn(f'href="/probes/{pid}/checks/1" aria-label="8.8.8.8 von PC-EMPFANG"',
                       self.client.get("/outages").get_data(as_text=True))
         self.assertIn('<a href="/admin/checks/1/edit">check:1</a>', self.client.get("/admin/audit").get_data(as_text=True))
-        admin = self.client.get("/admin").get_data(as_text=True)
+        admin = self.client.get("/admin?tab=pcs").get_data(as_text=True)
         self.assertIn('<td><a href="/sites/1">Zentrale</a></td><td>', admin)
 
     def test_navigation_marks_current_page(self):

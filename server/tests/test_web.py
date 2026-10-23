@@ -105,12 +105,12 @@ class WebTest(AppTestCase):
         tok = self.session_csrf()
         self.client.post("/admin/users", data={"csrf_token": tok, "username": "neu-kollege", "password": "",
                                                "role": "operator"})
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?tab=system").get_data(as_text=True)
         self.assertIn('value="neu-kollege"', html)
         self.assertIn('value="operator" selected', html)
-        self.assertNotIn('value="neu-kollege"', self.client.get("/admin").get_data(as_text=True))  # nur einmal
+        self.assertNotIn('value="neu-kollege"', self.client.get("/admin?tab=system").get_data(as_text=True))  # nur einmal
         self.client.post("/admin/notify", data={"csrf_token": tok, "email_to": "kein-mail", "smtp_password": "geheim"})
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?tab=alarme").get_data(as_text=True)
         self.assertIn('value="kein-mail"', html)
         self.assertNotIn("geheim", html)
 
