@@ -90,3 +90,6 @@
 @media (max-width: 999px) { .dash-list, .dash-now { grid-column: 1 / -1; } }
 @media (max-width: 600px) { .tl { grid-template-columns: minmax(5rem, 8rem) minmax(0, 1fr); } }
 @media (max-width: 600px) { .tl-axis span:nth-child(even) { visibility: hidden; } }
+/* Links in den Spuren: Klickfläche ≥ 24 px (WCAG 2.5.8) */
+.tl-label a { display: inline-block; line-height: 24px; }
+.tl-detail .tl-lane { height: 24px; }

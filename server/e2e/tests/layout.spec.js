@@ -63,11 +63,15 @@ for (const width of [1280, 768, 320]) {
 }
 
 test.describe("Auto-Refresh", () => {
-  test("lädt die Übersicht neu, wenn niemand tippt", async ({ page }) => {
+  test("lädt Zustand und Übersicht neu, wenn niemand tippt", async ({ page }) => {
     await page.clock.install();
-    await page.goto("/");
-    const reload = page.waitForEvent("load");
+    await page.goto("/zustand");
+    let reload = page.waitForEvent("load");
     await page.clock.runFor(31_000);
+    await reload;
+    await page.goto("/");
+    reload = page.waitForEvent("load");
+    await page.clock.runFor(61_000);
     await reload;
   });
 
@@ -85,10 +89,10 @@ test.describe("Auto-Refresh", () => {
   });
 });
 
-test.describe("Suche auf der Übersicht", () => {
+test.describe("Suche auf der Zustandsseite", () => {
   test("filtert Standorte und Probes und übersteht das Neuladen", async ({ page }) => {
     await page.clock.install();
-    await page.goto("/");
+    await page.goto("/zustand");
     await page.getByLabel("Standort oder Probe suchen").fill("K-1002");          // Kundennummer der Filiale
     await expect(page.locator("a.card.site:visible")).toHaveCount(1);
     await expect(page).toHaveURL(/\?q=K-1002/);

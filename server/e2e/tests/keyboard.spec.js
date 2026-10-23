@@ -34,9 +34,9 @@ test("Hauptnavigation: aktuelle Seite markiert, per Tastatur erreichbar", async 
   await page.goto("/alerts");
   const nav = page.getByRole("navigation", { name: "Hauptnavigation" });
   await expect(nav.getByRole("link", { name: "Alarme" })).toHaveAttribute("aria-current", "page");
-  await nav.getByRole("link", { name: "Ausfälle" }).focus();
+  await nav.getByRole("link", { name: "Störungen" }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/outages/);
+  await expect(page).toHaveURL(/\/stoerungen/);
 });
 
 test("Fokus ist auf jedem Bedienelement sichtbar", async ({ page }) => {
