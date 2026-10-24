@@ -317,7 +317,14 @@ PAIRS = [
     # Graph: Median je Verlustklasse auf dem dunkleren Rauch-Band (und damit auch auf hellerem Grund) ≥ 3:1
     ("--ok", "--band", 3.0), ("--loss-low", "--band", 3.0), ("--warn", "--band", 3.0), ("--bad", "--band", 3.0),
     ("--loss-low", "--surface", 3.0),
+    # Gesundheitsbalken der Übersicht: Flächen ≥ 3:1 auf der Karte (WCAG 1.4.11)
+    ("--ok-fill", "--surface", 3.0), ("--warn-fill", "--surface", 3.0), ("--bad-fill", "--surface", 3.0),
+    ("--bar-text", "--bar-bg", 4.5), ("--accent", "--surface-2", 4.5),
+    # Links in Tabellen sind nicht unterstrichen: Linkfarbe hebt sich ≥ 3:1 vom Text ab (WCAG 1.4.1, G183).
+    # Bei „Kontrast erhöht“ sind alle Links unterstrichen, dort gilt das nicht (NORMAL_ONLY).
+    ("--accent", "--text", 3.0),
 ]
+NORMAL_ONLY = {("--accent", "--text")}
 # Badges: Schrift auf 12 % der eigenen Farbe über --surface (siehe .badge.* in app.css)
 BADGES = [("--bad", 0.12), ("--warn", 0.12), ("--report", 0.12), ("--ok", 0.12), ("--text-muted", 0.12)]
 
@@ -379,6 +386,8 @@ class ContrastTest(AppTestCase):
         failures = []
         for theme, t in self.themes().items():
             for fg, bg, minimum in PAIRS:
+                if (fg, bg) in NORMAL_ONLY and "Kontrast" in theme:
+                    continue
                 c = contrast(t[fg], t[bg])
                 if c < minimum:
                     failures.append(f"{theme}: {fg} auf {bg} = {c:.2f}:1 (mind. {minimum}:1)")

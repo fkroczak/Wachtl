@@ -17,6 +17,30 @@
   <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="#ausfaelle"><span class="num">{{ recent_outages|length }}</span><span>Ausfälle (24 h)</span></a>
 </section>
 
+{% if sites %}
+<section class="card health" aria-labelledby="verlauf">
+  <div class="card-head">
+    <h2 id="verlauf">Standorte – letzte 24 Stunden</h2>
+    <span class="muted small">je Balken 30 Minuten · Anteil ohne Störung</span>
+  </div>
+  <ul class="health-list">
+    {% for s in sites %}
+    {% set h = site_health[s.id] %}
+    {% set state = site_state.get(s.id, 'waiting') %}
+    {% if state == 'ok' and site_stats[s.id].problems %}{% set state = 'warn' %}{% endif %}
+    <li class="health-row">
+      <span class="health-name"><span class="dot {{ state }}" aria-hidden="true"></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></span>
+      <span class="healthbar" role="img" aria-label="{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in 24 Stunden{% if h.down_s %}, {{ h.down_s|duration }} gestört{% endif %}{% else %}keine Ausfälle in 24 Stunden{% endif %}">
+        {%- for c in h.cells %}<span class="hb-{{ c }}"></span>{% endfor -%}
+      </span>
+      <span class="health-up">{% if h.up is not none %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% else %}–{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="health-legend" aria-hidden="true"><span><i></i>ohne Ausfall</span><span><i class="hb-warn"></i>einzelnes Ziel / Paketverlust</span><span><i class="hb-down"></i>Probe, Gateway oder WAN gestört</span><span><i class="hb-none"></i>noch nicht überwacht</span></p>
+</section>
+{% endif %}
+
 <h2 id="probleme">Messungen mit Problemen</h2>
 {% if problems or offline %}
 <p class="muted">Alle Messungen, die gerade fehlschlagen, auffällig sind oder ausbleiben – Ping, Pfad, iperf3, WAN und Sprache.</p>
@@ -90,7 +114,7 @@
   <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
 <p class="muted" data-filter-empty role="status" hidden>Kein Standort und keine Probe passt zum Suchbegriff.</p>
 {% endif %}
-<h2>Standorte</h2>
+<h2 id="standorte">Standorte</h2>
 {% if sites %}
 <div class="cards">
   {% for s in sites %}

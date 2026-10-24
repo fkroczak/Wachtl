@@ -36,6 +36,7 @@ def inject():
     return {
         "user": user,
         "open_reports": report_service.count("open") if user else 0,
+        "nav_sites": _nav_sites() if user else None,
         "csrf_token": csrf_token,
         "has_role": has_role,
         "ROLE_LABELS": ROLE_LABELS,
@@ -45,6 +46,40 @@ def inject():
         "report_graph_url": report_graph_url,
         "alert_refs": alert_refs,
     }
+
+
+NAV_SITES_MAX = 15
+SITE_STATE_LABELS = {"down": "gestört", "warn": "auffällig", "ok": "in Ordnung", "waiting": "ohne aktive Probe"}
+
+
+def site_states() -> dict[int, str]:
+    """Zustand je Standort ohne Messdaten-Abfrage (für jede Seite): gestört bei kritischem Alarm oder Probe
+    offline, auffällig bei Warnung, sonst in Ordnung; ohne aktive Probe „waiting“."""
+    states: dict[int, str] = {}
+    for p in q("SELECT site_id, last_seen FROM probes WHERE status = 'active'"):
+        sid = p["site_id"]
+        if not repo.probe_online(p):
+            states[sid] = "down"
+        else:
+            states.setdefault(sid, "ok")
+    for a in q("SELECT severity, labels FROM alert_events WHERE status = 'firing'"):
+        try:
+            sid = int(json.loads(a["labels"] or "{}").get("site") or 0)
+        except (ValueError, TypeError):
+            continue
+        if sid in states and states[sid] != "down":
+            states[sid] = "down" if a["severity"] == "critical" else "warn"
+    return states
+
+
+def _nav_sites() -> dict:
+    """Standorte in der Seitenleiste: zuerst die gestörten, dann alphabetisch; höchstens NAV_SITES_MAX."""
+    states = site_states()
+    order = {"down": 0, "warn": 1, "ok": 2, "waiting": 3}
+    sites = [{"id": s["id"], "name": s["name"], "state": states.get(s["id"], "waiting")}
+             for s in q("SELECT id, name FROM sites ORDER BY name")]
+    sites.sort(key=lambda s: order[s["state"]])
+    return {"items": sites[:NAV_SITES_MAX], "total": len(sites), "labels": SITE_STATE_LABELS}
 
 
 def check_url(probe: dict, check: dict) -> str:
@@ -305,8 +340,11 @@ def overview():
     recent_reports = report_service.search("open", since=since, limit=5)
     client_findings = finding_service.search(since=repo.now() - 86400, limit=20)
     recent_outages = _recent_outages(refine=live_ok)
+    now = repo.now()
+    health = outages.site_health(recent_outages, sites, now - RECENT_OUTAGES_S, now)
     return render_template(
-        "overview.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
+        "overview.html", sites=sites, site_health=health, site_state=site_states(), probes=probes,
+        per_probe=per_probe, site_stats=site_stats,
         client_findings=client_findings, recent_outages=recent_outages, outage_causes=outages.CAUSES,
         alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth, voice=voice,
         KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,

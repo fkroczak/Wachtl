@@ -233,3 +233,35 @@ class RecentOutageTest(AppTestCase):
             probe_html = self.client.get(f"/probes/{pid}").get_data(as_text=True)
             self.assertIn("1 Ausfall in 24 h", probe_html)
             self.assertIn("Ausfall vor", probe_html)
+
+
+class SiteHealthTest(AppTestCase):
+    """Verlauf je Standort (Übersicht): Abschnitte nach schlimmster Ursache, gestörte Zeit ohne Doppelzählung."""
+
+    def test_buckets_and_uptime(self):
+        from wachtl.services.outages import Outage, site_health
+
+        def outage(cause, start, end, site="1"):
+            return Outage(id=0, cause=cause, probe="1", probe_name="p", site=site, site_name="s", target="",
+                          check_id="", start=start, end=end, summary="")
+
+        since, until = 0, 4800                                   # 4 Abschnitte à 1200 s
+        items = [outage("wan", 100, 700), outage("probe", 500, 900),  # überlappend: 800 s gestört
+                 outage("target", 2500, 2600), outage("wan", 0, 4800, site="2")]
+        h = site_health(items, [{"id": 1, "created_at": 0}, {"id": 3, "created_at": 3000}], since, until, buckets=4)
+        self.assertEqual(h[1]["cells"], ["down", "ok", "warn", "ok"])
+        self.assertEqual(h[1]["down_s"], 800)
+        self.assertAlmostEqual(h[1]["up"], 100 * (1 - 800 / 4800))
+        self.assertEqual(h[3]["cells"], ["none", "none", "ok", "ok"])   # erst später angelegt
+        self.assertEqual(h[3]["up"], 100)
+
+    def test_overview_and_sidebar(self):
+        self.enroll("PC-1")
+        self.make_user()
+        self.login()
+        with mock.patch("wachtl.services.vm.live_status", return_value={}):
+            html = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Standorte – letzte 24 Stunden", html)
+        self.assertEqual(html.count('<span class="hb-'), 48)
+        self.assertIn('aria-label="Standorte"', html)                  # Standorte in der Seitenleiste
+        self.assertRegex(html, r'<nav class="side-sites"[\s\S]*href="/sites/1"')

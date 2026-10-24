@@ -238,7 +238,7 @@ class ReportPagesTest(AppTestCase):
         self.assertIn(f"/probes/{self.pid}/checks/", html)       # Link zum Graph …
         self.assertIn(f"at={self.now - 300}", html)              # … um den Zeitpunkt
         # Navigation zeigt die offenen Meldungen barrierefrei
-        self.assertRegex(html, r'aria-current="page">Meldungen <span class="nav-count" aria-hidden="true">1</span>'
+        self.assertRegex(html, r'aria-current="page"><svg[^>]*>.*?</svg>Meldungen <span class="nav-count" aria-hidden="true">1</span>'
                                r'<span class="sr-only"> \(1 offen\)</span>')
         for url in ("/", f"/probes/{self.pid}", "/sites/1"):
             page = self.client.get(url).get_data(as_text=True)
