@@ -127,6 +127,7 @@ Filename: "notepad.exe"; Parameters: """{code:GetDataDir}\setup-info.txt"""; Des
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM wachtl-tray.exe"; Flags: runhidden waituntilterminated; RunOnceId: "StopTray"
 ; ---- Probe: zuerst am Server abmelden (Token wird dort ungültig), dann Dienst, Prozesse und Firewall-Regeln ----
 Filename: "{app}\wachtl-probe.exe"; Parameters: "deregister --out ""{commonappdata}\Wachtl\deregister.ini"""; Flags: runhidden waituntilterminated; RunOnceId: "Deregister"; Check: IsClient
+Filename: "{app}\wachtl-probe.exe"; Parameters: "trust --remove 1"; Flags: runhidden waituntilterminated; RunOnceId: "Untrust"; Check: IsClient
 Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "StopWachtl"; Check: IsClient
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"; Check: IsClient
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -Command ""Get-Process iperf3,wachtl-probe,wachtl-tray -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -like '{app}\*' } | Stop-Process -Force"""; Flags: runhidden waituntilterminated; RunOnceId: "StopProcesses"; Check: IsClient
@@ -1174,6 +1175,27 @@ begin
     ClientOk := True;
 end;
 
+// Server-Zertifikat unter „Vertrauenswürdige Stammzertifizierungsstellen“ ablegen, damit Browser auf dem PC
+// das Web-UI ohne Warnung öffnen. Nur ein Komfort: schlägt es fehl, läuft die Probe trotzdem (sie prüft den Pin).
+procedure TrustServerCertificate();
+var
+  ResultFile: String;
+  Code: Integer;
+begin
+  if EnrollDeferred then
+  begin
+    Log('Wachtl Probe: Server nicht erreichbar – Zertifikat wird beim nächsten Setup oder Update abgelegt.');
+    Exit;
+  end;
+  WizardForm.StatusLabel.Caption := 'Server-Zertifikat wird als vertrauenswürdig hinterlegt …';
+  ResultFile := ExpandConstant('{tmp}	rust.ini');
+  Code := RunProbe(ExpandConstant('{app}\wachtl-probe.exe'), 'trust', ResultFile);
+  if Code = 0 then
+    Log('Wachtl Probe: Zertifikat: ' + ResultValue(ResultFile, 'outcome') + ' ' + ResultValue(ResultFile, 'thumbprint'))
+  else
+    Log('Wachtl Probe: Zertifikat nicht abgelegt (Code ' + IntToStr(Code) + '): ' + ResultValue(ResultFile, 'error'));
+end;
+
 procedure SetupClient();
 begin
   EnrollClient();
@@ -1189,7 +1211,9 @@ begin
   end;
   InstallClientService();
   if not ClientOk then
-    Log('Wachtl Probe: ' + ClientError);
+    Log('Wachtl Probe: ' + ClientError)
+  else
+    TrustServerCertificate();
 end;
 
 // ============================================================ Server einrichten

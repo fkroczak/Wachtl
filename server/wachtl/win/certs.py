@@ -31,6 +31,19 @@ def _san(names: list[str]) -> list[x509.GeneralName]:
     return result
 
 
+def _name_constraints(names: list[str]) -> x509.NameConstraints:
+    """Das Zertifikat liegt auf den PCs als Stammzertifikat. Die Namensbeschränkung sorgt dafür, dass es –
+    selbst wenn der Schlüssel abhandenkäme – nur für die Adressen des Wachtl-Servers gilt, nicht für fremde Seiten."""
+    permitted: list[x509.GeneralName] = []
+    for name in names:
+        if _is_ip(name):
+            ip = ipaddress.ip_address(name)
+            permitted.append(x509.IPAddress(ipaddress.ip_network(f"{ip}/{ip.max_prefixlen}")))
+        else:
+            permitted.append(x509.DNSName(name))
+    return x509.NameConstraints(permitted_subtrees=permitted, excluded_subtrees=None)
+
+
 def load_or_create_key(key_file: Path) -> ec.EllipticCurvePrivateKey:
     if key_file.exists():
         key = serialization.load_pem_private_key(key_file.read_bytes(), password=None)
@@ -70,6 +83,7 @@ def create_certificate(names: list[str], key_file: Path, cert_file: Path, days: 
                                      key_encipherment=False, data_encipherment=False, key_agreement=False,
                                      crl_sign=False, encipher_only=False, decipher_only=False), critical=True)
         .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .add_extension(_name_constraints(names), critical=True)
         .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
         .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(key.public_key()), critical=False)
         .sign(key, hashes.SHA256())
@@ -107,6 +121,10 @@ def needs_renewal(cert_file: Path, names: list[str]) -> str | None:
     want = {str(ipaddress.ip_address(n)) if _is_ip(n) else n for n in names}
     if have != want:
         return "Servernamen haben sich geändert"
+    try:
+        cert.extensions.get_extension_for_class(x509.NameConstraints)
+    except x509.ExtensionNotFound:
+        return "ohne Namensbeschränkung (vor 0.9.3 ausgestellt)"
     return None
 
 

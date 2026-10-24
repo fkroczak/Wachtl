@@ -5,6 +5,10 @@
 
 ## Unveröffentlicht
 
+- **Zertifikat direkt vertrauenswürdig**: Das Setup legt das Server-Zertifikat unter **Vertrauenswürdige Stammzertifizierungsstellen** ab – auf dem Windows-Server (Server-Setup) und auf jedem PC mit Probe (Probe-Setup, nur wenn es zum Pin passt). Browser öffnen Wachtl dort ohne Warnung, eine GPO ist nicht mehr nötig. Die Deinstallation entfernt es wieder. Gilt für Windows- und Linux-Server gleichermaßen.
+- **Namensbeschränkung**: Das Zertifikat gilt nur noch für die Namen und IP-Adressen des Wachtl-Servers. Bestehende Zertifikate werden beim Update einmal neu ausgestellt – gleicher Schlüssel, der Pin der Probes bleibt.
+- **Andere Geräte**: Neue Seite `/zertifikat` (Link auf der Anmeldeseite) zum Herunterladen mit Fingerabdruck und Anleitung für Windows, macOS, iPhone/iPad, Android und Linux.
+
 - **Kurze Ausfälle bleiben sichtbar**: Übersicht und Standort zeigen eine Kachel **Ausfälle (24 h)** und den Abschnitt **Ausfälle der letzten 24 Stunden**. Bisher stand dort nur der aktuelle Zustand – ein Ausfall von 20–30 s war nach wenigen Minuten wieder „ok“ und nirgends mehr auf der Startseite zu sehen. Ein Klick aufs Ziel öffnet den Graphen zum Zeitpunkt des Ausfalls.
 - **Probe-Seite**: Unter „Alle Messungen“ steht bei jedem Check mit Ausfall in den letzten 24 h, wann und wie lange.
 

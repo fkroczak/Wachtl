@@ -40,6 +40,9 @@ if ($Part -eq 'Probe') {
     if (Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Wachtl Tray' -ErrorAction SilentlyContinue) { $problems.Add('Autostart-Eintrag Wachtl Tray') }
     if (Get-Process wachtl-tray -ErrorAction SilentlyContinue | Where-Object Path -like "${env:ProgramFiles}\Wachtl\*") { $problems.Add('wachtl-tray.exe der Probe läuft noch') }
     if (Get-NetTCPConnection -LocalPort 47252 -State Listen -ErrorAction SilentlyContinue) { $problems.Add('Tray-Endpunkt 127.0.0.1:47252 lauscht noch') }
+    if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)') { $problems.Add('Stammzertifikat „Wachtl Server (Probe)“') }
+    # das des Server-Setups auf demselben Rechner bleibt
+    if (-not (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server')) { $problems.Add('Probe-Deinstallation hat das Stammzertifikat des Servers entfernt') }
 
     # Server: CI-PROBE ist abgemeldet, ihr Token ungültig
     $login = Invoke-WebRequest "$base/login" -SkipCertificateCheck -SessionVariable s
@@ -63,6 +66,7 @@ else {
     }
     if (Get-Process python, iperf3, victoria-metrics, vmalert, alertmanager, wachtl-tray -ErrorAction SilentlyContinue |
             Where-Object Path -like "${env:ProgramFiles}\Wachtl Server\*") { $problems.Add('Prozesse aus dem Programmordner laufen noch') }
+    if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server') { $problems.Add('Stammzertifikat „Wachtl Server“') }
     if (Test-Path C:\WachtlData) { $problems.Add('Datenordner C:\WachtlData trotz /REMOVEDATA') }
     if (Test-Path 'HKLM:\Software\Wachtl Server') { $problems.Add('Registry-Schlüssel HKLM\Software\Wachtl Server') }
     if (Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Wachtl Server Tray' -ErrorAction SilentlyContinue) { $problems.Add('Autostart-Eintrag Wachtl Server Tray') }

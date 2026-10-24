@@ -12,6 +12,7 @@
     <label>Passwort <input name="password" type="password" autocomplete="current-password" required></label>
     <button class="primary">Anmelden</button>
   </form>
-  <p class="forgot"><a href="{{ url_for('web.password_forgot') }}">Passwort vergessen?</a></p>
+  <p class="forgot"><a href="{{ url_for('web.password_forgot') }}">Passwort vergessen?</a>
+    · <a href="{{ url_for('web.certificate_help') }}">Zertifikat installieren</a></p>
 </div>
 {% endblock %}

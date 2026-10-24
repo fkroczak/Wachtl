@@ -8,8 +8,9 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
-from flask import (Blueprint, abort, current_app, flash, g, redirect, render_template, request,
+from flask import (Blueprint, Response, abort, current_app, flash, g, redirect, render_template, request,
                    session, url_for)
 
 from . import repo
@@ -219,6 +220,40 @@ def login():
 def password_forgot():
     # Windows-Server läuft ohne Docker direkt unter Windows, Linux-Server im Container
     return render_template("password_forgot.html", windows=os.name == "nt")
+
+
+def _server_certificate():
+    """Server-Zertifikat aus WACHTL_CERT_FILE (Windows: Datenordner, Linux: ./certs per Docker eingebunden)."""
+    from cryptography import x509
+
+    path = current_app.config.get("CERT_FILE") or ""
+    try:
+        return x509.load_pem_x509_certificate(Path(path).read_bytes()) if path else None
+    except (OSError, ValueError) as exc:
+        log.warning("Zertifikat %s nicht lesbar: %s", path, exc)
+        return None
+
+
+@bp.get("/zertifikat")
+def certificate_help():
+    # ohne Anmeldung erreichbar: das Zertifikat ist öffentlich (jeder Browser bekommt es beim Verbindungsaufbau)
+    from cryptography.hazmat.primitives import hashes
+
+    cert = _server_certificate()
+    fingerprint = ":".join(f"{b:02X}" for b in cert.fingerprint(hashes.SHA256())) if cert else None
+    return render_template("certificate.html", cert=cert, fingerprint=fingerprint)
+
+
+@bp.get("/zertifikat/wachtl.crt")
+def certificate_download():
+    from cryptography.hazmat.primitives import serialization
+
+    cert = _server_certificate()
+    if cert is None:
+        abort(404)
+    # DER mit diesem Typ öffnet auf iPhone/iPad und Android direkt die Installation
+    return Response(cert.public_bytes(serialization.Encoding.DER), mimetype="application/x-x509-ca-cert",
+                    headers={"Content-Disposition": 'attachment; filename="wachtl.crt"'})
 
 
 @bp.post("/logout")

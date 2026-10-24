@@ -34,6 +34,7 @@ def create_app(overrides: dict | None = None) -> Flask:
         # lokale IP-Adressen automatisch ergänzen (Windows-Server; im Docker-Container wären es interne Adressen)
         AUTO_IPS=_env("AUTO_IPS", "0") == "1",
         SPKI_PIN=_env("SPKI_PIN", ""),
+        CERT_FILE=_env("CERT_FILE", ""),   # nur zum Herunterladen unter /zertifikat
         PROBE_DIR=_env("PROBE_DIR", ""),
         IPERF_PORT=int(_env("IPERF_PORT", "5201") or 0),
         RTP_PORT=int(_env("RTP_PORT", "5004") or 0),     # RTP-Reflektor für Sprachtests, 0 = aus

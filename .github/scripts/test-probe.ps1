@@ -37,3 +37,23 @@ foreach ($i in 1..12) {
   if ($list -match 'CI-PROBE.*online') { $online = $true; break }
 }
 if (-not $online) { Get-Content C:\ProgramData\Wachtl\logs\*.log -Tail 40; throw 'Probe meldet sich nicht' }
+
+# Zertifikat: Server-Setup hat es schon abgelegt (die Probe lässt es dann stehen). Ohne den Eintrag des Servers
+# legt die Probe es selbst ab – gleicher Fingerabdruck, eigener Anzeigename.
+$store = [System.Security.Cryptography.X509Certificates.X509Store]::new('Root', 'LocalMachine')
+$store.Open('ReadWrite')
+$serverCert = $store.Certificates | Where-Object FriendlyName -eq 'Wachtl Server'
+if (-not $serverCert) { throw 'Stammzertifikat des Server-Setups fehlt' }
+$store.Remove($serverCert)
+& "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" trust
+if ($LASTEXITCODE -ne 0) { throw "wachtl-probe trust fehlgeschlagen ($LASTEXITCODE)" }
+$probeCert = Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)'
+if ($probeCert.Thumbprint -ne $serverCert.Thumbprint) { throw "Probe hat das Zertifikat nicht abgelegt ('$($probeCert.Thumbprint)')" }
+Invoke-WebRequest "$base/healthz" -UseBasicParsing | Out-Null   # ohne -SkipCertificateCheck
+& "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" trust --remove 1
+if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)') { throw 'trust --remove 1 hat nichts entfernt' }
+# Zustand wie nach dem Server-Setup wiederherstellen
+$serverCert.FriendlyName = 'Wachtl Server'
+$store.Add($serverCert)
+$store.Close()
+Write-Host "Probe legt das Stammzertifikat ab und entfernt es wieder"

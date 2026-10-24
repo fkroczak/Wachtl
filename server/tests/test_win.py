@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 import yaml
+from cryptography import x509
 
 from wachtl.win import certs, host, installer, serve, winsys
 from wachtl.win.layout import Layout, read_env, write_env
@@ -59,6 +60,28 @@ class CertTest(TempDirTest):
                              capture_output=True, text=True).stdout
         self.assertIn("DNS:wachtl.kunde.local", san)
         self.assertIn("IP Address:10.0.0.6", san)
+
+    def test_name_constraints_limit_certificate_to_server(self):
+        key, crt = self.data / "k.pem", self.data / "c.pem"
+        certs.create_certificate(["wachtl.kunde.local", "10.0.0.5"], key, crt)
+        nc = certs.load_certificate(crt).extensions.get_extension_for_class(x509.NameConstraints)
+        self.assertTrue(nc.critical)
+        self.assertEqual({str(n.value) for n in nc.value.permitted_subtrees}, {"wachtl.kunde.local", "10.0.0.5/32"})
+        self.assertIsNone(nc.value.excluded_subtrees)
+
+    def test_certificate_without_name_constraints_is_reissued_with_same_pin(self):
+        key, crt = self.data / "k.pem", self.data / "c.pem"
+        certs.load_or_create_key(key)
+        # Zertifikat wie vor 0.9.3: ohne Namensbeschränkung
+        subprocess.run(["openssl", "req", "-new", "-x509", "-key", str(key), "-out", str(crt), "-days", "3650",
+                        "-subj", "/CN=a.local/O=Wachtl", "-addext", "subjectAltName=DNS:a.local"],
+                       check=True, capture_output=True)
+        pin = certs.spki_pin(crt)
+        self.assertIn("Namensbeschränkung", certs.needs_renewal(crt, ["a.local"]))
+        pin2, reason = certs.ensure_certificate(["a.local"], key, crt)
+        self.assertIsNotNone(reason)
+        self.assertEqual(pin, pin2)
+        self.assertIsNone(certs.needs_renewal(crt, ["a.local"]))
 
     def test_short_validity_triggers_renewal(self):
         key, crt = self.data / "k.pem", self.data / "c.pem"
@@ -131,6 +154,11 @@ class InstallerTest(InstallBase):
         self.assertTrue(any("localport=8080" in c for c in flat))
         self.assertTrue(any(c.startswith("schtasks /Create") and "backup" in c for c in flat))
         self.assertIn(result["pin"], Path(result["info_file"]).read_text(encoding="utf-8"))
+        # Zertifikat unter „Vertrauenswürdige Stammzertifizierungsstellen“ (Computer)
+        trust = [c for c in run.calls if c[0] == "powershell.exe" and "X509Store('Root','LocalMachine')" in c[-1]]
+        self.assertEqual(len(trust), 1)
+        self.assertIn(str(layout.cert_file), trust[0][-1])
+        self.assertIn("$s.Add($c)", trust[0][-1])
 
     def test_reinstall_keeps_secrets_and_pin_and_resets_password(self):
         first, _ = self.do_install()
@@ -155,6 +183,8 @@ class InstallerTest(InstallBase):
         # auch Regeln, die Windows selbst für die Programme angelegt hat
         self.assertTrue(any("name=all" in c and "program=" in c and "python" in c for c in flat))
         self.assertTrue(any("schtasks /Delete" in c for c in flat))
+        self.assertTrue(any("X509Store('Root','LocalMachine')" in c and "$s.Remove($o)" in c and "$s.Add" not in c
+                            for c in flat))
 
     def test_uninstall_reports_leftovers(self):
         self.do_install()
