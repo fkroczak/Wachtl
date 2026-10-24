@@ -210,7 +210,13 @@ class PageSemanticsTest(AppTestCase):
         return ["/", "/sites/1", f"/probes/{pid}", f"/probes/{pid}/checks/1", f"/probes/{pid}/path/{self.path}",
                 f"/probes/{pid}/path/{self.path}/hop/1", f"/probes/{pid}/bandwidth/{self.wan}", "/alerts", "/outages",
                 "/admin", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
-                f"/probes/{pid}/checks/1?at={repo.now() - 600}"] + [f"/admin/checks/new/{t}" for t in checktypes.TYPES]
+                f"/probes/{pid}/checks/1?at={repo.now() - 600}", "/standorte", "/hinweise"] \
+            + [f"/admin/checks/new/{t}" for t in checktypes.TYPES] \
+            + [f"/probes?tab={t}" for t in ("probleme", "alle", "bandbreite", "sprache")] \
+            + [f"/admin?tab={t}" for t in ("standardpaket", "checks", "messung", "alarme", "benachrichtigungen",
+                                           "benutzer")] \
+            + [f"/sites/1?tab={t}" for t in ("ereignisse", "meldungen", "messungen")] \
+            + [f"/probes/{pid}?tab={t}" for t in ("ping", "bandbreite", "meldungen", "alarme", "details")]
 
     def test_all_pages_pass_lint(self):
         failures = {}

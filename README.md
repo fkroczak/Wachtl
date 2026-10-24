@@ -28,7 +28,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Alarme | Probe offline, Ziel nicht erreichbar (3 Fehler in Folge), WAN gestört, Paketverlust, Latenz; Bestätigen = Stummschalten; Historie |
 | Betrieb | Linux: `setup.sh`, `backup.sh`/`restore.sh` · Windows: Setup-Assistent, `wachtl-server.cmd` |
 | Installation | Ein Setup `WachtlSetup` für Probe (Standard) und Server. Im Web-UI „Setup herunterladen“: alle Server-Adressen (Name und IP), Pin und Token eingebaut – auf dem PC nur „Installieren“. Ausweichen auf die IP, wenn ein Name nicht auflösbar ist; Anmeldung wird nachgeholt, wenn der Server bei der Installation nicht erreichbar ist |
-| Marke | Flaches Logo mit Wachtel-Umriss (Wachtelbraun/Ocker), Quelle `brand/render.py`; Oberfläche neutral grau mit gedämpftem Blau als Akzent |
+| Marke | Flaches Logo mit Wachtel-Umriss (Wachtelbraun/Ocker), Quelle `brand/render.py`; Oberfläche im UniFi-Stil: Seitenleiste, helles Grau, weiße Karten, kräftiges Blau als Akzent |
 | Benachrichtigungen | E-Mail und Teams im Web-UI einstellbar, mit Testnachricht |
 | Pfade (0.3) | Traceroute + Dauerpings auf jeden Hop, MTR-Tabelle mit Bewertung (echter Verlust vs. ICMP-Drosselung, Latenzsprung), Pfadverlauf, Alarm bei Pfadwechsel |
 | Bandbreite (0.3) | iperf3 Probe ↔ Server und Probe ↔ Probe (TCP/UDP), WAN per HTTP oder iperf3; Zeitplan, Zeitfenster, Wochentage, „Jetzt messen“, Schwellwert-Alarm |

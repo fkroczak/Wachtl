@@ -93,11 +93,12 @@ class CheckStatusTest(AppTestCase):
             self.assertIn("Zeitlimit erreicht", html)
             self.assertIn("noch kein Traceroute-Ergebnis", html)
             self.assertIn(f"/probes/{self.pid}/bandwidth/{self.wan}", html)
-            self.assertIn("Checks ok / auffällig / gestört / keine Daten", html)
+            self.assertIn("Checks ok / auffällig / gestört / keine Daten",
+                          self.client.get("/probes?tab=alle").get_data(as_text=True))
             probe_html = self.client.get(f"/probes/{self.pid}").get_data(as_text=True)
             self.assertIn("Alle Messungen", probe_html)
             self.assertIn("Zeitlimit erreicht", probe_html)
-            site_html = self.client.get("/sites/1").get_data(as_text=True)
+            site_html = self.client.get("/sites/1?tab=messungen").get_data(as_text=True)
             self.assertIn("Pfad", site_html)
             self.assertIn("WAN", site_html)
 
@@ -130,7 +131,7 @@ class StandardPackageTest(AppTestCase):
         n = q1("SELECT COUNT(*) AS n FROM checks")["n"]
         self.client.post("/admin/standard-package", data={"csrf_token": tok, "scope": "all", "items": keys})
         self.assertEqual(q1("SELECT COUNT(*) AS n FROM checks")["n"], n)
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?tab=standardpaket").get_data(as_text=True)
         self.assertIn("schon vorhanden", html)
         # alle angelegten Checks sind gültig für die Probe-Konfiguration
         probe = self.enroll("PC-02")
@@ -174,7 +175,7 @@ class DeregisterTest(AppTestCase):
         self.client.post(f"/probes/{probe['probe_id']}/status", data={"csrf_token": self.session_csrf(),
                                                                        "action": "enable"})
         self.assertEqual(q1("SELECT status FROM probes WHERE id = ?", (probe["probe_id"],))["status"], "disabled")
-        html = self.client.get(f"/probes/{probe['probe_id']}").get_data(as_text=True)
+        html = self.client.get(f"/probes/{probe['probe_id']}?tab=details").get_data(as_text=True)
         self.assertIn("deinstalliert am", html)
         self.assertNotIn('value="enable"', html)   # kein Aktivieren-Knopf, der nur scheitern kann
         token = self.make_token(site, token="neu")
@@ -227,7 +228,7 @@ class RecentOutageTest(AppTestCase):
             self.assertIn("Ausfälle der letzten 24 Stunden", html)
             self.assertIn("185.87.179.244", html)
             self.assertIn(f"/probes/{pid}/checks/{cid}?at={now - 600}", html)
-            site_html = self.client.get("/sites/1").get_data(as_text=True)
+            site_html = self.client.get("/sites/1?tab=ereignisse").get_data(as_text=True)
             self.assertIn("Ausfälle der letzten 24 Stunden", site_html)
             self.assertIn("185.87.179.244", site_html)
             probe_html = self.client.get(f"/probes/{pid}").get_data(as_text=True)
