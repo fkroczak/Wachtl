@@ -55,8 +55,10 @@
 </ul>
 
 {% if chart_reports %}
-<h2 id="meldungen">Störungsmeldungen dieser Probe</h2>
+<details id="meldungen" class="fold">
+<summary><h2>Störungsmeldungen dieser Probe <span class="tab-count">{{ chart_reports|length }}</span></h2></summary>
 <p class="muted">Im Graph als senkrechte Markierung zum gemeldeten Zeitpunkt. Die neuesten Meldungen der letzten 30 Tage:</p>
 {{ report_table(chart_reports, show_probe=False) }}
+</details>
 {% endif %}
 {% endblock %}

@@ -4,51 +4,16 @@
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links, check_target, onoff, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
+{% from "_tabs.html" import tabs as tabnav %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
 <h1>{{ probe.hostname }}{% if probe.kind == 'server' %} <span class="badge info">Wachtl-Server</span>{% endif %}</h1>
+{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.probe', probe_id=probe.id, tab=key))) %}{% endfor %}
+{{ tabnav(tab_items, tab) }}
 
-<section class="cards">
-  <div class="card kv">
-    <dl>
-      <dt>Status</dt><dd>
-        {{ probe_state(probe) }}{% if probe.deregistered_at %} am {{ probe.deregistered_at|dt }} (abgemeldet){% endif %}</dd>
-      <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
-      <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
-      <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
-      <dt>Gegenstelle</dt><dd>{{ onoff(probe.iperf_server) }}{{ (' iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server }}</dd>
-      <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
-      <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
-      <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>
-      <dt>Puffer (nicht gesendet)</dt><dd>{{ probe.buffer_items or 0 }} Werte</dd>
-      <dt>Registriert</dt><dd>{{ probe.created_at|dt }}</dd>
-    </dl>
-  </div>
-</section>
-
-{% if has_role(user, 'admin') %}
-<div class="actions">
-  {% if probe.deregistered_at %}
-  <p class="muted">Deinstalliert – zum erneuten Messen das Setup auf dem PC neu installieren.</p>
-  {% else %}
-  <form method="post" action="{{ url_for('web.probe_status', probe_id=probe.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    {% if probe.status == 'active' %}
-      <button name="action" value="disable" data-confirm="Probe deaktivieren? Ihr Token wird sofort abgelehnt.">Deaktivieren</button>
-    {% else %}
-      <button name="action" value="enable">Aktivieren</button>
-    {% endif %}
-  </form>
-  {% endif %}
-  <form method="post" action="{{ url_for('web.probe_delete', probe_id=probe.id) }}" class="inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="danger" data-confirm="Probe {{ probe.hostname }} endgültig löschen?">Löschen</button>
-  </form>
-</div>
-{% endif %}
-
-<h2 id="messungen">Alle Messungen</h2>
+{% if tab == 'messungen' %}
+<h2 id="messungen" class="sr-only">Alle Messungen</h2>
 {% if not probe_online(probe) and probe.status == 'active' %}<div class="flash error">Die Probe ist offline – ihre Messungen laufen gerade nicht.</div>{% endif %}
 {% if states %}
 <p class="muted"><span class="ok-t">{{ state_counts.ok }} ok</span> · <span class="warn-t">{{ state_counts.warn }} auffällig</span> ·
@@ -78,7 +43,7 @@
     </tr>
   {% endfor %}</tbody>
 </table>
-{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.admin') }}#standardpaket">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
+{% else %}<p class="muted">Dieser Probe sind keine Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ admin_url('standardpaket') }}">Standardpaket anlegen</a>{% endif %}</p>{% endif %}
 
 {% if excluded_checks %}
 <div class="muted excluded">Für diese Probe entfernt:
@@ -89,6 +54,7 @@
   </form>{% endif %}{% endfor %}</div>
 {% endif %}
 
+{% elif tab == 'ping' %}
 <h2>Dauerpings</h2>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
 <table>
@@ -130,6 +96,7 @@
 </table>
 {% else %}<p class="muted">Keine Pfad-Checks zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='path') }}">Pfad-Check anlegen</a>{% endif %}</p>{% endif %}
 
+{% elif tab == 'bandbreite' %}
 <h2>Bandbreite</h2>
 {% if bandwidth %}
 <table>
@@ -183,6 +150,71 @@
 </table>
 {% else %}<p class="muted">Keine Sprachtests zugewiesen. {% if has_role(user, 'admin') %}<a href="{{ url_for('web.check_new', ctype='rtp') }}">Sprachtest anlegen</a>.{% endif %}</p>{% endif %}
 
+{% elif tab == 'meldungen' %}
+<h2 id="hinweise">Hinweise dieses PCs</h2>
+{% if client_findings %}
+<p class="muted">Was die Probe auf diesem PC erkannt hat – der Benutzer sieht dasselbe als Sprechblase. Aktive und die der letzten 30 Tage.</p>
+{{ findings_table(client_findings, show_probe=False) }}
+{% else %}<p class="muted">Die Probe hat an Netzwerkkarte, Kabel und Treiber dieses PCs nichts Auffälliges erkannt.</p>{% endif %}
+
+<h2 id="meldungen">Störungsmeldungen</h2>
+{% if reports %}
+<p class="muted">Was Benutzer an diesem PC gemeldet haben. <a href="{{ url_for('web.reports_view', status='all', probe=probe.id) }}">Alle Meldungen dieser Probe</a></p>
+{{ report_table(reports, show_probe=False) }}
+{% else %}<p class="muted">Von diesem PC gibt es keine Meldungen.</p>{% endif %}
+
+{% elif tab == 'alarme' %}
+<h2 class="sr-only">Letzte Alarme</h2>
+{% if alerts %}
+<table>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Ende</th></tr></thead>
+  <tbody>{% for a in alerts %}
+    <tr><td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td><td>{{ a.summary or a.alertname }}{% set refs = alert_links(a, False) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
+      <td>{{ a.starts_at|dt }}</td><td>{{ a.ends_at|dt if a.ends_at else 'aktiv' }}</td></tr>
+  {% endfor %}</tbody>
+</table>
+{% else %}<p class="muted">Keine Alarme für diese Probe.</p>{% endif %}
+{% else %}
+<h2 class="sr-only">Details</h2>
+<section class="cards">
+  <div class="card kv">
+    <dl>
+      <dt>Status</dt><dd>
+        {{ probe_state(probe) }}{% if probe.deregistered_at %} am {{ probe.deregistered_at|dt }} (abgemeldet){% endif %}</dd>
+      <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
+      <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
+      <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
+      <dt>Gegenstelle</dt><dd>{{ onoff(probe.iperf_server) }}{{ (' iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server }}</dd>
+      <dt>Version</dt><dd>{{ probe.version or '–' }}</dd>
+      <dt>Betriebssystem</dt><dd>{{ probe.os or '–' }}</dd>
+      <dt>Laufzeit Dienst</dt><dd>{{ ((probe.uptime_s or 0) // 3600) }} h</dd>
+      <dt>Puffer (nicht gesendet)</dt><dd>{{ probe.buffer_items or 0 }} Werte</dd>
+      <dt>Registriert</dt><dd>{{ probe.created_at|dt }}</dd>
+    </dl>
+  </div>
+</section>
+
+{% if has_role(user, 'admin') %}
+<div class="actions">
+  {% if probe.deregistered_at %}
+  <p class="muted">Deinstalliert – zum erneuten Messen das Setup auf dem PC neu installieren.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('web.probe_status', probe_id=probe.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if probe.status == 'active' %}
+      <button name="action" value="disable" data-confirm="Probe deaktivieren? Ihr Token wird sofort abgelehnt.">Deaktivieren</button>
+    {% else %}
+      <button name="action" value="enable">Aktivieren</button>
+    {% endif %}
+  </form>
+  {% endif %}
+  <form method="post" action="{{ url_for('web.probe_delete', probe_id=probe.id) }}" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="danger" data-confirm="Probe {{ probe.hostname }} endgültig löschen?">Löschen</button>
+  </form>
+</div>
+{% endif %}
+
 {% if has_role(user, 'admin') %}
 <h2 id="einstellungen">Einstellungen dieser Probe</h2>
 <form method="post" action="{{ url_for('web.probe_settings', probe_id=probe.id) }}" class="settings-form">
@@ -207,26 +239,5 @@
 </form>
 {% endif %}
 
-<h2 id="hinweise">Hinweise dieses PCs</h2>
-{% if client_findings %}
-<p class="muted">Was die Probe auf diesem PC erkannt hat – der Benutzer sieht dasselbe als Sprechblase. Aktive und die der letzten 30 Tage.</p>
-{{ findings_table(client_findings, show_probe=False) }}
-{% else %}<p class="muted">Die Probe hat an Netzwerkkarte, Kabel und Treiber dieses PCs nichts Auffälliges erkannt.</p>{% endif %}
-
-<h2 id="meldungen">Störungsmeldungen</h2>
-{% if reports %}
-<p class="muted">Was Benutzer an diesem PC gemeldet haben. <a href="{{ url_for('web.reports_view', status='all', probe=probe.id) }}">Alle Meldungen dieser Probe</a></p>
-{{ report_table(reports, show_probe=False) }}
-{% else %}<p class="muted">Von diesem PC gibt es keine Meldungen.</p>{% endif %}
-
-<h2>Letzte Alarme</h2>
-{% if alerts %}
-<table>
-  <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Ende</th></tr></thead>
-  <tbody>{% for a in alerts %}
-    <tr><td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td><td>{{ a.summary or a.alertname }}{% set refs = alert_links(a, False) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
-      <td>{{ a.starts_at|dt }}</td><td>{{ a.ends_at|dt if a.ends_at else 'aktiv' }}</td></tr>
-  {% endfor %}</tbody>
-</table>
-{% else %}<p class="muted">Keine Alarme für diese Probe.</p>{% endif %}
+{% endif %}
 {% endblock %}

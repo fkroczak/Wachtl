@@ -4,12 +4,13 @@
 {% from "_links.html" import check_target, onoff with context %}
 {% block content %}
 <h1>Verwaltung</h1>
+<nav class="tabs" aria-label="Bereiche der Verwaltung">
+  {%- for key, text in tabs.items() %}<a href="{{ url_for('web.admin', tab=key) }}"{% if key == tab %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
+  <a href="{{ url_for('web.audit') }}">Audit-Log</a>
+</nav>
+{% if tab == 'standorte' %}
 <p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
   <span class="muted small">Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten – mit Standards vorbelegt.</span></p>
-<nav class="subnav" aria-label="Abschnitte der Verwaltung">
-  <a href="#standorte">Standorte</a><a href="#enrollment">Probes registrieren</a><a href="#standardpaket">Standardpaket</a><a href="#checks">Checks</a><a href="#messung">Messung</a>
-  <a href="#alarme">Alarmregeln</a><a href="#benachrichtigungen">Benachrichtigungen</a><a href="#benutzer">Benutzer</a><a href="{{ url_for('web.audit') }}">Audit-Log</a>
-</nav>
 
 <section id="standorte">
   <h2>Standorte</h2>
@@ -65,7 +66,9 @@
     <button name="action" value="token" {{ 'disabled' if not sites }}>Nur Token anzeigen</button>
   </form>
 </section>
+{% endif %}
 
+{% if tab == 'standardpaket' %}
 <section id="standardpaket">
   <h2>Standardpaket</h2>
   <p class="muted">Fertige Checks für einen neuen Kunden: anhaken, Zuweisung wählen, anlegen – fertig. Danach nur noch die Probes installieren.
@@ -113,7 +116,9 @@
     <button class="primary">Standardpaket anlegen</button>
   </form>
 </section>
+{% endif %}
 
+{% if tab == 'checks' %}
 <section id="checks">
   <h2>Checks</h2>
   <p class="muted">Was die Probes messen. Ziel <code>gateway</code> steht für das Default-Gateway, das jede Probe selbst ermittelt.
@@ -142,7 +147,9 @@
     {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
+{% endif %}
 
+{% if tab == 'messung' %}
 <section id="messung">
   <h2>Messung</h2>
   <p class="muted">Allgemeine Einstellungen für alle Probes. Was gemessen wird, steht in den Checks; ob eine Probe iperf3-Gegenstelle ist, auf der Seite der Probe.</p>
@@ -166,7 +173,9 @@
     <button class="primary">Messeinstellungen speichern</button>
   </form>
 </section>
+{% endif %}
 
+{% if tab == 'alarme' %}
 <section id="alarme">
   <h2>Alarmregeln</h2>
   <form method="post" action="{{ url_for('web.rules_update') }}">
@@ -188,7 +197,9 @@
     <button class="primary">Alarmregeln speichern</button>
   </form>
 </section>
+{% endif %}
 
+{% if tab == 'benachrichtigungen' %}
 <section id="benachrichtigungen">
   <h2>Benachrichtigungen</h2>
   {% if not notify_enabled %}<div class="flash error">Alertmanager-Datei ist nicht konfiguriert (WACHTL_AM_CONFIG).</div>{% endif %}
@@ -213,7 +224,9 @@
     <button {{ 'disabled' if not (n.email_to or n.teams_webhook_url) }}>Testnachricht senden</button>
   </form>
 </section>
+{% endif %}
 
+{% if tab == 'benutzer' %}
 <section id="benutzer">
   <h2>Benutzer</h2>
   <div class="scroll"><table>
@@ -239,4 +252,5 @@
     <button class="primary">Benutzer anlegen</button>
   </form>
 </section>
+{% endif %}
 {% endblock %}

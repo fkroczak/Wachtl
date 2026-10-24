@@ -13,6 +13,14 @@ const PASSWORD = process.env.WACHTL_E2E_PASSWORD || "e2e-admin-passwort";
 // [Name, Pfad] – Navigation, Dashboards, Detailseiten, Formulare
 const PAGES = [
   ["Übersicht", "/"],
+  ["Standorte", "/standorte"],
+  ["Probes", "/probes?tab=alle"],
+  ["Probes: Bandbreite", "/probes?tab=bandbreite"],
+  ["Hinweise", "/hinweise"],
+  ["Standort: Alle Messungen", `/sites/${ids.site}?tab=messungen`],
+  ["Probe: Details", `/probes/${ids.probe}?tab=details`],
+  ["Verwaltung: Checks", "/admin?tab=checks"],
+  ["Verwaltung: Messung", "/admin?tab=messung"],
   ["Standort", `/sites/${ids.site}`],
   ["Probe", `/probes/${ids.probe}`],
   ["Ziel (Graph)", `/probes/${ids.probe}/checks/${ids.ping_check}`],

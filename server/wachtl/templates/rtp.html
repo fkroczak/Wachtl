@@ -71,8 +71,9 @@
     in einer Richtung zeigen meist eine volle Leitung ohne Priorisierung (oft der Upload).</p>
 </details>
 
-<h2>Tests <span class="muted small">(die letzten 50, alle per API /api/v1/probes/…/rtp)</span></h2>
-<table>
+<details class="fold">
+<summary><h2>Tests <span class="tab-count">{{ runs|length }}</span> <span class="muted small">(die letzten 50, alle per API /api/v1/probes/…/rtp)</span></h2></summary>
+<div class="scroll"><table>
   <thead><tr><th>Zeit</th><th>MOS</th><th>Laufzeit</th><th>Verlust ↑</th><th>Verlust ↓</th><th>Jitter ↑</th><th>Jitter ↓</th><th>Pakete</th><th>Auslöser</th></tr></thead>
   <tbody>{% for r in runs %}
     <tr>
@@ -96,5 +97,6 @@
       <td>{{ 'manuell' if r.trigger == 'manual' else 'Zeitplan' }}</td>
     </tr>
   {% else %}<tr><td colspan="9" class="muted">Noch keine Tests.</td></tr>{% endfor %}</tbody>
-</table>
+</table></div>
+</details>
 {% endblock %}

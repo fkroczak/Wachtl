@@ -1,0 +1,6 @@
+{#- Reiter einer Seite: jeder Reiter eine eigene Adresse, damit Links, Zurück und Speichern weiter funktionieren -#}
+{% macro tabs(items, current, label='Bereiche') -%}
+<nav class="tabs" aria-label="{{ label }}">
+  {%- for key, text, url in items %}<a href="{{ url }}"{% if key == current %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
+</nav>
+{%- endmacro %}
