@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Standorte{% endblock %}
+{% from "_health.html" import healthbar, uptime, legend with context %}
+{% block content %}
+<div data-autorefresh="30" hidden></div>
+<h1>Standorte</h1>
+{% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
+{% if sites %}
+{% if sites|length > 1 %}
+<p class="filter"><label for="filter">Standort suchen</label>
+  <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
+<p class="muted" data-filter-empty role="status" hidden>Kein Standort passt zum Suchbegriff.</p>
+{% endif %}
+<ul class="cards site-tiles">
+  {% for s in sites %}
+  {% set st = site_stats[s.id] %}{% set h = site_health[s.id] %}{% set state = site_state.get(s.id, 'waiting') %}
+  <li class="card site-tile {{ state }}" data-filter-item="{{ s.customer_no or '' }}">
+    <h2><span class="dot {{ state }}" aria-hidden="true"></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></h2>
+    {% if s.customer_no %}<p class="muted small">Kd.-Nr. {{ s.customer_no }}</p>{% endif %}
+    {{ healthbar(s, h) }}
+    <p class="tile-scale muted small" aria-hidden="true"><span>vor 24 h</span><span>{{ uptime(h) }} ohne Störung</span><span>jetzt</span></p>
+    <dl class="tile-kv">
+      <div><dt>Probes online</dt><dd>{{ st.online }} / {{ st.probes }}</dd></div>
+      <div><dt>Probleme</dt><dd class="{{ 'down-t' if st.problems }}">{{ st.problems }}</dd></div>
+      <div><dt>Ausfälle 24 h</dt><dd>{{ h.count }}</dd></div>
+    </dl>
+  </li>
+  {% endfor %}
+</ul>
+{{ legend() }}
+{% else %}<p class="muted">Noch keine Standorte. {% if has_role(user,'admin') %}<a href="{{ url_for('web.setup_wizard') }}">Geführt einrichten</a>{% endif %}</p>{% endif %}
+{% endblock %}

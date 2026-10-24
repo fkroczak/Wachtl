@@ -31,9 +31,9 @@ module.exports = {
         "largest-contentful-paint": ["error", { maxNumericValue: 2000, aggregationMethod: "median" }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.05, aggregationMethod: "median" }],
         "total-blocking-time": ["error", { maxNumericValue: 200, aggregationMethod: "median" }],
-        "total-byte-weight": ["error", { maxNumericValue: 160 * 1024, aggregationMethod: "median" }],  // Audit 2026-10-21: Graph-Seite mit 1 h Demodaten ~152 KB
+        "total-byte-weight": ["error", { maxNumericValue: 170 * 1024, aggregationMethod: "median" }],  // 0.10: Graph-Seite ~161 KB (+8 KB CSS)
         "resource-summary:script:size": ["error", { maxNumericValue: 30 * 1024 }],
-        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 26 * 1024 }],  // Audit 2026-10-21: Touch-Ziele, Ein/Aus, Suche
+        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 36 * 1024 }],  // 0.10: UniFi-Design, Seitenleiste, Reiter (~33 KB)
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
         // nur Warnung
         "first-contentful-paint": ["warn", { maxNumericValue: 1500, aggregationMethod: "median" }],

@@ -63,7 +63,7 @@
   <fieldset class="card">
     <legend><h2>3 · Alarmierung</h2></legend>
     <p class="muted small">Wer soll erfahren, wenn ein Standort, das Internet oder ein Ziel ausfällt? Leer lassen = keine Benachrichtigung.
-      SMTP-Benutzer und -Passwort stehen unter <a href="{{ url_for('web.admin') }}#benachrichtigungen">Verwaltung › Benachrichtigungen</a>.</p>
+      SMTP-Benutzer und -Passwort stehen unter <a href="{{ admin_url('benachrichtigungen') }}">Verwaltung › Benachrichtigungen</a>.</p>
     <div class="grid-form">
       {% call(attrs) field("email_to", "E-Mail an", help="Mehrere Empfänger mit Komma trennen.", error=field_errors.email_to) %}
         <input name="email_to" maxlength="500" value="{{ f.get('email_to', n.email_to) }}" placeholder="it@kunde.de" {{ attrs }}>
@@ -80,7 +80,7 @@
     </div>
     {% if rules %}
     <p class="small">Aktive Alarmregeln (Standard): {% for r in rules %}{{ r.name }}{{ ', ' if not loop.last }}{% endfor %}.
-      <a href="{{ url_for('web.admin') }}#alarme">Schwellwerte ändern</a></p>
+      <a href="{{ admin_url('alarme') }}">Schwellwerte ändern</a></p>
     {% endif %}
   </fieldset>
 
