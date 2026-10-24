@@ -34,9 +34,10 @@
   --radius-sm: 8px;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.04);
   font-family: Inter, "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
-  font-size: 14px;
+  font-size: 15px;   /* schmal ≥ 15 px, damit auch .small am Handy ≥ 12 px bleibt (Lighthouse font-size) */
   color-scheme: light dark;
 }
+@media (min-width: 901px) { :root { font-size: 14px; } }  /* breit: dichter wie UniFi */
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
 /* Kontrast „Erhöht“: Text ≥ 7:1 */
