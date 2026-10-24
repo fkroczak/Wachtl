@@ -53,7 +53,9 @@ Invoke-WebRequest "$base/healthz" -UseBasicParsing | Out-Null   # ohne -SkipCert
 & "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" trust --remove 1
 if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)') { throw 'trust --remove 1 hat nichts entfernt' }
 # Zustand wie nach dem Server-Setup wiederherstellen
-$serverCert.FriendlyName = 'Wachtl Server'
-$store.Add($serverCert)
+# frische Kopie: das Objekt aus dem Speicher hängt nach Remove() an keinem Eintrag mehr
+$restore = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($serverCert.RawData)
+$restore.FriendlyName = 'Wachtl Server'
+$store.Add($restore)
 $store.Close()
 Write-Host "Probe legt das Stammzertifikat ab und entfernt es wieder"
