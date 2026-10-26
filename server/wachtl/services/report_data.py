@@ -211,13 +211,18 @@ def cluster(items: list[dict], gap: int = CLUSTER_GAP_S) -> list[dict]:
         probes = sorted({m["probe_name"] for m in members if m["probe"]})
         targets = sorted({m["target"] for m in members if m["target"] and m["cause"] not in ("probe", "wan")})
         causes = sorted({m["cause"] for m in members}, key=lambda c: -outages.PRIORITY[c])
+        # Dauer = Zeit ohne Verbindung (Vereinigung), nicht die Spanne: zwei 5-s-Aussetzer mit 50 s Abstand
+        # bleiben zwei kurze Aussetzer und werden nicht zu einer 60-s-Störung
+        down = union((m["start"], m["start"] + m["duration"]) for m in members)
+        ongoing = any(m["ongoing"] for m in members)
         incidents.append({
             "site": primary["site"], "site_name": primary["site_name"], "cause": primary["cause"],
             "cause_label": primary["cause_label"], "causes": causes,
             "cause_labels": [outages.CAUSES[c][0] for c in causes],
-            "start": start, "end": None if any(m["ongoing"] for m in members) else end,
-            "ongoing": any(m["ongoing"] for m in members), "duration": end - start,
-            "short": end - start < SHORT_S and not any(m["ongoing"] for m in members),
+            "start": start, "end": None if ongoing else end, "ongoing": ongoing,
+            "duration": total(down), "span": end - start, "parts": len(down),
+            "longest_part": max((b - a for a, b in down), default=0),
+            "short": not ongoing and max((b - a for a, b in down), default=0) < SHORT_S,
             "probes": probes, "probe_ids": sorted({m["probe"] for m in members if m["probe"]}),
             "targets": targets, "members": members,
             "consequences": sum(1 for m in members if m["consequence_of"]),
@@ -405,15 +410,18 @@ def quality(probes: list[dict], since: int, until: int, incidents: list[dict], s
         def merged(entries: list[dict], how=None) -> dict:
             keys = {k for e in entries for k in e["series"]}
             return {k: _combine([e["series"].get(k, []) for e in entries],
-                                how=max if k in ("max", "loss_max", "p90") and how is None else how) for k in keys}
+                                # Verlust gemittelt: eine einzelne gedrosselte Referenz ist noch kein Leitungsproblem
+                                how=max if k in ("max", "p90") and how is None else how) for k in keys}
 
         gateway = merged(gw_entries) if gw_entries else None
         internet = merged(ref_entries) if ref_entries else None
-        anomalies = detect_anomalies(p, internet, gateway, step, incidents) if internet else []
+        found = detect_anomalies(p, internet, gateway, step, incidents) if internet else []
+        # Verlust nur während eines Ausfalls steht schon in der Störungsliste
+        anomalies = [a for a in found if not (a["during_outage"] and a["kinds"] == ["loss"])]
         out.append({
             "probe_id": p["id"], "probe_name": p["hostname"], "site_name": p["site_name"], "step": step,
             "since": since, "until": until, "gateway": gateway, "internet": internet, "checks": checks,
-            "anomalies": anomalies,
+            "anomalies": anomalies, "outage_loss_periods": len(found) - len(anomalies),
             "gateway_stats": _check_stats({"series": gateway}, step) if gateway else None,
             "internet_stats": _check_stats({"series": internet}, step) if internet else None,
         })
@@ -470,7 +478,8 @@ def paths(probe_ids: list[int], since: int, until: int, state: dict) -> list[dic
         analysis = pathanalysis.analyze(rows, pr["target"] or "")
         for r in rows:
             r["mark"] = analysis.hop_marks.get(r["hop"], "")
-        origin = next((f for f in analysis.findings if f.level in ("warn", "bad") and f.hop and "verlust" in f.text.lower()),
+        origin = next((f for f in analysis.findings
+                       if f.level in ("warn", "bad") and f.hop and "verlust" in f.text.lower()),
                       None)
         origin_row = next((r for r in rows if origin and r["hop"] == origin.hop), None)
         out.append({
@@ -600,6 +609,9 @@ def netscan_section(site_id: int | None, since: int, until: int, state: dict) ->
 
 
 # -- Tagesübersicht und Uhrzeiten ----------------------------------------------------
+WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+
 def daily(incidents: list[dict], down: list[tuple[int, int]], since: int, until: int) -> list[dict]:
     days = []
     d = datetime.fromtimestamp(since).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -612,8 +624,7 @@ def daily(incidents: list[dict], down: list[tuple[int, int]], since: int, until:
         lo, hi = max(a, since), min(b, until)
         mine = [i for i in incidents if lo <= i["start"] < hi]
         days.append({
-            "day": a, "label": d.strftime("%a %d.%m.").replace("Mon", "Mo").replace("Tue", "Di")
-            .replace("Wed", "Mi").replace("Thu", "Do").replace("Fri", "Fr").replace("Sat", "Sa").replace("Sun", "So"),
+            "day": a, "label": f"{WEEKDAYS[d.weekday()]} {d.strftime('%d.%m.')}",
             "count": len(mine), "short": sum(1 for i in mine if i["short"]),
             "severe": sum(1 for i in mine if i["cause"] in outages.SEVERE),
             "down_s": total(outages.intersect(down, [(lo, hi)])),
@@ -690,7 +701,7 @@ def verdict(incidents: list[dict], probes: list[dict], quality_items: list[dict]
         if o:
             add(o["where"], "path", 2.0)
     customer = [f for f in finding_items if f["customer_side"]]
-    for f in customer[:6]:
+    for _ in customer[:6]:
         add("pc", "finding", 0.5)
     if len(customer) > 6:
         ev["pc"]["finding"]["n"] = len(customer)
@@ -716,7 +727,7 @@ def verdict(incidents: list[dict], probes: list[dict], quality_items: list[dict]
     if cat != "none" and len(ranked) > 1 and ranked[1][0] >= 0.25 * totals:
         second = {"key": ranked[1][1], "title": CATEGORIES[ranked[1][1]]["title"]}
         bullets.append(f"Daneben gibt es Hinweise auf: {second['title']}.")
-    return {"key": cat, **CATEGORIES[cat], "confidence": conf, "share": share, "bullets": bullets[:5],
+    return {"key": cat, **CATEGORIES[cat], "confidence": conf, "share": share, "bullets": bullets[:6],
             "second": second, "scores": {k: round(v, 2) for k, v in score.items()}}
 
 
@@ -772,9 +783,30 @@ def _bullets(cat: str, ev: dict, incidents: list[dict], probes: list[dict], path
             out.append(f"Pfad zu {pi['target']} ({pi['probe_name']}): Verlust beginnt ab Hop {o['hop']} "
                        f"({o['ip']}) – Bereich {o['owner']}.")
             break
+    pattern = time_pattern(incidents)
+    if pattern and cat != "none":
+        out.append(pattern)
     if not vm_ok:
         out.append("Messreihen fehlen (Messdatenbank nicht erreichbar). Die Einschätzung beruht nur auf den Alarmen.")
     return out
+
+
+def time_pattern(incidents: list[dict], min_count: int = 5) -> str | None:
+    """Häufung zu einer Tageszeit: mindestens die Hälfte der schweren Störungen in einem 4-h-Fenster an 3+ Tagen."""
+    severe = [i for i in incidents if i["cause"] in outages.SEVERE]
+    if len(severe) < min_count:
+        return None
+    best = None
+    for h in range(24):
+        hits = [i for i in severe if (datetime.fromtimestamp(i["start"]).hour - h) % 24 < 4]
+        days = {datetime.fromtimestamp(i["start"]).date() for i in hits}
+        if len(hits) * 2 >= len(severe) and len(days) >= 3 and (best is None or len(hits) > best[1]):
+            best = (h, len(hits), len(days))
+    if best is None:
+        return None
+    h, n, days = best
+    return (f"Häufung zur gleichen Tageszeit: {n} von {len(severe)} Störungen begannen zwischen {h:02d}:00 und "
+            f"{(h + 4) % 24:02d}:00 Uhr (an {days} Tagen).")
 
 
 # -- Gesamt --------------------------------------------------------------------------

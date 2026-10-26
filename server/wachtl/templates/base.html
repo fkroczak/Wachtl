@@ -22,6 +22,7 @@
   'web.findings_view': '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
   'web.alerts': '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>',
   'web.outages_view': '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+  'web.report_view': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   'web.reports_view': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   'web.admin': '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
 } %}
@@ -47,7 +48,7 @@
   </div>
   <nav class="side-nav" aria-label="Hauptnavigation">
     {% set nav = [('web.overview', 'Übersicht'), ('web.sites_view', 'Standorte'), ('web.probes_view', 'Probes'),
-                  ('web.alerts', 'Alarme'), ('web.outages_view', 'Ausfälle'), ('web.reports_view', 'Meldungen'),
+                  ('web.alerts', 'Alarme'), ('web.outages_view', 'Ausfälle'), ('web.report_view', 'Bericht'), ('web.reports_view', 'Meldungen'),
                   ('web.findings_view', 'Hinweise')]
                  + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
     {% for endpoint, label in nav %}

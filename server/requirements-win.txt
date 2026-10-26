@@ -3,3 +3,4 @@ requests==2.32.*
 PyYAML==6.0.*
 cheroot>=10.0
 cryptography>=44
+reportlab>=4.2,<6

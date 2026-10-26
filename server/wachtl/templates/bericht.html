@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "_forms.html" import field, error_summary %}
+{% block title %}PDF-Bericht{% endblock %}
+{% block content %}
+{% set fe = field_errors or {} %}
+<h1>PDF-Bericht</h1>
+<p class="muted">Alle Störungen, Kurzausfälle und Schwankungen eines Zeitraums in einem PDF – zum Weitergeben an den Provider oder den Kunden.
+  Vorne steht die Einschätzung, wo das Problem liegt. Dahinter folgen die Belege: Zeitstrahl, Leitungsqualität, Störungsliste und Pfadanalyse.</p>
+
+{{ error_summary(errors) }}
+
+<form method="get" action="{{ url_for('web.report_pdf') }}" class="settings-form" data-check-form novalidate>
+  <input type="hidden" name="teile" value="1">
+  <fieldset>
+    <legend>Standort und Zeitraum</legend>
+    <div class="grid-form">
+      {% call(attrs) field("site", "Standort", error=fe.site) %}
+        <select name="site" {{ attrs }}>
+          <option value="">Alle Standorte</option>
+          {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if form.site == s.id|string }}>{{ s.name }}</option>{% endfor %}
+        </select>
+      {% endcall %}
+      {% call(attrs) field("range", "Zeitraum", error=fe.range) %}
+        <select name="range" data-field="range" {{ attrs }}>
+          {% for k, v in presets.items() %}<option value="{{ k }}" {{ 'selected' if form.range == k }}>{{ v[0] }}</option>{% endfor %}
+        </select>
+      {% endcall %}
+      {% set custom = form.range == 'custom' %}
+      {% call(attrs) field("von", "Von", help="Datum und Uhrzeit, Ortszeit des Servers.", error=fe.von, show_if="range:custom", hidden=not custom) %}
+        <input name="von" type="datetime-local" value="{{ form.von }}" {{ 'disabled' if not custom }} {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("bis", "Bis", help="Höchstens " ~ max_days ~ " Tage.", error=fe.bis, show_if="range:custom", hidden=not custom) %}
+        <input name="bis" type="datetime-local" value="{{ form.bis }}" {{ 'disabled' if not custom }} {{ attrs }}>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Angaben im Bericht</legend>
+    <div class="grid-form">
+      {% call(attrs) field("kunde", "Kunde / Kundennummer", help="Optional. Steht auf der ersten Seite.", error=fe.kunde) %}
+        <input name="kunde" maxlength="{{ limits.kunde }}" value="{{ form.kunde }}" autocomplete="organization" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("ersteller", "Erstellt von", error=fe.ersteller) %}
+        <input name="ersteller" maxlength="{{ limits.ersteller }}" value="{{ form.ersteller }}" autocomplete="name" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("bemerkung", "Bemerkung an den Provider", help="Optional, z. B. Ticketnummer oder was der Kunde beobachtet. Steht auf der ersten Seite.", error=fe.bemerkung, wide=True) %}
+        <textarea name="bemerkung" rows="3" maxlength="{{ limits.bemerkung }}" {{ attrs }}>{{ form.bemerkung }}</textarea>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Inhalt</legend>
+    <p class="muted small">Die erste Seite mit Einschätzung und Kennzahlen ist immer dabei.</p>
+    <div class="grid-form">
+      {% for k, label in sections.items() %}
+      {% call(attrs) field("teil_" ~ k, label, check=True) %}
+        <input type="checkbox" name="teil_{{ k }}" value="1" {{ 'checked' if k in form.teile }} {{ attrs }}>
+      {% endcall %}
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="actions">
+    <button class="primary">PDF erstellen</button>
+  </div>
+</form>
+<p class="muted small">Für 30 Tage und viele PCs dauert das Erstellen einige Sekunden. Das PDF wird heruntergeladen.</p>
+{% endblock %}

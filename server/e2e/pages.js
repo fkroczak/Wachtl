@@ -32,6 +32,7 @@ const PAGES = [
   ["Alarme", "/alerts"],
   ["Ausfälle", "/outages"],
   ["Meldungen", "/meldungen?status=all"],
+  ["PDF-Bericht", "/bericht"],
   ["Verwaltung", "/admin"],
   ["Probes einrichten", "/admin/einrichtung"],
   ["Check-Formular Ping", "/admin/checks/new/ping"],

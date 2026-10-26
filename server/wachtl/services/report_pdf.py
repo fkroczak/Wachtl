@@ -53,7 +53,7 @@ MARGIN_X = 17 * mm
 CONTENT_W = PAGE_W - 2 * MARGIN_X
 
 _REPLACE = {"→": "->", "←": "<-", "≥": ">=", "≤": "<=", "≈": "~", "−": "-", "⚠": "!", "✓": "ok", "✔": "ok",
-            "×": "x", " ": " ", " ": " ", " ": " "}
+            "\u00a0": " ", "\u202f": " ", "\u2009": " "}
 
 
 def clean(text) -> str:
@@ -130,6 +130,12 @@ def table(rows: list[list], widths: list[float], head: bool = True, zebra: bool 
                 cmds.append(("BACKGROUND", (0, i), (-1, i), colors.HexColor("#fafbfc")))
     t.setStyle(TableStyle(cmds + (extra or [])))
     return t
+
+
+def red(text: str, bold: bool = False) -> Paragraph:
+    """Tabellenzelle in Rot (TEXTCOLOR wirkt nicht auf Paragraph-Zellen)."""
+    inner = f"<b>{e(text)}</b>" if bold else e(text)
+    return P(f"<font color='#c42b2b'>{inner}</font>", "cell")
 
 
 def empty(text: str = "Keine Daten im Zeitraum.") -> Paragraph:
@@ -382,11 +388,11 @@ def quality_drawing(qi: dict) -> Drawing:
         return y0 + min(v, ymax) / ymax * lat_h
 
     d.add(Rect(left, y0, w, lat_h, fillColor=None, strokeColor=EMPTY, strokeWidth=0.4))
-    for frac in (0.5, 1):
+    for frac in (0, 0.5, 1):
         y = y0 + frac * lat_h
         d.add(Line(left, y, left + w, y, strokeColor=EMPTY, strokeWidth=0.4))
-        d.add(String(left - 3, y - 2.2, f"{ymax * frac:g} ms", fontName="Helvetica", fontSize=6.2, fillColor=MUTED,
-                     textAnchor="end"))
+        d.add(String(left - 3, y - 2.2, f"{ymax * frac:g} ms" if frac else "0", fontName="Helvetica", fontSize=6.2,
+                     fillColor=MUTED, textAnchor="end"))
     d.add(String(0, y0 + lat_h - 8, "Latenz", fontName="Helvetica-Bold", fontSize=7.2, fillColor=INK))
     d.add(String(0, y0 + lat_h - 17, "Mittel und p10-p90", fontName="Helvetica", fontSize=6.2, fillColor=MUTED))
     p10, p90 = dict(inet.get("p10", [])), dict(inet.get("p90", []))
@@ -546,7 +552,7 @@ def cover(data: dict) -> list:
     avail = k["availability"]
     longest = k["longest"]
     cells = [
-        _kpi(fmt_num(avail, "%", 3 if avail is not None and avail > 99.9 else 2) if avail is not None else "–",
+        _kpi("–" if avail is None else "100 %" if avail >= 100 else fmt_num(avail, "%", 3 if avail > 99.9 else 2),
              "Verfügbarkeit Internet", BAD if avail is not None and avail < 99.5 else None),
         _kpi(str(k["incidents"]), f"Störungen (davon {k['severe']} Internet/LAN)", BAD if k["severe"] else None),
         _kpi(str(k["short"]), "davon Kurzausfälle unter 60 s"),
@@ -637,11 +643,12 @@ def section_quality(data: dict) -> list:
     for qi in data["quality"]:
         block = [CondPageBreak(120 * mm), heading(f"{qi['probe_name']} ({qi['site_name']})", f"q{qi['probe_id']}", 1),
                  quality_drawing(qi),
-                 legend_line([(OK, "line", "Gateway"), (ACCENT, "line", "Internet Ø"), (BAND, "box", "Internet p10-p90"),
+                 legend_line([(OK, "line", "Gateway"), (ACCENT, "line", "Internet Ø"),
+                              (BAND, "box", "Internet p10-p90"),
                               (BAD_FILL, "box", "Verlust"), (JITTER, "line", "Jitter Internet"),
                               (WARN, "dash", "30 ms")]),
                  P(e(f"Ein Wert je {fmt_dur(qi['step'])}."), "muted"), Spacer(1, 4)]
-        rows = [["Ziel", "Rolle", "Latenz Ø", "95 %", "Max", "Verlust Ø", "Max/min", "Min. mit Verlust",
+        rows = [["Ziel", "Rolle", "Latenz Ø", "95 %", "Max", "Verlust Ø", "Verlust je Min. max", "Min. mit Verlust",
                  "verlorene Pings", "Jitter Ø"]]
         for c in qi["checks"]:
             rows.append([c["target"] or c["check_id"], c["role_label"], fmt_num(c["lat_avg"], "ms"),
@@ -655,24 +662,30 @@ def section_quality(data: dict) -> list:
         an = qi["anomalies"]
         out.append(Spacer(1, 4))
         if not an:
+            if qi.get("outage_loss_periods"):
+                out.append(P(e(f"Verlust nur während der Ausfälle aus der Störungsliste "
+                               f"({qi['outage_loss_periods']} Abschnitte)."), "muted"))
+                continue
             out.append(P(e("Keine auffälligen Zeiträume (Verlust über 1 %, Latenz über dem Doppelten des Üblichen, "
                            "Jitter über 30 ms)."), "muted"))
             continue
         out.append(P(f"<b>Auffällige Zeiträume</b> {e(f'({len(an)})')}", "base"))
         rows = [["Beginn", "Ende", "Dauer", "Art", "Internet: Latenz max (üblich)", "Verlust max", "Jitter max",
-                 "Gateway", "Bereich"]]
+                 "Gateway", "Ursache bei"]]
         for a in an[:MAX_ANOMALIES]:
             gw = a["gw_state"] + (f" ({fmt_num(a['gw_loss_max'], '%')})" if a["gw_loss_max"] else "")
+            where = WHERE_LABELS.get(a["where"], a["where"]) + (" (bei Ausfall)" if a["during_outage"] else "")
             rows.append([fmt_ts(a["start"], False), fmt_ts(a["end"], False), fmt_dur(a["duration"]), a["kind_label"],
                          f"{fmt_num(a['lat_max'], 'ms')} ({fmt_num(a['lat_base'], 'ms')})",
                          fmt_num(a["loss_max"], "%"), fmt_num(a["jitter_max"], "ms"), gw,
-                         WHERE_LABELS.get(a["where"], a["where"]) + (" · Ausfall" if a["during_outage"] else "")])
-        hl = [("TEXTCOLOR", (8, i), (8, i), BAD) for i, a in enumerate(an[:MAX_ANOMALIES], 1)
-              if a["where"] == "provider"]
-        out.append(table(rows, [24 * mm, 24 * mm, 15 * mm, 18 * mm, 26 * mm, 14 * mm, 14 * mm, 20 * mm,
-                                CONTENT_W - 155 * mm], extra=hl))
+                         red(where) if a["where"] == "provider" else where])
+        out.append(table(rows, [23 * mm, 23 * mm, 17 * mm, 15 * mm, 26 * mm, 14 * mm, 14 * mm, 20 * mm,
+                                CONTENT_W - 152 * mm]))
         if len(an) > MAX_ANOMALIES:
             out.append(P(e(f"Nur die ersten {MAX_ANOMALIES} von {len(an)} Zeiträumen."), "muted"))
+        if qi.get("outage_loss_periods"):
+            out.append(P(e(f"Dazu {qi['outage_loss_periods']} Abschnitte mit Verlust nur während der Ausfälle aus der "
+                           "Störungsliste (nicht doppelt aufgeführt)."), "muted"))
     return out
 
 
@@ -684,23 +697,27 @@ def section_incidents(data: dict) -> list:
                "sekundengenau aus den 1-s-Messwerten, soweit verfügbar. Kurz = unter 60 s."), "muted"), Spacer(1, 4)]
     if not inc:
         return out + [empty("Keine Störungen im Zeitraum.")]
-    rows = [["Nr", "Beginn", "Ende", "Dauer", "Ursache", "Standort / betroffen", "Ziele / Hinweis"]]
-    extra = []
-    for n, i in enumerate(inc[:MAX_INCIDENTS], 1):
-        cause = i["cause_label"]
-        others = [c for c in i["cause_labels"] if c != cause]
+    multi = len(data["sites"]) > 1
+    rows = [["Nr", "Beginn", "Ende", "Dauer", "Ursache", "Standort / PCs" if multi else "betroffene PCs",
+             "Ziele / Hinweis"]]
+    for i in inc[:MAX_INCIDENTS]:
         hint = []
-        if i["targets"]:
+        if i["cause"] not in ("wan", "probe") and i["targets"]:
             hint.append(", ".join(i["targets"][:6]))
-        if others:
-            hint.append("Folgen: " + ", ".join(others))
+        if i["consequences"]:
+            # Folgen auf Referenzen und Ziele sind bei WAN/Gateway selbstverständlich: nur die Zahl nennen
+            others = [label for c, label in zip(i["causes"], i["cause_labels"])
+                      if c != i["cause"] and c not in ("reference", "target")]
+            hint.append(f"+{i['consequences']} Folgestörungen" + (f" ({', '.join(others)})" if others else ""))
         dur = fmt_dur(i["duration"]) + (" (läuft)" if i["ongoing"] else "")
+        if i["parts"] > 1:
+            hint.insert(0, f"{i['parts']} Aussetzer innerhalb von {fmt_dur(i['span'])}")
+        pcs = ", ".join(i["probes"][:6]) or "–"
         rows.append([str(i["no"]), fmt_ts(i["start"]), "läuft noch" if i["ongoing"] else fmt_ts(i["end"]),
                      P(("<b>%s</b>" % e(dur)) + (" <font color='#c42b2b'>kurz</font>" if i["short"] else ""), "cell"),
-                     cause, f"{i['site_name']}: " + (", ".join(i["probes"][:6]) or "–"), " · ".join(hint) or "–"])
-        if i["cause"] in ("wan", "gateway", "probe"):
-            extra.append(("TEXTCOLOR", (4, n), (4, n), BAD))
-    out.append(table(rows, [9 * mm, 29 * mm, 29 * mm, 20 * mm, 27 * mm, 34 * mm, CONTENT_W - 148 * mm], extra=extra))
+                     red(i["cause_label"]) if i["cause"] in ("wan", "gateway", "probe") else i["cause_label"],
+                     f"{i['site_name']}: {pcs}" if multi else pcs, "; ".join(hint) or "–"])
+    out.append(table(rows, [9 * mm, 29 * mm, 29 * mm, 21 * mm, 25 * mm, 34 * mm, CONTENT_W - 147 * mm]))
     if len(inc) > MAX_INCIDENTS:
         out.append(P(e(f"Liste gekürzt: {MAX_INCIDENTS} von {len(inc)} Störungen. Für alle Einträge einen kürzeren "
                        "Zeitraum wählen."), "muted"))
@@ -731,18 +748,16 @@ def section_paths(data: dict) -> list:
         if not pi["has_values"]:
             block.append(P(e("Keine Hop-Werte aus der Messdatenbank – nur der ermittelte Weg."), "muted"))
         rows = [["Hop", "IP-Adresse", "Bereich", "Verlust Ø", "Latenz Ø", "Max", "Jitter", "Bewertung"]]
-        extra = []
-        for n, r in enumerate(pi["rows"], 1):
+        for r in pi["rows"]:
             ip = r["ip"] or "*"
             if r["other_ips"]:
                 ip += f" (+{len(r['other_ips'])})"
-            rows.append([str(r["hop"]), ip, r["owner"], fmt_num(r["loss"], "%"), fmt_num(r["avg"], "ms"),
-                         fmt_num(r["max"], "ms"), fmt_num(r["jitter"], "ms"), marks.get(r["mark"], "")])
-            if r["mark"] == "real":
-                extra.append(("TEXTCOLOR", (3, n), (3, n), BAD))
-                extra.append(("TEXTCOLOR", (7, n), (7, n), BAD))
+            real = r["mark"] == "real"
+            rows.append([str(r["hop"]), ip, r["owner"], red(fmt_num(r["loss"], "%"), True) if real
+                         else fmt_num(r["loss"], "%"), fmt_num(r["avg"], "ms"), fmt_num(r["max"], "ms"),
+                         fmt_num(r["jitter"], "ms"), red(marks[r["mark"]]) if real else marks.get(r["mark"], "")])
         block += [Spacer(1, 3), table(rows, [10 * mm, 34 * mm, 34 * mm, 18 * mm, 18 * mm, 18 * mm, 16 * mm,
-                                             CONTENT_W - 148 * mm], extra=extra), Spacer(1, 6)]
+                                             CONTENT_W - 148 * mm]), Spacer(1, 6)]
         out.append(KeepTogether(block) if len(pi["rows"]) <= 25 else block[0])
         if len(pi["rows"]) > 25:
             out += block[1:]
@@ -756,18 +771,15 @@ def section_bandwidth(data: dict) -> list:
     if not bw:
         out.append(empty("Keine Bandbreitenmessungen im Zeitraum."))
     else:
-        rows = [["PC", "Messung", "Richtung", "Messungen", "Min", "Ø", "Max", "Schwelle", "darunter", "Fehler"]]
-        extra = []
-        for n, b in enumerate(bw, 1):
-            s = b["stats"] or {}
+        rows = [["PC", "Messung", "Richtung", "Anzahl", "Min", "Ø", "Max", "Schwelle", "darunter", "Fehler"]]
+        for b in bw:
+            st = b["stats"] or {}
             rows.append([b["probe_name"], b["check_name"], b["direction_label"], str(b["runs"]),
-                         fmt_num(s.get("min"), "Mbit/s"), fmt_num(s.get("avg"), "Mbit/s"),
-                         fmt_num(s.get("max"), "Mbit/s"), fmt_num(b["threshold"], "Mbit/s") if b["threshold"] else "–",
-                         str(b["below"]), str(b["errors"])])
-            if b["below"]:
-                extra.append(("TEXTCOLOR", (8, n), (8, n), BAD))
-        out.append(table(rows, [26 * mm, 30 * mm, 16 * mm, 15 * mm, 17 * mm, 17 * mm, 17 * mm, 17 * mm, 14 * mm,
-                                CONTENT_W - 169 * mm], extra=extra))
+                         fmt_num(st.get("min"), "Mbit/s"), fmt_num(st.get("avg"), "Mbit/s"),
+                         fmt_num(st.get("max"), "Mbit/s"), fmt_num(b["threshold"], "Mbit/s") if b["threshold"] else "–",
+                         red(str(b["below"])) if b["below"] else "0", str(b["errors"])])
+        out.append(table(rows, [26 * mm, 26 * mm, 15 * mm, 13 * mm, 17 * mm, 17 * mm, 17 * mm, 17 * mm, 14 * mm,
+                                CONTENT_W - 162 * mm]))
     out.append(heading("Sprachqualität (RTP-Test, MOS)", "mos", 1))
     if not vo:
         out.append(empty("Keine Sprachtests im Zeitraum."))
@@ -779,8 +791,8 @@ def section_bandwidth(data: dict) -> list:
             rows.append([v["probe_name"], v["peer"] or v["check_name"], str(v["runs"]), fmt_num(m.get("min"), "", 2),
                          fmt_num(m.get("avg"), "", 2), fmt_num(v["min_mos"], "", 1), str(v["below"]),
                          fmt_num(v["loss_avg"], "%"), fmt_num(v["jitter_max"], "ms"), fmt_num(v["rtt_avg"], "ms")])
-        out.append(table(rows, [26 * mm, 34 * mm, 12 * mm, 15 * mm, 15 * mm, 15 * mm, 15 * mm, 16 * mm, 17 * mm,
-                                CONTENT_W - 165 * mm]))
+        out.append(table(rows, [26 * mm, 30 * mm, 11 * mm, 14 * mm, 13 * mm, 14 * mm, 14 * mm, 15 * mm, 16 * mm,
+                                CONTENT_W - 153 * mm]))
         out.append(P(e("MOS 4,3 = sehr gut, ab 3,6 brauchbar, unter 3,1 schlecht verständlich."), "muted"))
     return out
 
@@ -799,7 +811,7 @@ def section_customer(data: dict) -> list:
             rows.append([fmt_ts(f["detected_at"]), fmt_ts(f["resolved_at"]) if f["resolved_at"] else "aktiv",
                          f["probe_name"], f"{f['kind_label']}" + (f": {f['message']}" if f["message"] else ""),
                          f["adapter"] or "–", f["severity_label"]])
-        out.append(table(rows, [28 * mm, 28 * mm, 24 * mm, CONTENT_W - 132 * mm, 34 * mm, 18 * mm]))
+        out.append(table(rows, [28 * mm, 28 * mm, 27 * mm, CONTENT_W - 133 * mm, 32 * mm, 18 * mm]))
     out.append(heading("Meldungen von Benutzern", "meldungen", 1))
     rp = data["reports"]
     if not rp:
@@ -809,7 +821,7 @@ def section_customer(data: dict) -> list:
         for r in rp[:300]:
             rows.append([fmt_ts(r["ts"]), r["probe_name"], r["user"] or "–", r["category_label"], r["duration_label"],
                          r["description"][:300] or "–"])
-        out.append(table(rows, [28 * mm, 24 * mm, 24 * mm, 30 * mm, 24 * mm, CONTENT_W - 130 * mm]))
+        out.append(table(rows, [28 * mm, 27 * mm, 24 * mm, 30 * mm, 24 * mm, CONTENT_W - 133 * mm]))
         out.append(P(e("Zeitpunkt = vom Benutzer angegebener Beginn der Störung."), "muted"))
     return out
 
@@ -932,7 +944,8 @@ def render(data: dict, invariant: bool = False) -> bytes:
     meta = data["meta"]
     footer = f"Wachtl · {meta['site_label']} · {period_text(meta)}"
     buf = io.BytesIO()
-    doc = _Doc(buf, pagesize=A4, leftMargin=MARGIN_X, rightMargin=MARGIN_X, topMargin=16 * mm,
+    # Der Frame hat 6 pt Innenabstand: so liegen Text und Tabellen bündig mit Kopf- und Fußzeile
+    doc = _Doc(buf, pagesize=A4, leftMargin=MARGIN_X - 6, rightMargin=MARGIN_X - 6, topMargin=16 * mm,
                bottomMargin=18 * mm, title=clean(f"Netzwerk-Störungsbericht {meta['site_label']}"),
                author=clean(meta["author"] or "Wachtl"), subject=clean(period_text(meta)), creator="Wachtl",
                invariant=1 if invariant else 0)
@@ -941,10 +954,10 @@ def render(data: dict, invariant: bool = False) -> bytes:
     for key in SECTIONS:
         if key not in data["sections"]:
             continue
-        if key in ("zeitstrahl", "stoerungen", "anhang", "netzwerk", "qualitaet") or first:
+        if first or key in ("anhang", "qualitaet"):
             story.append(PageBreak())
         else:
-            story += [Spacer(1, 10), CondPageBreak(60 * mm)]
+            story += [Spacer(1, 12), CondPageBreak(90 * mm)]
         first = False
         story += RENDERERS[key](data)
     doc.build(story, canvasmaker=_canvas_class(footer, fmt_ts(meta["generated_at"], False)))
