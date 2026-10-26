@@ -496,7 +496,7 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
 
 
 SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Ausfälle", "meldungen": "Hinweise & Meldungen",
-             "messungen": "Alle Messungen", "netzwerk": "Netzwerk"}
+             "messungen": "Alle Messungen", "netzwerk": "Netzwerk", "topologie": "Topologie"}
 PROBE_TABS_DETAIL = {"messungen": "Messungen", "ping": "Ping & Pfade", "bandbreite": "Bandbreite & Sprache",
                      "meldungen": "Hinweise & Meldungen", "alarme": "Alarme", "details": "Details"}
 
@@ -515,6 +515,8 @@ def site(site_id: int):
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
     if tab == "netzwerk":
         return _site_network(s)
+    if tab == "topologie":
+        return redirect(url_for("web.topology", site_id=site_id))
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
         "WHERE p.site_id = ? ORDER BY p.hostname",
@@ -1896,3 +1898,6 @@ def report_pdf():
     filename = _report_filename(form.get("site_name"), form["until"])
     return Response(pdf, mimetype="application/pdf", headers={
         "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"})
+
+
+from . import web_topology  # noqa: E402,F401 – Routen der Switch-Topologie

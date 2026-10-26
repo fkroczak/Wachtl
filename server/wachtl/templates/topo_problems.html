@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head, tree with context %}
+{% block title %}Probleme · Topologie · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+{% if not items %}
+<section class="card"><h2>Keine Auffälligkeiten</h2>
+  <p class="muted">{{ 'Bei der letzten Abfrage war alles in Ordnung.' if lay else 'Sobald Switches eingetragen sind, erscheinen hier Port-Fehler, langsame Verbindungen, nicht verwaltete Switches und Kabelkreise.' }}</p></section>
+{% else %}
+<div class="topo-layout">
+  {% if lay %}
+  <section class="card topo-main" aria-labelledby="h-pb">
+    <h2 id="h-pb">Wo die Probleme liegen</h2>
+    <p class="small muted">Die Nummern am Gerät gehören zu den Befunden in der Liste.</p>
+    {{ tree(lay, site, None, 'detail', 'Topologie-Baum mit nummerierten Markierungen an den betroffenen Geräten. Die Befunde stehen in der Liste daneben.') }}
+  </section>
+  {% endif %}
+  <section class="card topo-side" aria-labelledby="h-list">
+    <h2 id="h-list">Befunde</h2>
+    <ol class="topo-issues">
+      {% for f in items %}
+      <li class="topo-issue{{ ' topo-issue-ack' if f.ack_at }}">
+        <span class="tnum tnum-{{ f.severity }}" aria-hidden="true">{{ f.no }}</span>
+        <div>
+          <h3>{{ f.title }}</h3>
+          <p class="small"><span class="badge {{ f.severity }}">{{ {'critical': 'Störung', 'warning': 'Warnung', 'info': 'Hinweis'}[f.severity] }}</span>
+            {% if f.first_seen %}<span class="muted">seit {{ f.first_seen|dt }}</span>{% endif %}{% if f.ack_at %} <span class="muted">· bekannt ({{ f.ack_by }})</span>{% endif %}</p>
+          <p class="small">{{ f.detail }}</p>
+          <div class="actions">
+            {% if f.switch_id %}<a class="button" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=f.switch_id, port=f.if_index) }}{{ '#port' if f.if_index }}" aria-label="Ansehen: {{ f.title }}">Ansehen</a>{% endif %}
+            {% if f.kind == 'no_credentials' and f.host and has_role(user, 'admin') %}<a class="button" href="{{ url_for('web.topology_new', site_id=site.id, host=f.host) }}" aria-label="Zugangsdaten eintragen: {{ f.title }}">Zugangsdaten eintragen</a>{% endif %}
+            {% if f.kind == 'unreachable' and has_role(user, 'admin') %}<a class="button" href="{{ url_for('web.topology_edit', site_id=site.id, switch_id=f.switch_id) }}" aria-label="Zugang prüfen: {{ f.title }}">Zugang prüfen</a>{% endif %}
+            {% if f.id and has_role(user, 'operator') %}
+            <form method="post" action="{{ url_for('web.topology_ack', site_id=site.id, finding_id=f.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="link" aria-label="{{ 'Wieder öffnen' if f.ack_at else 'Als bekannt markieren' }}: {{ f.title }}">{{ 'Wieder öffnen' if f.ack_at else 'Als bekannt markieren' }}</button></form>{% endif %}
+          </div>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head with context %}
+{% block title %}Verbindung testen · {{ sw.name or sw.host }} · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+<ol class="topo-steps" aria-label="Schritte">
+  <li class="done"><span>1</span> Switch und Zugang</li>
+  <li aria-current="step"><span>2</span> Verbindung testen</li>
+  <li{% if sw.status != 'draft' %} class="done"{% endif %}><span>3</span> Speichern</li>
+</ol>
+<h2>Verbindung zu {{ sw.name or sw.sys_name or sw.host }}</h2>
+<p class="muted small">{{ sw.host }}:{{ sw.port }} · {{ hint }}</p>
+
+{% if error %}
+<section class="card topo-result topo-result-bad" role="alert" aria-labelledby="h-res">
+  <h3 id="h-res">Test fehlgeschlagen</h3>
+  <p>{{ error }}</p>
+  <ul class="small">
+    <li>Stimmt die Adresse, und ist SNMP am Switch eingeschaltet?</li>
+    <li>Darf der Wachtl-Server zugreifen? Viele Switches erlauben SNMP nur von eingetragenen Adressen.</li>
+    <li>Lässt eine Firewall UDP-Port {{ sw.port }} vom Wachtl-Server zum Switch durch?</li>
+    <li>Bei SNMPv3: Benutzer, Verfahren und Passwörter müssen genau zur Einstellung am Switch passen.</li>
+  </ul>
+  <div class="actions">
+    <a class="button primary" href="{{ url_for('web.topology_edit', site_id=site.id, switch_id=sw.id) }}">Zugangsdaten ändern</a>
+    <a class="button" href="{{ url_for('web.topology_check', site_id=site.id, switch_id=sw.id) }}">Erneut testen</a>
+  </div>
+</section>
+{% else %}
+<section class="card topo-result" aria-labelledby="h-res">
+  <h3 id="h-res">Verbindung klappt</h3>
+  <dl class="kvlist">
+    <dt>Name</dt><dd>{{ result.name or '–' }}</dd>
+    <dt>Modell</dt><dd>{{ (result.descr or '–')|truncate(140, True, '…', 0) }}</dd>
+    {% if result.uptime_s %}<dt>Laufzeit</dt><dd>{{ result.uptime_s|duration }}</dd>{% endif %}
+    <dt>Ports</dt><dd>{{ result.ports }} ({{ result.ports_up }} mit Link)</dd>
+    <dt>MAC-Tabelle</dt><dd>{{ result.macs }} Einträge{% if not result.macs %} – <span class="warn-t">ohne MAC-Tabelle ist nicht erkennbar, welches Gerät an welchem Port hängt</span>{% endif %}</dd>
+    <dt>Nachbarn (LLDP/CDP)</dt><dd>{{ result.neighbors }}{% if not result.neighbors %} <span class="muted small">– Verbindungen zu anderen Switches werden dann aus den MAC-Tabellen ermittelt</span>{% endif %}</dd>
+    <dt>PoE</dt><dd>{{ 'ja' if result.poe else 'nicht gemeldet' }}</dd>
+    <dt>VLANs</dt><dd>{{ 'ja' if result.vlans else 'nicht gemeldet' }}</dd>
+    {% if result.duration_s %}<dt>Dauer der Abfrage</dt><dd>{{ result.duration_s|round(1) }} s</dd>{% endif %}
+  </dl>
+  {% if sw.status == 'draft' %}
+  <div class="actions">
+    <form method="post" action="{{ url_for('web.topology_activate', site_id=site.id, switch_id=sw.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="primary">Speichern und überwachen</button></form>
+    <form method="post" action="{{ url_for('web.topology_activate', site_id=site.id, switch_id=sw.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="neu">
+      <button>Speichern und nächsten Switch einrichten</button></form>
+  </div>
+  {% else %}
+  <div class="actions">
+    <a class="button primary" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw.id) }}">Zum Switch</a>
+    <a class="button" href="{{ url_for('web.topology_new', site_id=site.id, wie=sw.id) }}">Nächsten Switch einrichten</a>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% if sw.status == 'draft' %}
+<form method="post" action="{{ url_for('web.topology_delete', site_id=site.id, switch_id=sw.id) }}" class="inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger">Einrichtung abbrechen und Eingaben löschen</button></form>
+{% endif %}
+{% endblock %}

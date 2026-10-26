@@ -5,7 +5,7 @@ const path = require("path");
 const seedFile = path.join(__dirname, ".seed.json");
 const ids = fs.existsSync(seedFile)
   ? JSON.parse(fs.readFileSync(seedFile, "utf8"))
-  : { probe: 1, site: 1, ping_check: 2, path_check: 4, wan_check: 5, rtp_check: 6 };
+  : { probe: 1, site: 1, ping_check: 2, path_check: 4, wan_check: 5, rtp_check: 6, switch: 2 };
 
 const BASE = process.env.WACHTL_BASE_URL || "http://127.0.0.1:5000";
 const PASSWORD = process.env.WACHTL_E2E_PASSWORD || "e2e-admin-passwort";
@@ -19,6 +19,12 @@ const PAGES = [
   ["Hinweise", "/hinweise"],
   ["Standort: Alle Messungen", `/sites/${ids.site}?tab=messungen`],
   ["Standort: Netzwerk", `/sites/${ids.site}?tab=netzwerk`],
+  ["Topologie: Baum", `/sites/${ids.site}/topologie`],
+  ["Topologie: Switches", `/sites/${ids.site}/topologie/switche`],
+  ["Topologie: Switch", `/sites/${ids.site}/topologie/switche/${ids.switch}?port=4`],
+  ["Topologie: Probleme", `/sites/${ids.site}/topologie/probleme`],
+  ["Topologie: Pfad", `/sites/${ids.site}/topologie/pfad?geraet=pc-empfang`],
+  ["Topologie: Assistent", `/sites/${ids.site}/topologie/switche/neu`],
   ["Probe: Details", `/probes/${ids.probe}?tab=details`],
   ["Verwaltung: Checks", "/admin?tab=checks"],
   ["Verwaltung: Messung", "/admin?tab=messung"],

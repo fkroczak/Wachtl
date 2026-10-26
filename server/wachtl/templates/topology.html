@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head, tree, tree_list, faceplate, legend with context %}
+{% block title %}Topologie · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller, drafts) }}
+
+{% if not lay %}
+<section class="card">
+  <h2>Noch kein Switch eingetragen</h2>
+  <p>Wachtl fragt die Switches per SNMP ab: welche Switches miteinander verbunden sind, welche Ports belegt sind und
+     welches Gerät an welchem Port hängt. Daraus entsteht hier ein Baum vom Internet bis zum einzelnen PC.</p>
+  <p>Unterstützt werden SNMPv1, SNMPv2c und SNMPv3. Der Assistent fragt je Switch die Zugangsdaten ab und testet sie sofort.</p>
+  {% if has_role(user, 'admin') %}<p><a class="button primary" href="{{ url_for('web.topology_new', site_id=site.id) }}">Ersten Switch einrichten</a></p>
+  {% else %}<p class="muted">Ein Administrator kann Switches mit ihren Zugangsdaten eintragen.</p>{% endif %}
+</section>
+{% else %}
+<div class="topo-layout">
+  <section class="card topo-main" aria-labelledby="h-baum">
+    <div class="page-head">
+      <h2 id="h-baum">Baum</h2>
+      <div class="topo-tools">
+        {{ legend() }}
+        <a class="small" href="{{ url_for('web.topology', site_id=site.id, switch=selected.row.id if selected else None, geraete='0' if show_devices else '1') }}">{{ 'Geräte ausblenden' if show_devices else 'Geräte zeigen' }}</a>
+      </div>
+    </div>
+    <div class="topo-list-narrow">
+      <h3>Baum als Liste</h3>
+      <ul>{% for r in topo.roots %}{{ tree_list(topo, site, r) }}{% endfor %}</ul>
+    </div>
+    {{ tree(lay, site, selected.row.id if selected else None, 'select') }}
+    <details class="topo-list">
+      <summary>Baum als Liste</summary>
+      <ul>{% for r in topo.roots %}{{ tree_list(topo, site, r) }}{% endfor %}</ul>
+    </details>
+  </section>
+
+  {% if selected %}{% set s = selected %}
+  <aside class="card topo-side" aria-labelledby="h-sel">
+    <div class="topo-side-head">
+      <h2 id="h-sel"><a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=s.row.id) }}">{{ s.node.label }}</a></h2>
+      {% if s.node.status == 'bad' %}<span class="badge critical">antwortet nicht</span>
+      {% elif s.node.status == 'off' %}<span class="badge off">{{ 'pausiert' if s.row.status == 'disabled' else 'noch keine Daten' }}</span>
+      {% else %}<span class="badge on">erreichbar</span>{% endif %}
+    </div>
+    <dl class="kvlist">
+      <dt>Adresse</dt><dd>{{ s.row.host }}</dd>
+      {% if s.snap.system and s.snap.system.descr %}<dt>Modell</dt><dd>{{ s.snap.system.descr|truncate(70, True, '…', 0) }}</dd>{% endif %}
+      {% if s.row.uptime_s %}<dt>Laufzeit</dt><dd>{{ s.row.uptime_s|duration }}</dd>{% endif %}
+      {% if s.parent %}<dt>Uplink</dt><dd>{% if s.parent.switch_id %}<a href="{{ url_for('web.topology', site_id=site.id, switch=s.parent.switch_id) }}">{{ s.parent.label }}</a>{% else %}{{ s.parent.label }}{% endif %}{% if s.uplink %} · {{ s.uplink }}{% endif %}</dd>{% endif %}
+      <dt>Abgefragt</dt><dd>{{ s.row.last_ok|ago }}</dd>
+    </dl>
+    {% if s.total %}
+    <p class="small muted topo-ports-title">Ports · {{ s.used }} von {{ s.total }} belegt</p>
+    {{ faceplate(s.ports, site, s.row.id, mini=True, name=s.node.label) }}
+    {% endif %}
+    {% if s.neighbors %}
+    <h3>Direkt verbunden</h3>
+    <ul class="topo-nb">
+      {% for nb in s.neighbors %}
+      <li><span>Port {{ nb.port.short }} → {% if nb.node.switch_id %}<a href="{{ url_for('web.topology', site_id=site.id, switch=nb.node.switch_id) }}">{{ nb.node.label }}</a>{% else %}{{ nb.node.label }}{% endif %}</span>
+        <span class="{{ 'warn-t' if nb.port.speed and nb.port.speed < 1000 else 'muted' }}">{{ speed_short(nb.port.speed) or '–' }}{{ ' · PoE' if nb.port.poe }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+    <div class="actions">
+      <a class="button primary" href="{{ s.links.web }}" target="_blank" rel="noopener noreferrer">Weboberfläche öffnen</a>
+      {% if s.links.ssh %}<a class="button" href="{{ s.links.ssh }}">SSH</a>{% endif %}
+      <a class="button" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=s.row.id) }}">Ports ansehen</a>
+    </div>
+    <p class="small muted">Weboberfläche und SSH öffnen sich <strong>von diesem PC aus</strong> – das klappt nur, wenn er den Switch erreicht (gleiches Netz oder VPN).</p>
+  </aside>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

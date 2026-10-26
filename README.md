@@ -44,6 +44,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Sprache (0.9) | RTP-Sprachtest wie ein Telefonat (G.711/G.729) zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor: MOS, Laufzeit, Jitter und Verlust je Richtung, Alarm bei schlechter Sprachqualität ([docs/MESSUNGEN.md](docs/MESSUNGEN.md#sprache-rtpvoip)) |
 | PDF-Bericht (1.0) | Alle Störungen eines Zeitraums als PDF für den Provider: Einschätzung, wo das Problem liegt, Zeitstrahl mit Kurzausfällen, Leitungsschwankungen, Störungsliste, Pfadanalyse, Netzwerkscan |
 | Netzwerkscan (1.0) | Geräte im Kundennetz, Anwesenheit, unregelmäßige Geräte, IP-Konflikte, Portscan mit Diensterkennung und Links zum Verbinden ([docs/NETZWERKSCAN.md](docs/NETZWERKSCAN.md)) |
+| Switch-Topologie (1.0) | SNMPv1/v2c/v3 je Switch mit Assistent (Zugang testen, verschlüsselt speichern); Baum Internet → Gateway → Switches → Geräte mit Ports und Geschwindigkeit, Switch-Frontansicht mit Port-Details und Probe-Messwerten, Probleme (Port-Fehler, langsame Uplinks, Kabelkreise, nicht verwaltete Switches), Pfad eines Geräts bis ins Internet ([docs/TOPOLOGIE.md](docs/TOPOLOGIE.md)) |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).

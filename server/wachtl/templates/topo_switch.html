@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head, faceplate, port_legend with context %}
+{% block title %}{{ sw.node.label }} · Topologie · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+{% set row = sw.row %}
+
+<nav class="crumbs topo-path" aria-label="Weg vom Internet zum Switch">
+  {% for n in path %}{% if n.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id) }}">{{ n.label }}</a>{% else %}<span>{{ n.label }}</span>{% endif %} <span aria-hidden="true">›</span> {% endfor %}<strong>{{ sw.node.label }}</strong>
+</nav>
+
+<section class="card topo-swhead" aria-labelledby="h-sw">
+  <div>
+    <h2 id="h-sw">{{ sw.node.label }}</h2>
+    <p class="muted small">
+      {% if sw.node.status == 'bad' %}<span class="badge critical">antwortet nicht</span>{% elif row.status == 'disabled' %}<span class="badge off">pausiert</span>{% elif sw.node.status == 'off' %}<span class="badge off">noch keine Daten</span>{% else %}<span class="badge on">erreichbar</span>{% endif %}
+      {{ row.host }}{% if row.location %} · {{ row.location }}{% elif row.sys_location %} · {{ row.sys_location }}{% endif %}{% if row.uptime_s %} · Laufzeit {{ row.uptime_s|duration }}{% endif %} · abgefragt {{ row.last_ok|ago }}
+    </p>
+    {% if row.sys_descr %}<p class="small">{{ row.sys_descr|truncate(160, True, '…', 0) }}</p>{% endif %}
+    {% if row.last_error %}<p class="field-error"><span aria-hidden="true">⚠ </span>Letzte Abfrage {{ row.last_poll|ago }}: {{ row.last_error }}</p>{% endif %}
+  </div>
+  <div class="actions">
+    <a class="button primary" href="{{ sw.links.web }}" target="_blank" rel="noopener noreferrer">Weboberfläche öffnen</a>
+    {% if sw.links.ssh %}<a class="button" href="{{ sw.links.ssh }}">SSH</a>{% endif %}
+    {% if has_role(user, 'operator') %}
+    <form method="post" action="{{ url_for('web.topology_poll', site_id=site.id, switch_id=row.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Jetzt abfragen</button></form>{% endif %}
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-face">
+  <div class="page-head"><h2 id="h-face">Frontansicht</h2>{{ port_legend() }}</div>
+  {% if sw.total %}
+  <p class="small muted">{{ sw.used }} von {{ sw.total }} Ports belegt{% if sw.snap.poe and sw.snap.poe.power_w %} · PoE {{ sw.snap.poe.used_w or 0 }} von {{ sw.snap.poe.power_w }} W{% endif %}. Port antippen für Details.</p>
+  <div class="scroll">{{ faceplate(sw.ports, site, row.id, port.index if port else None) }}</div>
+  {% else %}
+  <p class="muted">Noch keine Ports bekannt – die erste Abfrage läuft mit dem nächsten Durchgang der Server-Probe oder über „Jetzt abfragen“.</p>
+  {% endif %}
+</section>
+
+{% if port %}
+<div class="topo-two" id="port">
+  <section class="card" aria-labelledby="h-port">
+    <div class="topo-side-head">
+      <h2 id="h-port">Port {{ port.short }}{% if port.alias %} · {{ port.alias }}{% endif %}</h2>
+      {% if port.state == 'err' %}<span class="badge critical">Fehler</span>{% elif port.up %}<span class="badge on">aktiv</span>{% else %}<span class="badge off">{{ 'frei' if port.admin_up else 'abgeschaltet' }}</span>{% endif %}
+    </div>
+    <dl class="kvlist">
+      <dt>Name</dt><dd>{{ port.name }}</dd>
+      <dt>Verbindung</dt><dd>{% if port.up %}{{ speed_text(port.speed) }}{% if port.duplex %} {{ 'Vollduplex' if port.duplex == 'full' else 'Halbduplex' }}{% endif %}{% else %}kein Link{% endif %}</dd>
+      <dt>Rolle</dt><dd>{{ {'uplink': 'Uplink (Richtung Internet)', 'downlink': 'Verbindung zu einem weiteren Gerät im Baum', 'access': 'Geräte-Anschluss', 'free': 'frei', 'down': 'kein Link'}[port.role] }}</dd>
+      {% if port.link %}{% set other = port.link.b if port.link.a == sw.node.id else port.link.a %}
+      <dt>Verbunden mit</dt><dd>{% if topo.nodes[other].switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=topo.nodes[other].switch_id) }}">{{ topo.nodes[other].label }}</a>{% else %}{{ topo.nodes[other].label }}{% endif %}
+        <span class="muted small">(erkannt über {{ {'lldp': 'LLDP', 'cdp': 'CDP', 'mac': 'MAC-Tabellen', 'gateway': 'Gateway-Adresse', 'vermutet': 'Anzahl der Geräte'}[port.link.via] }})</span></dd>{% endif %}
+      {% if port.neighbor %}<dt>Nachbar</dt><dd>{{ port.neighbor.name }}{% if port.neighbor.port %}, Port {{ port.neighbor.port }}{% endif %}{% if port.neighbor.ip %} · {{ port.neighbor.ip }}{% endif %} <span class="muted small">({{ port.neighbor.via }})</span></dd>{% endif %}
+      <dt>PoE</dt><dd>{{ 'liefert Strom' if port.poe else '–' }}</dd>
+      <dt>VLAN</dt><dd>{{ port.vlan or '–' }}</dd>
+      <dt>Fehler (24 h)</dt><dd class="{{ 'down-t' if port.errors_24h >= 50 }}">{{ '{:,}'.format(port.errors_24h).replace(',', '.') }}{% if port.errors_24h >= 50 %} – Kabel, Dose oder Stecker prüfen{% endif %}</dd>
+      <dt>MAC-Adressen</dt><dd>{{ port.macs|length }}</dd>
+    </dl>
+    {% if port.devices %}
+    <h3>Geräte an diesem Port</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Gerät</th><th>IP</th><th>MAC</th></tr></thead>
+      <tbody>{% for d in port.devices[:50] %}<tr>
+        <td>{% if d.device_id %}<a href="{{ url_for('web.site', site_id=site.id, tab='netzwerk') }}#geraet-{{ d.device_id }}">{{ d.label }}</a>{% else %}{{ d.label }}{% endif %}{% if d.is_probe %} <span class="badge info">Probe</span>{% endif %}</td>
+        <td>{{ d.ip or '–' }}</td><td class="mono nowrap">{{ d.mac }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if port.devices|length > 50 %}<p class="small muted">… und {{ port.devices|length - 50 }} weitere.</p>{% endif %}
+    {% endif %}
+    {% if port.devices %}<p><a href="{{ url_for('web.topology_path', site_id=site.id, mac=port.devices[0].mac) }}">Pfad von {{ port.devices[0].label }} bis ins Internet</a></p>{% endif %}
+  </section>
+  <section class="card" aria-labelledby="h-measure">
+    <h2 id="h-measure">Wachtl-Messung an diesem Port</h2>
+    {% if measure %}
+    <p class="small">Auf <a href="{{ url_for('web.probe', probe_id=measure.probe.id) }}">{{ measure.probe.hostname }}</a> läuft eine Wachtl-Probe. So stehen Port und Messung nebeneinander.</p>
+    {% if measure.states %}
+    <div class="scroll"><table>
+      <thead><tr><th>Ziel</th><th>Zustand</th></tr></thead>
+      <tbody>{% for st in measure.states %}<tr><td><a href="{{ check_url(measure.probe, st.check) }}">{{ st.check.name }}</a></td>
+        <td><span class="dot {{ {'ok': 'ok', 'warn': 'warn', 'down': 'down'}.get(st.state, '') }}" aria-hidden="true"></span> {{ st.detail or st.label }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="muted">Die Probe hat keine Ping-Messungen.</p>{% endif %}
+    {% else %}
+    <p class="muted">An diesem Port hängt kein Gerät mit Wachtl-Probe. Mit einer Probe auf einem PC an diesem Port erscheinen hier Latenz und Paketverlust.</p>
+    {% endif %}
+    {% if port_errors %}
+    <h3>Neue Fehler an diesem Port (7 Tage)</h3>
+    <ul class="small">{% for e in port_errors %}<li>{{ e.ts|dt }}: {{ e.errors }} Fehler</li>{% endfor %}</ul>
+    {% endif %}
+  </section>
+</div>
+{% endif %}
+
+<section class="card" aria-labelledby="h-all">
+  <h2 id="h-all">Alle Ports</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Port</th><th>Verbunden mit</th><th>Verbindung</th><th>PoE</th><th>VLAN</th><th>Fehler 24 h</th></tr></thead>
+    <tbody>{% for p in all_ports %}{% if p.physical or p.up %}
+      <tr{% if port and p.index == port.index %} class="row-sel"{% endif %}>
+        <td><a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=row.id, port=p.index) }}#port">{{ p.short }}</a>{% if p.alias %} <span class="muted small">{{ p.alias }}</span>{% endif %}</td>
+        <td>{% if p.link %}{% set other = p.link.b if p.link.a == sw.node.id else p.link.a %}{{ topo.nodes[other].label }}{% elif p.devices %}{{ p.devices[0].label }}{% if p.devices|length > 1 %} <span class="muted small">+{{ p.devices|length - 1 }}</span>{% endif %}{% elif p.neighbor %}{{ p.neighbor.name }}{% else %}<span class="muted">–</span>{% endif %}</td>
+        <td class="nowrap">{% if p.up %}<span class="{{ 'warn-t' if p.speed and p.speed < 1000 and p.role in ('uplink', 'downlink') }}">{{ speed_text(p.speed) }}</span>{% if p.duplex == 'half' %} <span class="badge warning">Halbduplex</span>{% endif %}{% else %}<span class="muted">{{ 'frei' if p.admin_up else 'aus' }}</span>{% endif %}</td>
+        <td>{{ 'ja' if p.poe else '–' }}</td><td>{{ p.vlan or '–' }}</td>
+        <td class="{{ 'down-t' if p.errors_24h >= 50 }}">{{ p.errors_24h }}</td>
+      </tr>{% endif %}{% endfor %}</tbody>
+  </table></div>
+</section>
+
+<section class="card" aria-labelledby="h-access">
+  <h2 id="h-access">Zugang und Verlauf</h2>
+  <dl class="kvlist"><dt>Zugang</dt><dd>{{ creds }}</dd><dt>Abfrage</dt><dd>{{ 'pausiert' if row.status == 'disabled' else 'alle 15 Minuten über die Server-Probe' }}</dd></dl>
+  {% if has_role(user, 'admin') %}
+  <div class="actions">
+    <a class="button" href="{{ url_for('web.topology_edit', site_id=site.id, switch_id=row.id) }}">Zugangsdaten ändern</a>
+    <form method="post" action="{{ url_for('web.topology_status', site_id=site.id, switch_id=row.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>{{ 'Abfrage fortsetzen' if row.status == 'disabled' else 'Abfrage pausieren' }}</button></form>
+    <form method="post" action="{{ url_for('web.topology_delete', site_id=site.id, switch_id=row.id) }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="danger" data-confirm="Switch {{ sw.node.label }} mit seinen Zugangsdaten löschen?">Switch löschen</button></form>
+  </div>
+  {% endif %}
+  {% if events %}
+  <h3>Verlauf</h3>
+  <div class="scroll"><table>
+    <thead><tr><th>Zeit</th><th>Ereignis</th></tr></thead>
+    <tbody>{% for e in events %}<tr><td class="nowrap">{{ e.ts|dt }}</td><td>{{ {'speed_changed': 'Geschwindigkeit geändert', 'mac_moved': 'Gerät an anderem Port'}.get(e.kind, e.kind) }}: {{ e.detail }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% endif %}
+</section>
+{% endblock %}

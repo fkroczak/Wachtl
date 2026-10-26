@@ -159,8 +159,94 @@ def main(base: str) -> dict:
             hosts = lan + ([phone] if with_phone else []) + ([intruder] if i == 7 else [])
             netscan_service.store(scanner, {"id": scan}, netscan_service.validate(
                 {"hosts": hosts, "subnets": ["192.168.1.0/24"], "duration_s": 21.4}), now - (7 - i) * 900)
+        switch = _seed_topology(site, now)
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
-    return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice}
+    return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice,
+            "switch": switch}
+
+
+def _seed_topology(site: int, now: int) -> int:
+    """Switch-Topologie (docs/TOPOLOGIE.md): Core, Erdgeschoss, Obergeschoss, Lager – wie in den Entwürfen."""
+    from wachtl import secretbox
+    from wachtl.services import topology
+
+    def mac(prefix: int, n: int) -> str:
+        return f"02:00:00:{prefix:02X}:{n // 256:02X}:{n % 256:02X}"
+
+    def snap(name, base, ports, fdb, lldp=(), poe=(), gateway=None, ips=(), arp=()):
+        return {"system": {"name": name, "descr": f"{name} · Managed Switch, Firmware 7.2", "object_id": None,
+                           "uptime_s": 41 * 86400 + 3600, "location": "Technikschrank", "contact": None},
+                "interfaces": [{"index": i, "name": f"Port {i}", "descr": f"Port {i}", "alias": alias, "type": 6,
+                                "speed_mbps": speed if up else None, "mac": mac(base, 1000 + i), "admin_up": True,
+                                "oper_up": up, "in_errors": 0, "out_errors": 0, "fcs_errors": 0,
+                                "duplex": "full" if up else None}
+                               for i, speed, up, alias in ports],
+                "fdb": [{"mac": m, "if_index": p, "vlan": 10} for m, p in fdb], "lldp": list(lldp), "cdp": [],
+                "pvid": {str(i): 20 if i % 4 == 2 else 10 for i, *_ in ports},
+                "poe": {"power_w": 370, "used_w": 62, "ports": list(poe)} if poe else None,
+                "ips": list(ips), "arp": [{"ip": a, "mac": m} for a, m in arp], "gateway": gateway,
+                "base_mac": mac(base, 0), "lldp_chassis": mac(base, 0), "duration_s": 1.4}
+
+    def nb(port, base, port_id, name, ip):
+        return {"if_index": port, "chassis_id": mac(base, 0), "port_id": port_id, "port_descr": port_id,
+                "sys_name": name, "sys_descr": None, "mgmt_ip": ip, "bridge": True, "ap": False, "router": False,
+                "phone": False}
+
+    gw, empfang, nas, srv, printer = "3C:A6:2F:11:22:01", "A8:5E:45:00:00:50", "00:11:32:AA:BB:20", \
+        "00:15:5D:01:02:10", "00:80:77:12:34:30"
+    eg_pcs = [mac(0x40, i) for i in range(14)]
+    og_pcs = [mac(0x41, i) for i in range(6)]
+    desk = [mac(0x42, i) for i in range(5)]
+    wlan = [mac(0x43, i) for i in range(9)]
+    lager = [mac(0x44, i) for i in range(3)]
+    ap = mac(0x45, 1)
+    downstream_eg = [mac(2, 0), empfang, printer] + eg_pcs
+    downstream_og = [mac(3, 0)] + og_pcs + desk
+    core = snap("SW-Core-01", 1,
+                [(1, 10000, True, "SW-EG-01"), (2, 10000, True, "Firewall"), (3, 1000, True, "SW-OG-01"),
+                 (4, 1000, True, "Server HV-01"), (5, 1000, True, "AP-Empfang"), (6, 1000, True, "NAS")]
+                + [(i, 1000, False, None) for i in range(7, 9)] + [(9, 100, True, "SW-Lager")]
+                + [(i, 1000, i < 15, None) for i in range(10, 25)] + [(i, 10000, i < 27, None) for i in range(25, 29)],
+                [(m, 1) for m in downstream_eg] + [(gw, 2)] + [(m, 3) for m in downstream_og] + [(srv, 4)]
+                + [(ap, 5)] + [(m, 5) for m in wlan] + [(nas, 6)] + [(m, 9) for m in [mac(4, 0)] + lager],
+                lldp=[nb(1, 2, "Port 25", "SW-EG-01", "192.168.1.3"),
+                      {**nb(5, 0x45, "eth0", "AP-Empfang", "192.168.1.20"), "bridge": False, "ap": True}],
+                gateway="192.168.1.1", ips=["192.168.1.2"], arp=[("192.168.1.1", gw)])
+    eg = snap("SW-EG-01", 2, [(i, 100 if i in (7, 10, 16) else 1000, i in range(1, 19) and i not in (13, 17), None)
+                              for i in range(1, 25)] + [(25, 10000, True, "Uplink Core"), (26, 10000, False, None),
+                                                        (27, 10000, False, None), (28, 10000, False, None)],
+              [(mac(1, 0), 25), (gw, 25), (mac(3, 0), 25), (empfang, 4), (printer, 7)]
+              + [(m, i) for m, i in zip(eg_pcs, [1, 2, 3, 5, 6, 8, 9, 10, 11, 12, 14, 15, 16, 18])],
+              lldp=[nb(25, 1, "Port 1", "SW-Core-01", "192.168.1.2")], poe=[1, 2, 5, 8, 10, 12, 14, 18],
+              ips=["192.168.1.3"])
+    og = snap("SW-OG-01", 3, [(i, 1000, i in (1, 2, 3, 5, 6, 7, 9, 10, 12, 14, 15), None) for i in range(1, 17)],
+              [(mac(1, 0), 15), (gw, 15), (mac(2, 0), 15)] + [(m, p) for m, p in zip(og_pcs, (1, 2, 3, 5, 6, 7))]
+              + [(m, 12) for m in desk], ips=["192.168.1.4"])
+    og["interfaces"][5]["speed_mbps"] = 100
+    lag = snap("SW-Lager", 4, [(1, 1000, True, None), (2, 100, True, None), (3, 100, True, None), (4, 1000, False, None),
+                                (5, 1000, True, None), (6, 1000, False, None), (7, 1000, False, None),
+                                (8, 100, True, "Uplink Core")],
+               [(mac(1, 0), 8), (gw, 8)] + [(m, p) for m, p in zip(lager, (1, 2, 3))], ips=["192.168.1.5"])
+    secret = secretbox.seal({"version": "2c", "community": "demo"})
+    ids = []
+    for name, host, s, loc in (("SW-Core-01", "192.168.1.2", core, "Serverraum"),
+                               ("SW-EG-01", "192.168.1.3", eg, "Erdgeschoss"),
+                               ("SW-OG-01", "192.168.1.4", og, "Obergeschoss"), ("SW-Lager", "192.168.1.5", lag, "Lager")):
+        ids.append(ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, location, status, "
+                       "last_poll, last_ok, sys_name, sys_descr, uptime_s, base_mac, snapshot, created_at, updated_at) "
+                       "VALUES (?, NULL, ?, 161, '2c', ?, ?, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (site, host, secret, loc, now - 240, now - 240, name, s["system"]["descr"],
+                        s["system"]["uptime_s"], s["base_mac"], json.dumps(s), now - 86400, now)))
+    ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, status, last_poll, last_error, "
+        "created_at, updated_at) VALUES (?, 'SW-Keller', '192.168.1.6', 161, '3', ?, 'active', ?, ?, ?, ?)",
+        (site, secret, now - 240, "Keine Antwort von 192.168.1.6 (Zeitüberschreitung) – Adresse, Benutzer und "
+         "Firewall (UDP 161) prüfen.", now - 86400, now))
+    ins("INSERT INTO net_port_errors (switch_id, if_index, ts, errors) VALUES (?, 4, ?, 1204)", (ids[1], now - 3600))
+    for i in range(3):
+        ins("INSERT INTO net_topo_events (site_id, switch_id, ts, kind, if_index, mac, detail) VALUES (?, ?, ?, "
+            "'mac_moved', 3, ?, ?)", (site, ids[0], now - 3600 * (i + 1), og_pcs[0], f"{og_pcs[0]}: Port 3 → Port 7"))
+    topology.refresh_findings(site, now)
+    return ids[1]
 
 
 if __name__ == "__main__":
