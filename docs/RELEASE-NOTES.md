@@ -7,6 +7,7 @@
 
 - **Eigene Wachtl-CA**: Wachtl stellt sein Server-Zertifikat jetzt mit einer eigenen Zertifizierungsstelle aus. Auf die Geräte kommt nur die CA (10 Jahre, per Namensbeschränkung nur für die Adressen des Servers). Das Server-Zertifikat gilt 397 Tage und erneuert sich 30 Tage vor Ablauf selbst – Windows im laufenden Dienst ohne Neustart, Linux täglich per Cron. Damit akzeptieren auch Safari auf Mac, iPhone und iPad das Zertifikat. Der Pin der Probes bleibt gleich; bestehende Installationen stellt das Update einmal um.
 - **Tägliche Prüfung auf den PCs**: Die geplante Aufgabe „Wachtl Zertifikat“ legt die CA nach, wenn der Server beim Setup nicht erreichbar war, und übernimmt eine neu ausgestellte CA.
+- **Handy: Menü rechts**: Am Handy öffnet ein Hamburger-Symbol oben rechts die Navigation und das Benutzermenü.
 - **Richtiges Setup zum Herunterladen**: Liegen auf dem Server mehrere Setups im Probe-Ordner, gibt das Web-UI jetzt immer das mit der höchsten Versionsnummer aus. Bisher entschied das Dateidatum – ein später kopiertes älteres Setup (z. B. 0.9.2) verdrängte das aktuelle.
 
 ## Neu in 0.9.3
