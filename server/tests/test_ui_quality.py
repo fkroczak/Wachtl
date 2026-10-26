@@ -221,7 +221,7 @@ class PageSemanticsTest(AppTestCase):
     def test_all_pages_pass_lint(self):
         failures = {}
         for url in self.pages():
-            r = self.client.get(url)
+            r = self.client.get(url, follow_redirects=True)  # ein Standort: / zeigt die Standortseite
             self.assertEqual(r.status_code, 200, url)
             problems = lint(r.get_data(as_text=True))
             if problems:
@@ -243,7 +243,7 @@ class PageSemanticsTest(AppTestCase):
         names = {"Zentrale", "PC-EMPFANG"}
         failures = []
         for url in self.pages() + [f"/meldungen?status=all&probe={pid}"]:
-            r = self.client.get(url)
+            r = self.client.get(url, follow_redirects=True)  # ein Standort: / zeigt die Standortseite
             self.assertEqual(r.status_code, 200, url)
             for node in _Tree(r.get_data(as_text=True)).root.walk():
                 chain = [node, *node.ancestors()]

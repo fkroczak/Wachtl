@@ -33,17 +33,18 @@
   </div>
   <div class="side-drawer" id="side-drawer" data-menu>
   <nav class="side-nav" aria-label="Hauptnavigation">
-    {% set nav = [('web.overview', 'Übersicht'), ('web.sites_view', 'Standorte'), ('web.probes_view', 'Probes'),
+    {% set nav = [('web.overview', 'Übersicht')] + ([] if single_site else [('web.sites_view', 'Standorte')]) + [('web.probes_view', 'Probes'),
                   ('web.alerts', 'Alarme'), ('web.outages_view', 'Ausfälle'), ('web.report_view', 'Bericht')]
                  + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
     {#- Alarme, Störungsmeldungen und PC-Hinweise sind Reiter unter einem Menüpunkt #}
     {% set nav_groups = {'web.alerts': ('web.alerts', 'web.reports_view', 'web.findings_view')} %}
     {% for endpoint, label in nav %}
-    <a href="{{ url_for(endpoint) }}"{% if request.endpoint in nav_groups.get(endpoint, (endpoint,)) %} class="active" aria-current="page"{% endif %}><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">{{ icons[endpoint]|safe }}</svg>{{ label }}
+    {% set here = request.endpoint in nav_groups.get(endpoint, (endpoint,)) or (single_site and endpoint == 'web.overview' and request.endpoint == 'web.site') %}
+    <a href="{{ url_for(endpoint) }}"{% if here %} class="active" aria-current="page"{% endif %}><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">{{ icons[endpoint]|safe }}</svg>{{ label }}
       {%- if endpoint == 'web.alerts' and open_reports %} <span class="nav-count" aria-hidden="true">{{ open_reports }}</span><span class="sr-only"> ({{ open_reports }} {{ 'offene Meldung' if open_reports == 1 else 'offene Meldungen' }})</span>{% endif %}</a>
     {% endfor %}
   </nav>
-  {% if nav_sites and nav_sites.total %}
+  {% if nav_sites and nav_sites.total > 1 %}
   <nav class="side-sites" aria-label="Standorte">
     <p class="side-group">Standorte</p>
     <ul>
