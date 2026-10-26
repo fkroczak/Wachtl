@@ -20,6 +20,8 @@ from .db import ex, ins, q1
 from .security import hash_token, new_secret, probe_auth
 from .services import alertgen
 from .services import alerts as alert_service
+from .services import disturbances as disturbance_service
+from .services import notices as notice_service
 from .services import ingest, vm
 
 log = logging.getLogger(__name__)
@@ -129,7 +131,8 @@ def ingest_batch():
         return "", 204  # bereits verarbeitet (Wiederholung nach Verbindungsabbruch)
 
     body = _read_body()
-    result = ingest.process(body, g.probe, repo.check_map_for_probe(g.probe))
+    checks = repo.check_map_for_probe(g.probe)
+    result = ingest.process(body, g.probe, checks)
     if result.rejected:
         log.info("Probe %s: %d Zeilen verworfen %s", g.probe["id"], result.rejected, result.reasons)
     try:
@@ -142,6 +145,8 @@ def ingest_batch():
         (full_id, g.probe["id"], repo.now()),
     )
     ex("UPDATE probes SET last_seen = ?, last_ip = ? WHERE id = ?", (repo.now(), _client_ip(), g.probe["id"]))
+    if result.up:
+        disturbance_service.after_ingest(g.probe, result.up, checks)
     if result.rejected and not result.accepted:
         return jsonify(accepted=0, rejected=result.rejected, reasons=result.reasons), 422
     return "", 204
@@ -177,6 +182,8 @@ def heartbeat():
         log.warning("Heartbeat-Metrik nicht gespeichert: %s", exc)
     if random.random() < 0.01:  # gelegentlich aufräumen, ohne eigenen Scheduler
         repo.prune()
+    # laufende Störungen bei Alertmanager aktuell halten, verwaiste schließen – auch wenn gerade keine Pings kommen
+    disturbance_service.housekeeping(ts)
     _, etag = repo.probe_config(g.probe)
     return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]))
 
@@ -238,6 +245,26 @@ def findings():
     for e in errors:
         log.warning("Probe %s: Hinweis abgelehnt – %s", g.probe["hostname"], e)
     return jsonify(stored=len(items), new=new, rejected=len(errors), errors=errors[:10])
+
+
+@bp.get("/notices")
+@probe_auth
+def probe_notices():
+    """Nur für die Server-Probe: neue Störungen, Alarme und Client-Hinweise aller Standorte für das Tray-Symbol auf
+    dem Wachtl-Server (siehe docs/BENACHRICHTIGUNGEN.md). Andere Probes sehen nur ihre eigenen Daten – 404."""
+    if g.probe.get("kind") != "server":
+        return jsonify(error="nicht gefunden"), 404
+    current = notice_service.cursor()
+    try:
+        a, f = int(request.args["a"]), int(request.args["f"])
+    except (KeyError, ValueError):
+        a, f = current["a"], current["f"]
+    if a > current["a"] or f > current["f"]:
+        a, f = current["a"], current["f"]
+    items = notice_service.since(a, f)
+    cursor = {"a": max([a] + [i["id"] for i in items if i["source"] == "alert"]),
+              "f": max([f] + [i["id"] for i in items if i["source"] == "finding"])}
+    return jsonify(cursor=cursor, items=items, active=notice_service.active_alert_ids())
 
 
 def _addresses(raw) -> list[str]:

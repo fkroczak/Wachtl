@@ -60,7 +60,8 @@ LANES = (
     ("loss", "Paketverlust"),
 )
 LANE_OF = {"gateway": "gateway", "wan": "wan", "target": "target", "reference": "target", "probe": "probe",
-           "loss": "loss"}
+           "loss": "loss", "packetloss": "loss"}
+LOSS_CAUSES = ("loss", "packetloss")   # kritischer Verlust (Alarmregel) und jeder einzelne verlorene Ping
 
 # Client-Hinweise, die auf den PC bzw. die Verkabelung beim Kunden zeigen
 CUSTOMER_KINDS = {"cable_unplugged", "wifi_disconnected", "link_speed_changed", "link_speed_low", "link_flapping",
@@ -170,7 +171,7 @@ def load_outages(site_id: int | None, since: int, until: int) -> list[dict]:
             "a": max(o.start, since), "b": max(min(end, until), max(o.start, since)),
         })
     # Rolle (Gateway, Referenz, Ziel) eines Paketverlusts steht nur in den Labels des Alarms
-    loss_ids = [o["id"] for o in out if o["cause"] == "loss"]
+    loss_ids = [o["id"] for o in out if o["cause"] in LOSS_CAUSES]
     roles = {}
     for chunk in (loss_ids[i:i + 500] for i in range(0, len(loss_ids), 500)):
         marks = ", ".join("?" for _ in chunk)
@@ -679,7 +680,7 @@ def verdict(incidents: list[dict], probes: list[dict], quality_items: list[dict]
                 add("provider", "offline", 0.5 * _w(d), d)
             else:
                 add("pc", "offline_single", 0.3 * _w(d), d)
-        elif c == "loss":
+        elif c in LOSS_CAUSES:
             target_role = _loss_role(inc)
             cat = {"gateway": "lan", "reference": "provider"}.get(target_role, "target")
             add(cat, f"loss_{cat}", 0.7 * _w(d), d)
@@ -732,7 +733,7 @@ def verdict(incidents: list[dict], probes: list[dict], quality_items: list[dict]
 
 
 def _loss_role(inc: dict) -> str:
-    return next((m.get("role") or "" for m in inc["members"] if m["cause"] == "loss"), "")
+    return next((m.get("role") or "" for m in inc["members"] if m["cause"] in LOSS_CAUSES), "")
 
 
 def _bullets(cat: str, ev: dict, incidents: list[dict], probes: list[dict], path_items: list[dict],
@@ -770,7 +771,7 @@ def _bullets(cat: str, ev: dict, incidents: list[dict], probes: list[dict], path
             out.append(f"{len(customer)} Hinweise der PCs selbst: {', '.join(kinds[:4])}.")
     elif cat == "target":
         n = e["target"]["n"] + e["loss_target"]["n"]
-        names = sorted({t for i in incidents if i["cause"] in ("target", "reference", "loss") for t in i["targets"]})
+        names = sorted({t for i in incidents if i["cause"] in ("target", "reference", *LOSS_CAUSES) for t in i["targets"]})
         out.append(f"{n} Störungen betrafen nur einzelne Ziele ({', '.join(names[:4]) or 'unbekannt'}). "
                    "Gateway und Internet waren dabei erreichbar.")
     else:

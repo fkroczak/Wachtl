@@ -24,9 +24,12 @@ CAUSES = {
     "reference": ("Einzelne Internet-Referenz", "Nur eine Referenz gestört, das Internet insgesamt ist erreichbar."),
     "target": ("Ziel", "Ein überwachtes Ziel ist nicht erreichbar, Gateway und Internet sind in Ordnung."),
     "loss": ("Starker Paketverlust", "Ziel erreichbar, aber mit kritischem Paketverlust."),
+    "packetloss": ("Paketverlust", "Einzelne Pings ohne Antwort – kurze Aussetzer, zu kurz für einen Ausfall. "
+                                   "Jeder verlorene Ping zählt."),
 }
-PRIORITY = {"probe": 5, "gateway": 4, "wan": 3, "loss": 2, "reference": 1, "target": 1}
-OUTAGE_ALERTS = ("WachtlProbeOffline", "WachtlTargetDown", "WachtlWanDown", "WachtlPacketLossCritical")
+PRIORITY = {"probe": 5, "gateway": 4, "wan": 3, "loss": 2, "reference": 1, "target": 1, "packetloss": 0}
+OUTAGE_ALERTS = ("WachtlProbeOffline", "WachtlTargetDown", "WachtlWanDown", "WachtlPacketLossCritical",
+                 "WachtlPacketLossAny")
 
 # Alarme starten und enden versetzt: Auswertung alle 15 s, 30 s Verzögerung für spät hochgeladene Werte und
 # 20 s Rückblick der Regel. Der echte Ausfall liegt daher bis zu SEARCH_BEFORE_S vor dem Alarmbeginn.
@@ -66,6 +69,8 @@ def classify(alertname: str, labels: dict) -> str | None:
         return "wan"
     if alertname == "WachtlPacketLossCritical":
         return "loss"
+    if alertname == "WachtlPacketLossAny":
+        return "packetloss"
     if alertname == "WachtlTargetDown":
         return {"gateway": "gateway", "reference": "reference"}.get(labels.get("role", ""), "target")
     return None
@@ -226,6 +231,23 @@ def summarize(items: list[Outage]) -> dict:
     }
 
 
+def _union_s(spans: list[tuple[int, int]]) -> int:
+    """Summe der Sekunden aller Zeiträume, überlappende nur einmal."""
+    total, cur = 0, None
+    for a, b in sorted(spans):
+        if b <= a:
+            continue
+        if cur and a <= cur[1]:
+            cur = (cur[0], max(cur[1], b))
+        else:
+            if cur:
+                total += cur[1] - cur[0]
+            cur = (a, b)
+    if cur:
+        total += cur[1] - cur[0]
+    return total
+
+
 # Ursachen, die einen Standort als gestört zeigen; die übrigen (einzelnes Ziel, Verlust) als auffällig
 SEVERE = ("probe", "gateway", "wan")
 
@@ -253,21 +275,11 @@ def site_health(items: list[Outage], sites: list[dict], since: int, until: int, 
             cell = "down" if any(o.cause in SEVERE for o in hit) else "warn" if hit else "ok"
             cells.append(cell)
             slots.append({"state": cell, "start": int(a), "end": int(b), "outages": hit})
-        # Gestörte Zeit als Vereinigung der Intervalle (gleichzeitige Ausfälle nicht doppelt zählen)
-        spans = sorted((max(o.start, start), min(o.end or until, until)) for o in mine if o.cause in SEVERE)
-        down, cur = 0, None
-        for a, b in spans:
-            if b <= a:
-                continue
-            if cur and a <= cur[1]:
-                cur = (cur[0], max(cur[1], b))
-            else:
-                if cur:
-                    down += cur[1] - cur[0]
-                cur = (a, b)
-        if cur:
-            down += cur[1] - cur[0]
+        # Gestörte Zeit als Vereinigung der Intervalle (gleichzeitige Störungen nicht doppelt zählen):
+        # down_s nur Ausfälle von Probe, Gateway und WAN, any_s jede Störung – auch ein einzelner verlorener Ping
+        down = _union_s([(max(o.start, start), min(o.end or until, until)) for o in mine if o.cause in SEVERE])
+        any_s = _union_s([(max(o.start, start), min(o.end or until, until)) for o in mine])
         total = until - start
-        out[s["id"]] = {"cells": cells, "slots": slots, "count": len(mine), "down_s": down,
-                        "up": None if total <= 0 else 100 * (1 - down / total)}
+        out[s["id"]] = {"cells": cells, "slots": slots, "count": len(mine), "down_s": down, "any_s": any_s,
+                        "up": None if total <= 0 else 100 * (1 - any_s / total)}
     return out

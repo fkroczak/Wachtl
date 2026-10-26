@@ -116,13 +116,79 @@ class PendingReports:
             return len(remaining)
 
 
+MAX_NOTICES = 50
+BALLOON_MAX = 255
+
+
+class NoticeFeed:
+    """Störungen und Hinweise aller Standorte für das Tray-Symbol auf dem Wachtl-Server.
+
+    Liefert dasselbe Format wie ``GET /tray/v1/findings`` der Windows-Probe (docs/CLIENT-HINWEISE.md): fortlaufende
+    Nummer je Änderung, Zählung ab der Startzeit in ms. Laufende Alarme sind aktiv, bis der Server sie als beendet
+    meldet; einmalige Ereignisse (nachträglich erkannte Ausfälle, Paketverlust, Hinweise von PCs) tragen
+    ``event = true`` und erscheinen nur als Sprechblase.
+    """
+
+    def __init__(self, clock: Callable[[], float] = time.time):
+        self.lock = threading.Lock()
+        self.start = self.seq = int(clock() * 1000)
+        self.entries: dict[str, dict] = {}
+        self.active: dict[str, dict] = {}   # Schlüssel alert:<id> → zuletzt veröffentlichter Eintrag
+        self.cursor: dict | None = None
+
+    def _publish(self, entry: dict) -> None:
+        self.seq += 1
+        entry = {**entry, "seq": self.seq}
+        self.entries[entry["finding_id"]] = entry
+        if len(self.entries) > MAX_NOTICES:
+            for key in sorted(self.entries, key=lambda k: self.entries[k]["seq"])[:len(self.entries) - MAX_NOTICES]:
+                del self.entries[key]
+
+    @staticmethod
+    def _entry(item: dict, state: str, event: bool) -> dict:
+        text = (item.get("text") or "").strip()
+        return {
+            "finding_id": item["key"], "kind": item.get("alertname") or "", "severity": item.get("severity") or "warning",
+            "state": state, "title": (item.get("title") or "Wachtl")[:120], "message": text[:500], "solution": "",
+            "balloon": text[:BALLOON_MAX], "adapter": "", "detected_at": int(item.get("ts") or time.time()),
+            "resolved_at": int(item["end"]) if state == "resolved" and item.get("end") else None, "event": event,
+        }
+
+    def accept(self, response: dict) -> None:
+        """Antwort von ``GET /api/probe/v1/notices`` übernehmen."""
+        with self.lock:
+            first = self.cursor is None
+            self.cursor = response.get("cursor") or self.cursor
+            active_ids = {f"alert:{i}" for i in response.get("active") or []}
+            for item in response.get("items") or []:
+                if first:
+                    continue  # beim Start nichts Altes nachholen, nur den Stand merken
+                if item.get("source") == "alert" and item.get("state") == "firing" and item["key"] in active_ids:
+                    entry = self._entry(item, "active", False)
+                    self.active[item["key"]] = entry
+                else:
+                    entry = self._entry(item, "active", True)
+                self._publish(entry)
+            for key in [k for k in self.active if k not in active_ids]:
+                old = self.active.pop(key)
+                self._publish({**old, "state": "resolved", "title": ("Beendet: " + old["title"])[:120],
+                               "resolved_at": int(time.time())})
+
+    def since(self, since: int, notify: bool = True) -> dict:
+        with self.lock:
+            items = sorted((e for e in self.entries.values() if e["seq"] > since), key=lambda e: e["seq"])
+            return {"notify": notify, "latest_seq": self.seq, "start_seq": self.start, "findings": items}
+
+
 class TrayService:
     """Fachlogik des Endpunkts, ohne HTTP – testbar."""
 
     def __init__(self, status: Callable[[], dict], send: Callable[[dict], None], pending: PendingReports,
-                 hostname: str, ready: Callable[[], bool] = lambda: True, clock: Callable[[], float] = time.time):
+                 hostname: str, ready: Callable[[], bool] = lambda: True, clock: Callable[[], float] = time.time,
+                 notices: NoticeFeed | None = None):
         self.status_fn, self.send, self.pending, self.hostname = status, send, pending, hostname
         self.ready, self.clock = ready, clock
+        self.notices = notices or NoticeFeed(clock)
         self.recent: dict[str, deque[float]] = {}
         self.rate_lock = threading.Lock()
 
@@ -200,8 +266,16 @@ def make_handler(service: TrayService, port: int):
         def do_GET(self):  # noqa: N802
             if not self.guard():
                 return
-            if self.path.split("?")[0] == "/tray/v1/status":
+            path, _, query = self.path.partition("?")
+            if path == "/tray/v1/status":
                 self.reply(200, service.status())
+            elif path == "/tray/v1/findings":
+                since = 0
+                for part in query.split("&"):
+                    key, _, value = part.partition("=")
+                    if key == "since" and value.isdigit():
+                        since = int(value)
+                self.reply(200, service.notices.since(since))
             elif self.path.split("?")[0] == "/tray/v1/report":
                 self.reply(405, {"error": "Nur POST."})
             else:

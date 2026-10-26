@@ -140,3 +140,37 @@ def test_puffer_nicht_schreibbar(tmp_path):
 
     (tmp_path / "p.json").mkdir()          # Datei kann nicht geschrieben werden
     assert service(tmp_path, offline).report(good())[0] == 500
+
+
+def test_hinweise_aller_standorte_fuer_das_tray_symbol():
+    from wachtl.serverprobe.tray import NoticeFeed
+
+    feed = NoticeFeed(lambda: NOW)
+    # Start: nur den Stand übernehmen, nichts Altes zeigen
+    feed.accept({"cursor": {"a": 5, "f": 2}, "items": [], "active": [4]})
+    assert feed.since(0)["findings"] == []
+    assert feed.cursor == {"a": 5, "f": 2}
+
+    def alert(i, state, **extra):
+        return {"key": f"alert:{i}", "source": "alert", "id": i, "alertname": "WachtlTargetDown", "severity": "critical",
+                "state": state, "title": "Ausfall: PC-01 (Zentrale)", "text": "Ausfall: 8.8.8.8 nicht erreichbar",
+                "ts": NOW - 30, "end": None, **extra}
+
+    feed.accept({"cursor": {"a": 7, "f": 3}, "active": [6], "items": [
+        alert(6, "firing"),
+        alert(7, "resolved", end=NOW - 10),     # nachträglich erkannt: schon vorbei
+        {"key": "finding:3", "source": "finding", "id": 3, "alertname": "cable_unplugged", "severity": "critical",
+         "state": "firing", "title": "Netzwerkkabel getrennt – PC-02 (Filiale)", "text": "Kabel stecken", "ts": NOW},
+    ]})
+    out = feed.since(0)
+    assert out["start_seq"] == NOW * 1000 and out["notify"] is True
+    items = {f["finding_id"]: f for f in out["findings"]}
+    assert items["alert:6"]["state"] == "active" and items["alert:6"]["event"] is False
+    assert items["alert:7"]["event"] is True and items["finding:3"]["event"] is True
+    assert items["alert:6"]["balloon"] == "Ausfall: 8.8.8.8 nicht erreichbar"
+    latest = out["latest_seq"]
+    # Alarm vom Server beendet: einmal „Beendet“, dann nicht mehr aktiv
+    feed.accept({"cursor": {"a": 7, "f": 3}, "active": [], "items": []})
+    later = feed.since(latest)["findings"]
+    assert [(f["finding_id"], f["state"]) for f in later] == [("alert:6", "resolved")]
+    assert later[0]["title"].startswith("Beendet: ")

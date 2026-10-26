@@ -225,11 +225,11 @@ class RecentOutageTest(AppTestCase):
         live = {(str(pid), str(cid)): {"up": 1, "rtt": 0.98, "loss": 0.0}}
         with mock.patch("wachtl.services.vm.live_status", return_value=live):
             html = self.client.get("/").get_data(as_text=True)
-            self.assertIn("Ausfälle der letzten 24 Stunden", html)
+            self.assertIn("Störungen der letzten 24 Stunden", html)
             self.assertIn("185.87.179.244", html)
             self.assertIn(f"/probes/{pid}/checks/{cid}?at={now - 600}", html)
             site_html = self.client.get("/sites/1?tab=ereignisse").get_data(as_text=True)
-            self.assertIn("Ausfälle der letzten 24 Stunden", site_html)
+            self.assertIn("Störungen der letzten 24 Stunden", site_html)
             self.assertIn("185.87.179.244", site_html)
             probe_html = self.client.get(f"/probes/{pid}").get_data(as_text=True)
             self.assertIn("1 Ausfall in 24 h", probe_html)
@@ -243,7 +243,7 @@ class RecentOutageTest(AppTestCase):
             self.assertIn("je Balken 3 Stunden", week)
             self.assertIn('class="hb-warn"', week)
             self.assertIn("Standorte – letzte 7 Tage", self.client.get("/").get_data(as_text=True))
-            self.assertIn("Ausfälle 7 Tage", self.client.get("/standorte").get_data(as_text=True))
+            self.assertIn("Störungen 7 Tage", self.client.get("/standorte").get_data(as_text=True))
             # Zeitfenster eines Balkens auf der Ausfallseite
             hit = self.client.get(f"/outages?site=1&from={now - 900}&to={now - 300}").get_data(as_text=True)
             self.assertIn("185.87.179.244", hit)
@@ -267,7 +267,9 @@ class SiteHealthTest(AppTestCase):
         h = site_health(items, [{"id": 1, "created_at": 0}, {"id": 3, "created_at": 3000}], since, until, buckets=4)
         self.assertEqual(h[1]["cells"], ["down", "ok", "warn", "ok"])
         self.assertEqual(h[1]["down_s"], 800)
-        self.assertAlmostEqual(h[1]["up"], 100 * (1 - 800 / 4800))
+        # „ohne Störung“ zählt jede Störung, auch das einzelne Ziel (100 s)
+        self.assertEqual(h[1]["any_s"], 900)
+        self.assertAlmostEqual(h[1]["up"], 100 * (1 - 900 / 4800))
         self.assertEqual(h[3]["cells"], ["none", "none", "ok", "ok"])   # erst später angelegt
         self.assertEqual(h[3]["up"], 100)
 

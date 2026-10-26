@@ -2,8 +2,8 @@
 {% macro slot_title(c) -%}
 {{ (c.start|dt)[:16] }} – {{ (c.end|dt)[:16] }}:
 {%- if c.state == 'none' %} noch nicht überwacht
-{%- elif not c.outages %} ohne Ausfall
-{%- else %} {{ c.outages|length }} {{ 'Ausfall' if c.outages|length == 1 else 'Ausfälle' }}
+{%- elif not c.outages %} ohne Störung
+{%- else %} {{ c.outages|length }} {{ 'Störung' if c.outages|length == 1 else 'Störungen' }}
   {%- for o in c.outages[:3] %} · {{ o.cause_label }}{% if o.target and o.cause not in ('probe', 'wan') %} {{ o.target }}{% endif %} ({{ o.probe_name }}, {{ o.duration|duration }}){% endfor %}
   {%- if c.outages|length > 3 %} · …{% endif %}
 {%- endif %}
@@ -22,17 +22,18 @@
   {#- Klick mit der Maus (app.js); per Tastatur führt der Link „Ausfälle“ daneben zur selben Liste -#}
   {%- for c in h.slots %}<span class="hb-{{ c.state }}" title="{{ slot_title(c) }}"{% if c.outages %} data-href="{{ slot_url(s, c) }}"{% endif %}></span>{% endfor -%}
 </span>
-<span class="sr-only">{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in {{ health_label }}{% if h.down_s %}, {{ h.down_s|duration }} gestört{% endif %}{% else %}keine Ausfälle in {{ health_label }}{% endif %}</span>
+<span class="sr-only">{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }} in {{ health_label }}{% if h.any_s %}, {{ h.any_s|duration }} gestört{% endif %}{% else %}keine Störungen in {{ health_label }}{% endif %}</span>
 {%- endmacro %}
 {% macro outages_link(s, h) -%}
-<a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="{{ s.name }}: {{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in {{ health_label }} ansehen">{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }}</a>
+<a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="{{ s.name }}: {{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }} in {{ health_label }} ansehen">{{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }}</a>
 {%- endmacro %}
-{% macro uptime(h) %}{% if h.up is not none %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% else %}–{% endif %}{% endmacro %}
+{#- nie 100,0 % zeigen, wenn es eine Störung gab: dann so viele Stellen, dass der Unterschied sichtbar ist -#}
+{% macro uptime(h) %}{% if h.up is none %}–{% elif h.any_s and h.up >= 99.95 %}{{ '%.3f'|format([h.up, 99.999]|min)|replace('.', ',') }} %{% else %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% endif %}{% endmacro %}
 {% macro range_picker(endpoint) -%}
 <nav class="seg" aria-label="Zeitraum des Verlaufs">
   {%- for key, r in health_ranges.items() %}<a href="{{ url_for(endpoint, verlauf=key) }}"{% if key == health_range %} aria-current="true"{% endif %}>{{ r[2] }}</a>{% endfor -%}
 </nav>
 {%- endmacro %}
 {% macro legend() -%}
-<p class="health-legend" aria-hidden="true"><span><i></i>ohne Ausfall</span><span><i class="hb-warn"></i>einzelnes Ziel / Paketverlust</span><span><i class="hb-down"></i>Probe, Gateway oder WAN gestört</span><span><i class="hb-none"></i>noch nicht überwacht</span><span>Balken anklicken: Ausfall ansehen · Punkt: Zustand jetzt, auch Messungen</span></p>
+<p class="health-legend" aria-hidden="true"><span><i></i>ohne Störung</span><span><i class="hb-warn"></i>Paketverlust oder einzelnes Ziel</span><span><i class="hb-down"></i>Probe, Gateway oder WAN ausgefallen</span><span><i class="hb-none"></i>noch nicht überwacht</span><span>Balken anklicken: Störung ansehen · Punkt: Zustand jetzt, auch Messungen</span></p>
 {%- endmacro %}

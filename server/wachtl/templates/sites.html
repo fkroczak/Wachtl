@@ -22,7 +22,7 @@
     <dl class="tile-kv">
       <div><dt>Probes online</dt><dd>{{ st.online }} / {{ st.probes }}</dd></div>
       <div><dt>Probleme</dt><dd class="{{ 'down-t' if st.problems }}">{{ st.problems }}</dd></div>
-      <div><dt>Ausfälle {{ health_label }}</dt><dd>{% if h.count %}<a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="Ausfälle von {{ s.name }} in {{ health_label }} ansehen">{{ h.count }}</a>{% else %}0{% endif %}</dd></div>
+      <div><dt>Störungen {{ health_label }}</dt><dd>{% if h.count %}<a class="{{ 'down-t' if h.down_s else 'warn-t' }}" href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="Störungen von {{ s.name }} in {{ health_label }} ansehen">{{ h.count }}</a>{% else %}0{% endif %}</dd></div>
     </dl>
   </li>
   {% endfor %}

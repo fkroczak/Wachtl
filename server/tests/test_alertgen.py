@@ -31,34 +31,15 @@ class AlertGenTest(AppTestCase):
         ex("UPDATE probes SET status = 'disabled' WHERE id = ?", (b,))
         self.assertIn(f'wachtl_probe_last_seen{{probe!~"{b}"}}[24h]', expr())
 
-    def test_target_down_one_rule_per_interval(self):
+    def test_outages_not_from_vmalert(self):
+        # Ausfälle und jeden Paketverlust erkennt der Server beim Eingang der Rohdaten (services/disturbances.py),
+        # auch nachgelieferte – vmalert sähe die zu spät
         repo.create_check("Server", "10.0.0.5", "target", 5, 1000, "all", None)
-        alerts = [r for r in self.rules()["wachtl-alerts"] if r["alert"] == "WachtlTargetDown"]
-        self.assertEqual(sorted(a["labels"]["interval"] for a in alerts), ["1", "5"])
-        # Standard: ab 5 s ohne Antwort. 1-s-Ping = 5 Pings in Folge, 5-s-Ping = mindestens 2 Pings
-        one = next(a for a in alerts if a["labels"]["interval"] == "1")
-        self.assertIn("[5500ms]", one["expr"])
-        self.assertIn(">= 5", one["expr"])
-        five = next(a for a in alerts if a["labels"]["interval"] == "5")
-        self.assertIn("[12500ms]", five["expr"])
-        self.assertIn(">= 2", five["expr"])
-        # Unterabfrage: jede Sekunde der letzten 20 s, damit kurze Ausfälle zwischen zwei Auswertungen nicht fehlen
-        self.assertTrue(five["expr"].startswith("count_over_time(("))
-        self.assertIn(f")[{alertgen.LOOKBACK_S}s:1s]) > 0", five["expr"])
-
-    def test_outage_window(self):
-        self.assertEqual(alertgen.outage_window(5, 1), (5, "5500ms"))
-        self.assertEqual(alertgen.outage_window(5, 2), (3, "7000ms"))
-        self.assertEqual(alertgen.outage_window(5, 60), (2, "150000ms"))
-        self.assertEqual(alertgen.outage_window(0, 1), (2, "2500ms"))
-
-    def test_wan_down_uses_seconds_of_slowest_reference(self):
-        alerts = {r["alert"]: r for r in self.rules()["wachtl-alerts"]}
-        self.assertIn("[5500ms]", alerts["WachtlWanDown"]["expr"])
-        self.assertIn('role="reference"', alerts["WachtlWanDown"]["expr"])
-        repo.create_check("Quad9", "9.9.9.9", "reference", 5, 1000, "all", None)
-        alerts = {r["alert"]: r for r in self.rules()["wachtl-alerts"]}
-        self.assertIn("[12500ms]", alerts["WachtlWanDown"]["expr"])
+        alerts = {r["alert"] for r in self.rules()["wachtl-alerts"]}
+        self.assertNotIn("WachtlTargetDown", alerts)
+        self.assertNotIn("WachtlWanDown", alerts)
+        self.assertNotIn("WachtlPacketLossAny", alerts)
+        self.assertIn("WachtlPacketLoss", alerts)
 
     def test_disabled_rule_and_thresholds(self):
         ex("UPDATE alert_rules SET enabled = FALSE WHERE kind = 'latency_high'")
@@ -67,7 +48,6 @@ class AlertGenTest(AppTestCase):
         self.assertNotIn("WachtlLatencyHigh", alerts)
         self.assertIn("> 5", alerts["WachtlPacketLoss"]["expr"])
         self.assertEqual(alerts["WachtlPacketLoss"]["for"], "60s")
-        self.assertEqual(alerts["WachtlWanDown"]["labels"]["cause"], "wan")
 
     def test_write_rules_creates_valid_yaml(self):
         path = alertgen.write_rules(reload=False)

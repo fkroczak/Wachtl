@@ -38,6 +38,10 @@ FIELDS: tuple[Field, ...] = (
     Field("client_findings_notify", "Hinweis als Sprechblase auf dem PC anzeigen", "bool", True,
           group="Client-Hinweise",
           help="Der Benutzer sieht neben der Uhr, was erkannt wurde, mit Lösungsvorschlag. Braucht das Wachtl-Symbol."),
+    Field("client_connectivity_notify", "Ausfälle, Paketverlust und Netzwerkwechsel auf dem PC melden", "bool", True,
+          group="Client-Hinweise",
+          help="Sprechblase auf dem PC, sobald Gateway, Internet oder ein Ziel nicht antwortet, bei jedem verlorenen "
+               "Ping und wenn sich das Netzwerk ändert (IP-Adresse, Gateway, LAN/WLAN). Braucht das Wachtl-Symbol."),
     Field("history_days", "Pfad- und Bandbreitenverlauf aufbewahren", "int", 400, 7, 3650, unit="Tage",
           group="Aufbewahrung"),
     Field("outage_min_s", "Ausfälle anzeigen ab", "int", 0, 0, 3600, unit="s", group="Aufbewahrung",

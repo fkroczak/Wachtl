@@ -25,7 +25,10 @@ public sealed class ClientDiagnostics
     private readonly AdapterReader _reader;
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly SemaphoreSlim _flushSignal = new(0, 1);
+    private readonly NetworkChangeDetector _networkChanges = new();
     private volatile bool _enabled = true;
+    private volatile bool _notify = true;
+    private volatile bool _connectivity = true;
     private volatile bool _resetRequested;
     private bool _readFailedLogged;
     private bool _flushFailedLogged;
@@ -42,7 +45,11 @@ public sealed class ClientDiagnostics
         Pending = pending;
         Feed = feed;
         _reader = new AdapterReader(logger);
+        Connectivity = new ConnectivityMonitor(PublishLocal);
     }
+
+    /// <summary>Ausfälle und Paketverlust an den eigenen Pings (von den Ping-Checks gefüttert), nur für das Tray-Symbol.</summary>
+    public ConnectivityMonitor Connectivity { get; }
 
     /// <summary>Für GET /tray/v1/findings.</summary>
     public FindingFeed Feed { get; }
@@ -66,7 +73,10 @@ public sealed class ClientDiagnostics
         }
 
         _enabled = config.Enabled;
-        Feed.Notify = config.Enabled && config.Notify;
+        _notify = config.Enabled && config.Notify;
+        _connectivity = config.Connectivity;
+        Connectivity.Enabled = config.Connectivity;
+        Feed.Notify = _notify || _connectivity;
     }
 
     /// <summary>Gepufferte Hinweise jetzt senden (z. B. nach erfolgreichem Heartbeat).</summary>
@@ -111,7 +121,7 @@ public sealed class ClientDiagnostics
                     _evaluator.Reset();
                 }
 
-                if (_enabled)
+                if (_enabled || _connectivity)
                 {
                     Poll(afterEvent);
                 }
@@ -136,11 +146,19 @@ public sealed class ClientDiagnostics
 
     private void Poll(bool afterEvent)
     {
-        IReadOnlyList<ClientFinding> changes;
+        IReadOnlyList<ClientFinding> changes = Array.Empty<ClientFinding>();
         try
         {
             var snapshot = _reader.Read(DateTimeOffset.UtcNow, afterEvent);
-            changes = _evaluator.Evaluate(snapshot);
+            if (_enabled)
+            {
+                changes = _evaluator.Evaluate(snapshot);
+            }
+
+            if (_networkChanges.Check(snapshot) is { } changed && _connectivity)
+            {
+                PublishLocal(new[] { changed });
+            }
         }
         catch (Exception ex)
         {
@@ -159,11 +177,23 @@ public sealed class ClientDiagnostics
         }
     }
 
-    internal void Publish(IReadOnlyList<ClientFinding> changes)
+    /// <summary>Hinweise, die nur das Tray-Symbol zeigt (Ausfälle, Paketverlust, Netzwerkwechsel) – der Server erkennt
+    /// dieselben Störungen selbst aus den Messwerten.</summary>
+    internal void PublishLocal(IReadOnlyList<ClientFinding> changes)
     {
         foreach (var finding in changes)
         {
             Feed.Publish(finding);
+            _logger.Log(finding.IsActive && finding.Severity != "info" ? LogLevel.Warning : LogLevel.Information,
+                "Netzwerk ({Kind}, {State}): {Title} – {Message}", finding.Kind, finding.State, finding.Title, finding.Message);
+        }
+    }
+
+    internal void Publish(IReadOnlyList<ClientFinding> changes)
+    {
+        foreach (var finding in changes)
+        {
+            Feed.Publish(finding, quiet: !_notify);
             if (finding.IsActive)
             {
                 _logger.Log(finding.Severity == "info" ? LogLevel.Information : LogLevel.Warning,
