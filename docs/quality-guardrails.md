@@ -55,7 +55,7 @@ Streuung auf GitHub-Runnern.
 | Largest Contentful Paint | 1,07–1,27 s | ≤ 2,0 s | error |
 | Cumulative Layout Shift | 0–0,083 → nach Korrektur 0 | ≤ 0,05 | error |
 | Total Blocking Time (Lab-Ersatz für INP) | 0–6 ms | ≤ 200 ms | error |
-| Seitengewicht gesamt | 35–91 KB | ≤ 150 KB | error |
+| Seitengewicht gesamt | 35–91 KB | ≤ 180 KB | error |
 | JavaScript / CSS | 15 / 15 KB | ≤ 36 / 40 KB | error |
 | Fremd-Ressourcen (Drittanbieter) | 0 | 0 | error |
 | First Contentful Paint | 0,91 s | ≤ 1,5 s | warn |
@@ -70,7 +70,7 @@ Streuung auf GitHub-Runnern.
 | `render-blocking-*`, `network-dependency-tree-insight`, `document-latency-insight` | aus | Eine kleine CSS-Datei, server-gerendertes HTML; LCP liegt trotzdem bei ~1,1 s mobil. | – |
 | SEO | nur Warnung | Internes Werkzeug hinter Anmeldung, wird nicht indexiert. Seit Audit 2026-10-21 `X-Robots-Tag: noindex` → Score 63 (`is-crawlable`), gewollt. | – |
 | Eigene Datei `topology.css` (~14 KB) | nur auf den Seiten der Switch-Topologie geladen | Baum, Frontansicht und Assistent brauchen eigene Regeln; in `app.css` hätten sie das CSS-Budget aller Seiten gesprengt. Die Topologie-Seiten laufen durch axe, Tastatur- und Reflow-Tests (`e2e/pages.js`), aber nicht durch Lighthouse (dort gilt das Budget je Seite). | Mit Textkompression in `app.css` zusammenführen. |
-| Budget JS 30 → 36 KB, CSS 38 → 40 KB | angehoben (Live-Benachrichtigungen, PR #36) | Jede Seite fragt alle 15 s neue Störungen ab und zeigt sie unten rechts (bleiben über das Neuladen erhalten, Desktop-Benachrichtigung); dazu Zähler aktiver Alarme. Das brachte ~5 KB JS und ~1,4 KB CSS; `main` lag schon bei ~29,6 von 30 KB JS. | Wie unten: mit Textkompression zurücksetzen. |
+| Budget JS 30 → 36 KB, CSS 38 → 40 KB, Seitengewicht 170 → 180 KB | angehoben (Live-Benachrichtigungen, PR #36) | Jede Seite fragt alle 15 s neue Störungen ab und zeigt sie unten rechts (bleiben über das Neuladen erhalten, Desktop-Benachrichtigung); dazu Zähler aktiver Alarme. Das brachte ~5 KB JS und ~1,4 KB CSS; `main` lag schon bei ~29,6 von 30 KB JS; die Graph-Seite kommt damit auf ~173 KB. | Wie unten: mit Textkompression zurücksetzen. |
 | Budget CSS 36 → 38 KB | angehoben (Hamburger-Menü mobil, PR #24) | Das ausfahrende Menü rechts für schmale Bildschirme brachte die CSS-Datei auf ~36 KB unkomprimiert (ausgeliefert ~36,6 KB); `main` lag damit über der Grenze. | Wie unten: mit Textkompression zurücksetzen. |
 | Budget CSS 26 → 36 KB, Seitengewicht 160 → 170 KB | angehoben (Design im UniFi-Stil, PR #17) | Seitenleiste mit Standortliste, Reiter, 24-h-Verlauf, Standort-Kacheln, Kompaktlisten der Übersicht und Hell/Dunkel-Tokens dafür: CSS von ~25 auf ~33 KB (unkomprimiert); die Graph-Seite liegt damit bei ~161 KB. | Wie unten: mit Textkompression liegt die Datei bei ~8 KB; dann zurücksetzen. |
 | Budgets CSS 25 → 26 KB, Seitengewicht 150 → 160 KB | angehoben (Audit 2026-10-21, **zu bestätigen**) | Touch-Ziele ≥ 44 px, Ein/Aus-Badges, Suche und Meldungen am Sprungziel brachten ~0,7 KB CSS und ~1,5 KB JS; doppelte Regeln wurden dafür entfernt. Die Graph-Seite lag vorher schon bei ~152 von 153,6 KB (90 KB davon Messdaten-JSON). | Mit Textkompression (siehe oben) fallen beide Werte weit unter die alten Grenzen; dann zurücksetzen. |
