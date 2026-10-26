@@ -252,8 +252,9 @@ class ServerProbe:
 
     def tool_loop(self) -> None:
         """Werkzeuge (docs/WERKZEUGE.md): Einzeltests aus dem Web-UI ausführen."""
-        from . import tools
+        from . import ipinfo, tools
 
+        ipinfo.CACHE_DIR = str(self.state_dir / "registry")      # Registry-Antworten je Netz (IP-Info)
         tools.loop(lambda: self.api if self.config is not None else None, self.stop_event)
 
     def gateway_fields(self) -> dict:

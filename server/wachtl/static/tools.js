@@ -28,6 +28,8 @@
   function showTool() {
     const t = tool(), [, label, ph, text] = info[t] || [];
     form.querySelectorAll("fieldset[data-tool]").forEach((fs) => { fs.hidden = fs.dataset.tool !== t; });
+    // IP-Info fragt die Registries vom Wachtl-Server aus – dort gibt es keine Probe-Auswahl
+    if (form.elements.probe) form.elements.probe.disabled = (form.dataset.serverOnly || "").split(" ").includes(t);
     if (hostLabel && label) hostLabel.textContent = label;
     if (ph) hostInput.placeholder = ph;
     if (hint && text) hint.textContent = text;
@@ -37,6 +39,7 @@
     window.history.replaceState(null, "", url);
   }
   form.querySelectorAll("input[name=tool]").forEach((r) => r.addEventListener("change", showTool));
+  if (form.elements.probe) form.elements.probe.disabled = (form.dataset.serverOnly || "").split(" ").includes(tool());
   form.elements.probe?.addEventListener("change", showTool);
 
   function payload() {
@@ -49,6 +52,7 @@
       port: { host: h, ports: val("o_ports"), timeout: val("o_timeout") },
       http: { url: h, method: val("h_method"), insecure: on("h_insecure") },
       tls: { host: h, port: val("s_port"), sni: val("s_sni") },
+      ipinfo: { host: h },
     }[t]);
   }
 

@@ -40,7 +40,11 @@ TOOLS = {
              "Statuscode, Zeiten (DNS, Verbindung, TLS, erstes Byte), Weiterleitung und Zertifikat."),
     "tls": ("Zertifikat", "Ziel (Host oder IP)", "z. B. mail.kunde.de",
             "Zertifikat eines TLS-Dienstes: Namen, Aussteller, Ablauf, Protokoll."),
+    "ipinfo": ("IP-Info", "IP oder Host", "z. B. 203.0.113.10",
+               "Rückwärtsname, Netz, Anbieter, Kontakte, Land und Herkunfts-AS – direkt bei der zuständigen Registry "
+               "(RDAP, ersatzweise WHOIS), ohne Dienst eines Dritten. Läuft immer auf dem Wachtl-Server."),
 }
+SERVER_ONLY = {"ipinfo"}       # nur die Server-Probe kann das (Registry-Abfragen, Zwischenspeicher)
 
 
 class ToolError(ValueError):
@@ -149,6 +153,9 @@ def clean(tool: str, form: dict) -> tuple[str, dict]:
             raise ToolError("Adresse: ungültiger Port.") from None
         method = "GET" if str(form.get("method") or "").upper() == "GET" else "HEAD"
         return url[:500], {"url": url[:500], "method": method, "insecure": _flag(form, "insecure")}
+    if tool == "ipinfo":
+        host = _host(form.get("host"), "IP oder Host")
+        return host, {"host": host}
     # tls
     host = _host(form.get("host"))
     sni = (form.get("sni") or "").strip()
@@ -168,6 +175,8 @@ def estimate(tool: str, args: dict) -> float:
         return args["max_hops"] * args["count"] * 0.4 + (5 if args.get("names") else 0)
     if tool == "port":
         return len(args["ports"]) * min(args["timeout"], 2)
+    if tool == "ipinfo":
+        return 8
     return 4
 
 
