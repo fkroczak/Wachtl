@@ -93,6 +93,31 @@ def system(sess: snmp.Session) -> dict:
     }
 
 
+def quick(sess: snmp.Session) -> dict:
+    """Schnelle Abfrage (jede Minute): Laufzeit und je Port Status, Geschwindigkeit, Fehler, letzte Änderung.
+
+    Wenige Pakete je Switch. Kurze Aussetzer zwischen zwei Abfragen fallen über ifLastChange auf
+    (Laufzeit des Switches bei der letzten Statusänderung des Ports)."""
+    started = time.monotonic()
+    up = sess.get([f"{SYS}.3.0"]).get(f"{SYS}.3.0")
+    if not isinstance(up, int):
+        raise snmp.SnmpError("Der Switch liefert keine Laufzeit (sysUpTime) – Zugriffsrechte prüfen.")
+    cols = {}
+    for col in (7, 8, 9, 14):
+        cols[col] = {idx[0]: v for idx, v in _table(sess, f"{IF_ENTRY}.{col}", MAX_IF) if idx}
+    hs = {idx[0]: v for idx, v in _table(sess, f"{IFX_ENTRY}.15", MAX_IF) if idx}
+    interfaces = []
+    for i in sorted(cols[8])[:MAX_IF]:
+        interfaces.append({
+            "index": i, "admin_up": cols[7].get(i) == 1, "oper_up": cols[8].get(i) == 1,
+            "speed_mbps": hs.get(i) if isinstance(hs.get(i), int) and hs.get(i) else None,
+            "in_errors": cols[14].get(i) if isinstance(cols[14].get(i), int) else None,
+            "last_change_s": cols[9][i] // 100 if isinstance(cols[9].get(i), int) else None,
+        })
+    return {"quick": True, "system": {"uptime_s": up // 100}, "interfaces": interfaces,
+            "duration_s": round(time.monotonic() - started, 2)}
+
+
 def collect(sess: snmp.Session) -> dict:
     """Vollständige Abfrage eines Switches als JSON-fähiges Wörterbuch."""
     started = time.monotonic()
@@ -103,7 +128,7 @@ def collect(sess: snmp.Session) -> dict:
     ifx = _table(sess, IFX_ENTRY, MAX_IF * 20)
     dot3 = _table(sess, DOT3_ENTRY, MAX_IF * 20)
     descr, itype, speed, phys = (_column(ift, c) for c in (2, 3, 5, 6))
-    admin, oper, in_err, out_err = (_column(ift, c) for c in (7, 8, 14, 20))
+    admin, oper, in_err, out_err, changed = (_column(ift, c) for c in (7, 8, 14, 20, 9))
     name, hspeed, alias = (_column(ifx, c) for c in (1, 15, 18))
     fcs, duplex = _column(dot3, 3), _column(dot3, 19)
     interfaces = []
@@ -121,6 +146,7 @@ def collect(sess: snmp.Session) -> dict:
             "out_errors": out_err.get(idx) if isinstance(out_err.get(idx), int) else None,
             "fcs_errors": fcs.get(idx) if isinstance(fcs.get(idx), int) else None,
             "duplex": {2: "half", 3: "full"}.get(duplex.get(idx)),
+            "last_change_s": changed[idx] // 100 if isinstance(changed.get(idx), int) else None,
         })
     out["interfaces"] = interfaces
     if_ids = {i["index"] for i in interfaces}

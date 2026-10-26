@@ -16,8 +16,8 @@ Authentifizierung: `Authorization: Bearer <probe_id>.<secret>` (außer `enroll`)
 | POST | `/findings` | `{"findings": [{"finding_id", "kind", "severity", "state", "adapter", "adapter_description", "title", "message", "solution", "details", "detected_at", "resolved_at"}]}` (höchstens 50) | 200 `{"stored", "new", "rejected", "errors"}` – ungültige Einträge werden einzeln übersprungen · 400 `{"error"}` Körper unbrauchbar – Client-Hinweise der Probe, Details in CLIENT-HINWEISE.md |
 | POST | `/report` | `{"report_id", "occurred_at", "category", "duration", "description", "user", "hostname"}` | 201 `{"id"}` neu · 200 `{"id"}` dieselbe `report_id` gab es schon · 400 `{"error"}` (deutsch) – Störungsmeldung vom Tray-Symbol, Details in STOERUNGSMELDUNGEN.md |
 
-| GET | `/topology/jobs` | – | 200 `{"jobs": [{"switch_id", "host", "port", "credentials"}], "poll_s"}` – fällige Switch-Abfragen mit entschlüsselten SNMP-Zugangsdaten · 403 keine Server-Probe – Details in TOPOLOGIE.md |
-| POST | `/results/topology` | `{"switch_id", "ts", "snapshot"}` oder `{"switch_id", "ts", "error"}` | 201 `{"stored"}` · 403 keine Server-Probe · 422 Switch unbekannt |
+| GET | `/topology/jobs` | – | 200 `{"jobs": [{"switch_id", "host", "port", "credentials", "kind"}], "poll_s"}` – `kind` = `quick` (nur Port-Status) oder `full` – fällige Switch-Abfragen mit entschlüsselten SNMP-Zugangsdaten · 403 keine Server-Probe – Details in TOPOLOGIE.md |
+| POST | `/results/topology` | `{"switch_id", "ts", "kind", "snapshot"}` oder `{"switch_id", "ts", "kind", "error"}` | 201 `{"stored"}` · 403 keine Server-Probe · 422 Switch unbekannt |
 
 Fehler bei Authentifizierung: 401 (Token fehlt/falsch), 403 (Probe deaktiviert).
 
