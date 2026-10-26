@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
 {% from "_links.html" import alert_links with context %}
-{% from "_health.html" import healthbar, uptime, legend with context %}
+{% from "_health.html" import healthbar, uptime, legend, range_picker with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <h1>Übersicht</h1>
@@ -23,16 +23,18 @@
 {% if sites %}
 <section class="card health" aria-labelledby="verlauf">
   <div class="card-head">
-    <h2 id="verlauf">Standorte – letzte 24 Stunden</h2>
-    {% if sites|length > health_sites|length %}<a href="{{ url_for('web.sites_view') }}">Alle {{ sites|length }} Standorte</a>{% else %}<span class="muted small">je Balken 30 Minuten</span>{% endif %}
+    <h2 id="verlauf">Standorte – letzte {{ health_label }}</h2>
+    {{ range_picker('web.overview') }}
   </div>
+  <p class="muted small health-sub">je Balken {{ health_step }}{% if sites|length > health_sites|length %} · <a href="{{ url_for('web.sites_view') }}">Alle {{ sites|length }} Standorte</a>{% endif %}</p>
   <ul class="health-list">
     {% for s in health_sites %}
-    {% set h = site_health[s.id] %}
+    {% set h = site_health[s.id] %}{% set state = site_state.get(s.id, 'waiting') %}{% set why = site_why.get(s.id, []) %}
     <li class="health-row">
-      <span class="health-name"><span class="dot {{ site_state.get(s.id, 'waiting') }}" aria-hidden="true"></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></span>
+      <span class="health-name"><span class="dot {{ state }}" aria-hidden="true"{% if why %} title="{{ why|map(attribute='text')|join(' · ') }}"{% endif %}></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></span>
       {{ healthbar(s, h) }}
       <span class="health-up">{{ uptime(h) }}</span>
+      {% if why and state in ('warn', 'down') %}<span class="health-why small">Jetzt: {% for w in why[:3] %}<a href="{{ w.href }}">{{ w.text }}</a>{{ ' · ' if not loop.last }}{% endfor %}{% if why|length > 3 %} · +{{ why|length - 3 }}{% endif %}</span>{% endif %}
     </li>
     {% endfor %}
   </ul>

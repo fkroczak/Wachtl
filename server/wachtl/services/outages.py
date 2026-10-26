@@ -238,14 +238,21 @@ def site_health(items: list[Outage], sites: list[dict], since: int, until: int, 
     for s in sites:
         mine = [o for o in items if o.site == str(s["id"])]
         start = max(since, s.get("created_at") or since)
-        cells = []
+        if mine:   # ein Ausfall belegt, dass schon gemessen wurde
+            start = max(since, min(start, min(o.start for o in mine)))
+        cells, slots = [], []
         for i in range(buckets):
             a, b = since + i * step, since + (i + 1) * step
+            hit = [o for o in mine if o.start < b and (o.end or until) > a]
             if b <= start:
                 cells.append("none")
+                slots.append({"state": "none", "start": int(a), "end": int(b), "outages": []})
                 continue
-            hit = [o for o in mine if o.start < b and (o.end or until) > a]
-            cells.append("down" if any(o.cause in SEVERE for o in hit) else "warn" if hit else "ok")
+            # schlimmste Ursache zuerst, bei gleicher die längste: dorthin führt der Klick auf den Balken
+            hit.sort(key=lambda o: (-PRIORITY[o.cause], -o.duration))
+            cell = "down" if any(o.cause in SEVERE for o in hit) else "warn" if hit else "ok"
+            cells.append(cell)
+            slots.append({"state": cell, "start": int(a), "end": int(b), "outages": hit})
         # Gestörte Zeit als Vereinigung der Intervalle (gleichzeitige Ausfälle nicht doppelt zählen)
         spans = sorted((max(o.start, start), min(o.end or until, until)) for o in mine if o.cause in SEVERE)
         down, cur = 0, None
@@ -261,6 +268,6 @@ def site_health(items: list[Outage], sites: list[dict], since: int, until: int, 
         if cur:
             down += cur[1] - cur[0]
         total = until - start
-        out[s["id"]] = {"cells": cells, "count": len(mine), "down_s": down,
+        out[s["id"]] = {"cells": cells, "slots": slots, "count": len(mine), "down_s": down,
                         "up": None if total <= 0 else 100 * (1 - down / total)}
     return out

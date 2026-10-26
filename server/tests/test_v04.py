@@ -234,6 +234,20 @@ class RecentOutageTest(AppTestCase):
             probe_html = self.client.get(f"/probes/{pid}").get_data(as_text=True)
             self.assertIn("1 Ausfall in 24 h", probe_html)
             self.assertIn("Ausfall vor", probe_html)
+            # Verlauf: der gelbe Balken führt direkt in den Graphen zum Zeitpunkt des Ausfalls
+            self.assertRegex(html, rf'<a class="hb-warn" href="/probes/{pid}/checks/{cid}\?at={now - 600}"')
+            # Zeitraum wählbar und gemerkt; Ausfall bleibt im längeren Verlauf sichtbar
+            week = self.client.get("/?verlauf=7d").get_data(as_text=True)
+            self.assertIn("Standorte – letzte 7 Tage", week)
+            self.assertIn("je Balken 3 Stunden", week)
+            self.assertIn('class="hb-warn"', week)
+            self.assertIn("Standorte – letzte 7 Tage", self.client.get("/").get_data(as_text=True))
+            self.assertIn("Ausfälle 7 Tage", self.client.get("/standorte").get_data(as_text=True))
+            # Zeitfenster eines Balkens auf der Ausfallseite
+            hit = self.client.get(f"/outages?site=1&from={now - 900}&to={now - 300}").get_data(as_text=True)
+            self.assertIn("185.87.179.244", hit)
+            miss = self.client.get(f"/outages?site=1&from={now - 7200}&to={now - 3600}").get_data(as_text=True)
+            self.assertNotIn("185.87.179.244", miss)
 
 
 class SiteHealthTest(AppTestCase):
