@@ -121,6 +121,10 @@ class Api:
             raise ApiError(status, _message(data))
         return json.loads(data)
 
+    def findings(self, items: list[dict]) -> dict:
+        """Client-Hinweise dieses Servers (Netzwerkkarte deaktiviert, Kabel getrennt …)."""
+        return self.json("POST", "findings", {"findings": items}, ok=(200,))
+
     def report(self, payload: dict) -> dict:
         """Störungsmeldung vom Tray-Symbol weiterleiten (201 neu, 200 schon bekannt)."""
         return self.json("POST", "report", payload)

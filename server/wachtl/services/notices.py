@@ -33,13 +33,18 @@ def cursor() -> dict[str, int]:
     return {"a": int((a or {}).get("n") or 0), "f": int((f or {}).get("n") or 0)}
 
 
+def alert_where(labels: dict) -> str:
+    where = labels.get("probe_name") or ""
+    if labels.get("site_name"):
+        where = f"{where} ({labels['site_name']})" if where else labels["site_name"]
+    return where
+
+
 def alert_title(alertname: str, labels: dict) -> str:
     title = TITLES.get(alertname, "Alarm")
     if alertname == "WachtlTargetDown" and labels.get("role") == "gateway":
         title = "Gateway ausgefallen"
-    where = labels.get("probe_name") or ""
-    if labels.get("site_name"):
-        where = f"{where} ({labels['site_name']})" if where else labels["site_name"]
+    where = alert_where(labels)
     return f"{title}: {where}" if where else title
 
 
@@ -51,6 +56,8 @@ def alert_item(r: dict) -> dict:
         "title": alert_title(r["alertname"], labels), "text": r.get("summary") or r["alertname"],
         "ts": r.get("exact_start") or r["starts_at"], "end": r.get("exact_end") or r.get("ends_at"),
         "probe_id": labels.get("probe"), "check_id": labels.get("check_id"), "site_id": labels.get("site"),
+        # für das Zusammenfassen gleichzeitiger Ausfälle einer Probe im Tray (serverprobe/tray.py)
+        "where": alert_where(labels), "role": labels.get("role") or "", "target": labels.get("target") or "",
     }
 
 

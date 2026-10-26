@@ -118,6 +118,61 @@ class PendingReports:
 
 MAX_NOTICES = 50
 BALLOON_MAX = 255
+OUTAGE_ALERTS = ("WachtlTargetDown", "WachtlWanDown")
+LINK_GRACE_S = 60       # so lange vor/nach einer eigenen Netztrennung gelten Ausfälle dieses PCs als deren Folge
+LINK_HISTORY = 20
+
+
+def _duration(seconds: float) -> str:
+    seconds = max(int(seconds), 0)
+    if seconds < 60:
+        return f"{seconds} s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes} min {seconds} s" if seconds else f"{minutes} min"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours} h {minutes} min" if minutes else f"{hours} h"
+
+
+def _join(parts: list[str]) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " und " + parts[-1]
+
+
+def outage_text(members: list[dict]) -> tuple[str, str, str, str]:
+    """Gleichzeitige Ausfälle einer Probe als ein Hinweis: (Titel, Meldung, Lösung, Schwere).
+
+    Die wahrscheinliche Ursache steht vorn: Gateway weg → lokales Netz, nur Internet weg → Internetzugang,
+    sonst einzelne Ziele. Was davon abhängt, wird nur noch gezählt."""
+    where = next((m.get("where") for m in members if m.get("where")), "")
+    gateway = any(m.get("alertname") == "WachtlTargetDown" and m.get("role") == "gateway" for m in members)
+    wan = any(m.get("alertname") == "WachtlWanDown" for m in members)
+    targets = sorted({m.get("target") or "?" for m in members
+                      if m.get("alertname") == "WachtlTargetDown" and m.get("role") != "gateway"})
+    severity = "critical" if any(m.get("severity") == "critical" for m in members) else (
+        "warning" if any(m.get("severity") == "warning" for m in members) else "info")
+    affected = (["das Internet"] if wan and gateway else []) + (
+        [targets[0]] if len(targets) == 1 else [f"{len(targets)} Ziele"] if targets else [])
+    if gateway:
+        title = "Lokales Netz gestört"
+        message = "Das Gateway (Router) antwortet nicht."
+        if affected:
+            message += f" Dadurch sind auch {_join(affected)} nicht erreichbar."
+        solution = "Router, Switch und Netzwerkkabel dieses Standorts prüfen."
+    elif wan:
+        title = "Internet ausgefallen"
+        message = "Keine Internet-Referenz antwortet, das lokale Netz ist erreichbar."
+        if affected:
+            message += f" Betroffen: {_join(affected)}."
+        solution = "Internetanschluss und Router prüfen, ggf. Störung beim Provider."
+    else:
+        title = "Ausfall"
+        message = (f"{targets[0]} ist nicht erreichbar." if len(targets) == 1
+                   else f"{len(targets)} Ziele sind nicht erreichbar: {', '.join(targets[:5])}"
+                   + (" …" if len(targets) > 5 else "") + ".")
+        solution = ""
+    if len(members) == 1 and not gateway and not wan:
+        message = members[0].get("text") or message   # einzelner Ausfall: Satz des Servers mit Dauer
+    return (f"{title}: {where}" if where else title), message, solution, severity
 
 
 class NoticeFeed:
@@ -127,14 +182,24 @@ class NoticeFeed:
     Nummer je Änderung, Zählung ab der Startzeit in ms. Laufende Alarme sind aktiv, bis der Server sie als beendet
     meldet; einmalige Ereignisse (nachträglich erkannte Ausfälle, Paketverlust, Hinweise von PCs) tragen
     ``event = true`` und erscheinen nur als Sprechblase.
+
+    Gleichzeitige Ausfälle derselben Probe (Gateway, Internet, Ziele) werden ein Hinweis mit der wahrscheinlichen
+    Ursache. Verliert dieser PC selbst das Netz (Netzwerkkarte aus, Kabel ab), erscheint genau ein Hinweis
+    „Keine Netzwerkverbindung“; die Ausfälle der eigenen Probe sind dessen Folge und erscheinen nicht einzeln.
     """
 
     def __init__(self, clock: Callable[[], float] = time.time):
         self.lock = threading.Lock()
+        self.clock = clock
         self.start = self.seq = int(clock() * 1000)
         self.entries: dict[str, dict] = {}
         self.active: dict[str, dict] = {}   # Schlüssel alert:<id> → zuletzt veröffentlichter Eintrag
+        self.groups: dict[str, dict] = {}   # Probe-ID → laufender Sammel-Ausfall {"entry", "members"}
+        self.absorbed: dict[str, dict] = {} # laufende Ausfälle der eigenen Probe während einer Netztrennung
         self.cursor: dict | None = None
+        self.own_probe: str | None = None
+        self.link_down_since: float | None = None
+        self.link_periods: deque[tuple[float, float]] = deque(maxlen=LINK_HISTORY)
 
     def _publish(self, entry: dict) -> None:
         self.seq += 1
@@ -154,25 +219,148 @@ class NoticeFeed:
             "resolved_at": int(item["end"]) if state == "resolved" and item.get("end") else None, "event": event,
         }
 
+    @staticmethod
+    def _outage_entry(key: str, members: list[dict], event: bool) -> dict:
+        title, message, solution, severity = outage_text(members)
+        balloon = message + (f" Lösung: {solution}" if solution else "")
+        return {
+            "finding_id": key, "kind": "outage", "severity": severity, "state": "active", "title": title[:120],
+            "message": message[:500], "solution": solution, "balloon": balloon[:BALLOON_MAX], "adapter": "",
+            "detected_at": int(min((m.get("ts") or time.time()) for m in members)), "resolved_at": None,
+            "event": event,
+        }
+
+    # -- eigene Netzwerkverbindung ---------------------------------------------------------------------------
+    def local_finding(self, finding: dict) -> None:
+        """Hinweis zu einer eigenen Netzwerkkarte (deaktiviert, Kabel getrennt …) sofort zeigen."""
+        with self.lock:
+            entry = {k: finding.get(k) for k in ("kind", "severity", "state", "title", "message", "solution",
+                                                  "balloon", "adapter", "detected_at", "resolved_at")}
+            self._publish({**entry, "finding_id": "local:" + finding["finding_id"], "event": False})
+
+    def set_link(self, up: bool, explained: bool = False) -> None:
+        """Netzwerkverbindung dieses PCs (Default-Route vorhanden) – von der Server-Probe alle paar Sekunden.
+
+        ``explained``: ein Hinweis zur Netzwerkkarte nennt den Grund schon – dann kein zweiter allgemeiner Hinweis."""
+        with self.lock:
+            now = self.clock()
+            link = self.entries.get("link")
+            if explained and link and link["state"] == "active":
+                self._publish({**link, "state": "resolved", "quiet": True, "resolved_at": int(now)})
+                link = None
+            if not up and self.link_down_since is None:
+                self.link_down_since = now
+                # schon gemeldete Ausfälle dieses PCs sind Folge der Trennung: still beenden
+                group = self.groups.pop(self.own_probe or "", None)
+                if group:
+                    for key, item in group["members"].items():
+                        self.absorbed[key] = item
+                    self._publish({**group["entry"], "state": "resolved", "quiet": True, "resolved_at": int(now)})
+                if explained:
+                    return
+                self._publish({
+                    "finding_id": "link", "kind": "link_down", "severity": "critical", "state": "active",
+                    "title": "Keine Netzwerkverbindung",
+                    "message": "Dieser PC (Wachtl-Server) hat keine Netzwerkverbindung – die Netzwerkkarte ist "
+                               "deaktiviert oder das Kabel getrennt. Deshalb sind Gateway, Internet und alle Ziele "
+                               "von hier aus nicht erreichbar.",
+                    "solution": "Netzwerkkabel prüfen bzw. die Netzwerkkarte wieder aktivieren.",
+                    "balloon": "Netzwerkkarte deaktiviert oder Kabel getrennt – Gateway, Internet und Ziele sind "
+                               "von hier aus nicht erreichbar.",
+                    "adapter": "", "detected_at": int(now), "resolved_at": None, "event": False,
+                })
+            elif up and self.link_down_since is not None:
+                since, self.link_down_since = self.link_down_since, None
+                self.link_periods.append((since, now))
+                if not link or link["state"] != "active":
+                    return  # Grund stand schon im Hinweis zur Netzwerkkarte, der meldet auch „wieder aktiviert“
+                self._publish({"finding_id": "link", "kind": "link_down",
+                               "severity": "critical", "state": "resolved",
+                               "title": "Netzwerkverbindung wieder da",
+                               "message": f"Die Netzwerkverbindung dieses PCs war {_duration(now - since)} getrennt.",
+                               "solution": "", "balloon": f"Nach {_duration(now - since)} wieder verbunden.",
+                               "adapter": "", "detected_at": int(since), "resolved_at": int(now), "event": False})
+
+    def _caused_by_link(self, item: dict) -> bool:
+        """Ausfall der eigenen Probe während (oder kurz um) eine eigene Netztrennung."""
+        if self.own_probe is None or str(item.get("probe_id")) != self.own_probe:
+            return False
+        if self.link_down_since is not None:
+            return True
+        ts = item.get("ts") or 0
+        end = item.get("end") or ts
+        return any(start - LINK_GRACE_S <= end and ts <= stop + LINK_GRACE_S for start, stop in self.link_periods)
+
+    # -- Hinweise vom Server ---------------------------------------------------------------------------------
     def accept(self, response: dict) -> None:
         """Antwort von ``GET /api/probe/v1/notices`` übernehmen."""
         with self.lock:
             first = self.cursor is None
             self.cursor = response.get("cursor") or self.cursor
             active_ids = {f"alert:{i}" for i in response.get("active") or []}
+            now = self.clock()
+            settled = self.link_down_since is None and all(now - stop > LINK_GRACE_S for _, stop in self.link_periods)
+            # nach der Netztrennung: was dann noch läuft, ist eine eigene Störung
+            for key in list(self.absorbed):
+                if key not in active_ids:
+                    del self.absorbed[key]
+                elif settled:
+                    self._join_group(self.absorbed.pop(key))
+            changed: set[str] = set()
+            late: dict[str, list[dict]] = {}
             for item in response.get("items") or []:
                 if first:
                     continue  # beim Start nichts Altes nachholen, nur den Stand merken
-                if item.get("source") == "alert" and item.get("state") == "firing" and item["key"] in active_ids:
+                if item.get("source") == "finding" and self.own_probe and str(item.get("probe_id")) == self.own_probe:
+                    continue  # eigene Hinweise (Netzwerkkarte) stehen schon über local_finding() im Tray
+                firing = item.get("source") == "alert" and item.get("state") == "firing" and item["key"] in active_ids
+                if item.get("source") == "alert" and item.get("alertname") in OUTAGE_ALERTS:
+                    if self._caused_by_link(item):
+                        if firing:
+                            self.absorbed[item["key"]] = item
+                        continue
+                    if firing:
+                        changed.add(self._join_group(item, publish=False))
+                    else:
+                        late.setdefault(str(item.get("probe_id")), []).append(item)
+                    continue
+                if firing:
                     entry = self._entry(item, "active", False)
                     self.active[item["key"]] = entry
                 else:
                     entry = self._entry(item, "active", True)
                 self._publish(entry)
+            for probe in changed:
+                group = self.groups[probe]
+                group["entry"] = self._outage_entry(group["entry"]["finding_id"], list(group["members"].values()), False)
+                self._publish(group["entry"])
+            for probe, members in late.items():
+                # nachträglich erkannt und schon vorbei: ein Ereignis je Probe statt eines je Ziel
+                self._publish(self._outage_entry(f"outage-late:{probe}:{members[0]['id']}", members, True))
             for key in [k for k in self.active if k not in active_ids]:
                 old = self.active.pop(key)
                 self._publish({**old, "state": "resolved", "title": ("Beendet: " + old["title"])[:120],
                                "resolved_at": int(time.time())})
+            for probe in list(self.groups):
+                group = self.groups[probe]
+                for key in [k for k in group["members"] if k not in active_ids]:
+                    del group["members"][key]
+                if not group["members"]:
+                    del self.groups[probe]
+                    old = group["entry"]
+                    self._publish({**old, "state": "resolved", "title": ("Beendet: " + old["title"])[:120],
+                                   "resolved_at": int(time.time())})
+
+    def _join_group(self, item: dict, publish: bool = True) -> str:
+        probe = str(item.get("probe_id"))
+        group = self.groups.get(probe)
+        if group is None:
+            group = self.groups[probe] = {"entry": {"finding_id": f"outage:{probe}:{item['id']}"}, "members": {}}
+        group["members"][item["key"]] = item
+        if publish:
+            group["entry"] = self._outage_entry(group["entry"]["finding_id"], list(group["members"].values()), False)
+            self._publish(group["entry"])
+        return probe
 
     def since(self, since: int, notify: bool = True) -> dict:
         with self.lock:
