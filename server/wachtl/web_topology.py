@@ -9,6 +9,7 @@ from flask import abort, flash, redirect, render_template, request, url_for
 from . import repo, secretbox
 from .db import ex, ins, q, q1
 from .security import current_user, login_required
+from .services import switchfind
 from .services import topology as topo_service
 from .web import SITE_TABS, _live, bp
 
@@ -52,7 +53,8 @@ def _common(site: dict, view: str, topo=None) -> dict:
     counts = q1("SELECT COUNT(*) AS n FROM net_topo_findings WHERE site_id = ? AND active = TRUE AND ack_at IS NULL "
                 "AND severity <> 'info'", (site["id"],))
     drafts = q("SELECT * FROM net_switches WHERE site_id = ? AND status = 'draft' ORDER BY id", (site["id"],))
-    return {"site": site, "tabs": SITE_TABS, "tab": "topologie", "view": view, "views": VIEWS,
+    need = [c for c in switchfind.candidates(site["id"]) if c["access"] != "none"]
+    return {"site": site, "tabs": SITE_TABS, "tab": "topologie", "view": view, "views": VIEWS, "need_creds": need,
             "problem_count": int(counts["n"] or 0), "poller": _poller(), "drafts": drafts,
             "speed_text": topo_service.speed_text, "speed_short": topo_service.speed_short,
             "speed_class": topo_service.speed_class, "link_label": topo_service.link_label, "topo": topo,
@@ -147,6 +149,26 @@ def topology_context(site_id: int):
     return render_template("topo_context.html", ctx=ctx, **_common(site, "verlauf", topo_service.build(site_id)))
 
 
+@bp.get("/topologie")
+@login_required()
+def topology_index():
+    """Menüpunkt Topologie: bei einem Standort direkt sein Baum, sonst eine Kachel je Standort."""
+    sites = q("SELECT * FROM sites ORDER BY name")
+    if len(sites) == 1:
+        return redirect(url_for("web.topology", site_id=sites[0]["id"]))
+    cards = []
+    for site in sites:
+        sw = q1("SELECT COUNT(*) AS n, SUM(CASE WHEN last_error IS NOT NULL AND status = 'active' THEN 1 ELSE 0 END) AS bad, "
+                "MAX(last_ok) AS last_ok FROM net_switches WHERE site_id = ? AND status <> 'draft'", (site["id"],))
+        problems = q1("SELECT COUNT(*) AS n FROM net_topo_findings WHERE site_id = ? AND active = TRUE AND ack_at IS NULL "
+                      "AND severity <> 'info'", (site["id"],))
+        found = switchfind.candidates(site["id"])
+        cards.append({"site": site, "switches": int(sw["n"] or 0), "bad": int(sw["bad"] or 0), "last_ok": sw["last_ok"],
+                      "problems": int(problems["n"] or 0), "found": len(found),
+                      "need": sum(1 for c in found if c["access"] != "none")})
+    return render_template("topo_index.html", cards=cards)
+
+
 def _first_switch(topo) -> int:
     """Oberster Switch im Baum (meist der Core) – vorausgewählt im Seitenbereich."""
     stack = list(reversed(topo.roots))
@@ -179,10 +201,33 @@ def _switch_panel(site_id: int, topo, switch_id: int) -> dict:
 def topology_switches(site_id: int):
     """Switch-Karten: je Switch Uplink, Belegung, PoE, Aufschalten."""
     site = _site(site_id)
+    switchfind.refresh(site_id)
     topo = topo_service.build(site_id)
     cards = [_switch_panel(site_id, topo, sid) for sid in sorted(topo.switches, key=lambda i: topo.nodes[topo.switches[i]["node"]].label.lower())]
-    unmanaged = [n for n in topo.nodes.values() if n.kind in ("unmanaged", "neighbor")]
-    return render_template("topo_switches.html", cards=cards, unmanaged=unmanaged, **_common(site, "switche", topo))
+    unmanaged = [n for n in topo.nodes.values() if n.kind == "unmanaged"]
+    found = switchfind.candidates(site_id)
+    in_tree = {n.candidate_id: n for n in topo.nodes.values() if n.candidate_id}
+    for c in found:
+        node = in_tree.get(c["id"])
+        parent = topo.nodes.get(node.parent) if node and node.parent else None
+        c["where"] = f"{parent.label} · {topo_service.link_label(topo, node)}" if parent else None
+    ignored = switchfind.candidates(site_id, ("ignored",))
+    return render_template("topo_switches.html", cards=cards, unmanaged=unmanaged, found=found, ignored=ignored,
+                           **_common(site, "switche", topo))
+
+
+@bp.post("/sites/<int:site_id>/topologie/gefunden/<int:cand_id>/ignorieren")
+@login_required("admin")
+def topology_ignore(site_id: int, cand_id: int):
+    """Gefundenen Switch ausblenden (kein Switch oder soll nicht überwacht werden) – oder wieder anzeigen."""
+    c = q1("SELECT * FROM net_switch_candidates WHERE id = ? AND site_id = ?", (cand_id, site_id)) or abort(404)
+    new = "new" if c["state"] == "ignored" else "ignored"
+    ex("UPDATE net_switch_candidates SET state = ? WHERE id = ?", (new, cand_id))
+    repo.audit(current_user()["username"], f"topology.candidate_{'show' if new == 'new' else 'ignore'}",
+               f"candidate:{cand_id}", c["ip"] or c["mac"])
+    topo_service.refresh_findings(site_id, repo.now())
+    flash("Wird wieder angezeigt." if new == "new" else "Ausgeblendet – steht unten unter „Ausgeblendet“.", "ok")
+    return redirect(url_for("web.topology_switches", site_id=site_id))
 
 
 @bp.get("/sites/<int:site_id>/topologie/switche/<int:switch_id>")
@@ -294,12 +339,15 @@ def topology_path(site_id: int):
 
 # -- Assistent: Switch mit Zugangsdaten anlegen ---------------------------------------------
 def _suggestions(site_id: int, topo) -> list[dict]:
-    """Vorschläge: per LLDP/CDP gefundene Switches ohne Zugangsdaten."""
+    """Vorschläge: automatisch gefundene Switches (LLDP/CDP, Netzwerkscan, Rundruf) ohne Zugangsdaten."""
     known = {r["host"] for r in q("SELECT host FROM net_switches WHERE site_id = ?", (site_id,))}
-    out = []
+    out = [{"host": c["ip"], "name": c["label"], "id": c["id"], "access": c["access"],
+            "why": f"{c['sure']} ein Switch · {c['sources_text']}"}
+           for c in switchfind.candidates(site_id) if c["ip"] and c["ip"] not in known and c["access"] != "none"]
+    seen = {s["host"] for s in out}
     for n in topo.nodes.values():
-        if n.kind == "neighbor" and n.ip and n.ip not in known:
-            out.append({"host": n.ip, "name": n.label, "why": "per LLDP/CDP gefunden"})
+        if n.kind == "neighbor" and n.ip and n.ip not in known and n.ip not in seen:
+            out.append({"host": n.ip, "name": n.label, "id": None, "access": "snmp", "why": "per LLDP/CDP gefunden"})
     return out[:12]
 
 
@@ -307,8 +355,15 @@ def _wizard(site: dict, sw: dict | None, form: dict, errors: list, status: int =
     from flask import render_template as rt
 
     topo = topo_service.build(site["id"])
-    others = q("SELECT id, name, sys_name, host, snmp_version FROM net_switches WHERE site_id IN "
+    others = q("SELECT id, name, sys_name, host, snmp_version, access FROM net_switches WHERE site_id IN "
                "(SELECT id FROM sites) AND id <> ? ORDER BY site_id = ? DESC, name", (sw["id"] if sw else 0, site["id"]))
+    others = [o for o in others if (o["access"] or "snmp") == "snmp"]
+    access = form.get("access") or (sw or {}).get("access") or "snmp"
+    known = {r["host"] for r in q("SELECT host FROM net_switches WHERE site_id = ?", (site["id"],))}
+    # weitere gefundene Switches, für die dieselben Zugangsdaten gelten könnten (Haken setzt der Benutzer)
+    also = [c for c in switchfind.candidates(site["id"]) if c["ip"] and c["ip"] not in known
+            and c["ip"] != form.get("host") and c["access"] in ("snmp", "easysmart")] if not sw else []
+    chosen = {str(x) for x in (form.get("auch") or [])} if isinstance(form.get("auch"), list) else set()
     existing = {}
     if sw:
         try:
@@ -316,7 +371,8 @@ def _wizard(site: dict, sw: dict | None, form: dict, errors: list, status: int =
         except secretbox.SecretError:
             existing = {}
     return rt("topo_wizard.html", sw=sw, form=form, errors=errors, field_errors={e.field: e for e in errors if e.field},
-              existing=existing, others=others, suggestions=_suggestions(site["id"], topo),
+              existing=existing, others=others, suggestions=_suggestions(site["id"], topo), access=access,
+              also=also, chosen=chosen, ACCESS_KINDS=topo_service.ACCESS_KINDS,
               SNMP_VERSIONS=topo_service.SNMP_VERSIONS, SEC_LEVELS=topo_service.SEC_LEVELS,
               AUTH_CHOICES=topo_service.AUTH_CHOICES, PRIV_CHOICES=topo_service.PRIV_CHOICES,
               sec_level=topo_service.sec_level, **_common(site, "switche")), status
@@ -329,7 +385,14 @@ def topology_new(site_id: int):
     site = _site(site_id)
     if request.method == "GET":
         form = {"host": request.args.get("host", "")[:253], "name": request.args.get("name", "")[:80],
-                "snmp_version": "2c", "copy_from": request.args.get("wie", "")}
+                "snmp_version": "2c", "copy_from": request.args.get("wie", ""),
+                "access": request.args.get("zugang") if request.args.get("zugang") in ("snmp", "easysmart") else None,
+                "web_user": "admin"}
+        cand = q1("SELECT * FROM net_switch_candidates WHERE id = ? AND site_id = ?",
+                  (request.args.get("kandidat", type=int), site_id))
+        if cand:
+            form.update(host=cand["ip"] or form["host"], name=form["name"] or switchfind.label(cand)[:80],
+                        access=cand["access"] if cand["access"] in ("snmp", "easysmart") else "snmp")
         return _wizard(site, None, form, [])
     return _save_wizard(site, None)
 
@@ -345,6 +408,7 @@ def topology_edit(site_id: int, switch_id: int):
         except secretbox.SecretError:
             creds = {"version": sw["snmp_version"]}
         form = {"host": sw["host"], "name": sw["name"] or "", "location": sw["location"] or "", "port": sw["port"],
+                "access": sw["access"] or "snmp", "web_port": sw["port"], "web_user": creds.get("user", ""),
                 "snmp_version": creds.get("version", "2c"), "user": creds.get("user", ""),
                 "sec_level": topo_service.sec_level(creds), "auth_proto": creds.get("auth_proto", "sha"),
                 "priv_proto": creds.get("priv_proto", "aes"), "context": creds.get("context", "")}
@@ -357,16 +421,19 @@ def _save_wizard(site: dict, sw: dict | None):
 
     form = request.form
     errors: list = []
+    access = form.get("access") if form.get("access") in ("snmp", "easysmart") else "snmp"
     host = (form.get("host") or "").strip()
     if not host or len(host) > 253 or not valid_host(host):
         errors.append(FieldError("Adresse: IP-Adresse oder Hostname des Switches eintragen.", "host"))
+    key = "web_port" if access == "easysmart" else "port"
     try:
-        port = int(form.get("port") or 161)
+        port = int(form.get(key) or (80 if access == "easysmart" else 161))
         if not 1 <= port <= 65535:
             raise ValueError
     except ValueError:
-        errors.append(FieldError("UDP-Port: Zahl zwischen 1 und 65535 (Standard 161).", "port"))
-        port = 161
+        errors.append(FieldError("TCP-Port: Zahl zwischen 1 und 65535 (Standard 80)." if access == "easysmart" else
+                                 "UDP-Port: Zahl zwischen 1 und 65535 (Standard 161).", key))
+        port = 80 if access == "easysmart" else 161
     name = (form.get("name") or "").strip()[:80] or None
     location = (form.get("location") or "").strip()[:80] or None
     existing = {}
@@ -375,8 +442,11 @@ def _save_wizard(site: dict, sw: dict | None):
             existing = secretbox.unseal(sw["secret"])
         except secretbox.SecretError:
             existing = {}
-    copy_id = form.get("copy_from", type=int)
-    if copy_id:
+    copy_id = form.get("copy_from", type=int) if access == "snmp" else None
+    if access == "easysmart":
+        creds, cred_errors = topo_service.parse_web_credentials(form, existing)
+        errors += cred_errors
+    elif copy_id:
         src = q1("SELECT * FROM net_switches WHERE id = ?", (copy_id,))
         try:
             creds = secretbox.unseal(src["secret"]) if src else None
@@ -393,52 +463,80 @@ def _save_wizard(site: dict, sw: dict | None):
              (site["id"], host, port, sw["id"] if sw else 0))
     if dup:
         errors.append(FieldError("Adresse: dieser Switch ist an diesem Standort schon eingetragen.", "host"))
+    also = [int(x) for x in form.getlist("auch") if x.isdigit()][:20]
     if errors:
-        return _wizard(site, sw, dict(form), errors, 422)
+        return _wizard(site, sw, {**form.to_dict(), "auch": [str(x) for x in also]}, errors, 422)
     ts = repo.now()
     secret = secretbox.seal(creds)
     user = current_user()["username"]
     if sw:
         ex("UPDATE net_switches SET host = ?, port = ?, name = ?, location = ?, snmp_version = ?, secret = ?, "
-           "updated_at = ? WHERE id = ?", (host, port, name, location, creds["version"], secret, ts, sw["id"]))
+           "access = ?, updated_at = ? WHERE id = ?",
+           (host, port, name, location, creds["version"], secret, access, ts, sw["id"]))
         switch_id = sw["id"]
         repo.audit(user, "topology.switch_update", f"switch:{switch_id}", f"{host}, {topo_service.credential_hint(creds)}")
     else:
         switch_id = ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, location, status, "
-                        "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?)",
-                        (site["id"], name, host, port, creds["version"], secret, location, ts, ts))
+                        "access, origin, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?)",
+                        (site["id"], name, host, port, creds["version"], secret, location, access,
+                         "erkannt" if form.get("kandidat") else "manuell", ts, ts))
         repo.audit(user, "topology.switch_create", f"switch:{switch_id}", f"{host}, {topo_service.credential_hint(creds)}")
-    return redirect(url_for("web.topology_check", site_id=site["id"], switch_id=switch_id))
+    return redirect(url_for("web.topology_check", site_id=site["id"], switch_id=switch_id,
+                            auch=",".join(str(x) for x in also) or None))
+
+
+def _test(sw: dict) -> tuple[dict | None, str | None]:
+    """Switch sofort vom Wachtl-Server aus abfragen: (Momentaufnahme, None) oder (None, Fehlertext)."""
+    from . import easysmart, snmp, snmpcollect
+
+    try:
+        if (sw.get("access") or "snmp") == "easysmart":
+            snapshot = easysmart.poll(sw["host"], secretbox.unseal(sw["secret"]), port=sw["port"])
+        else:
+            with snmp.Session(sw["host"], topo_service.credentials(sw), port=sw["port"], timeout=2.0, retries=1) as sess:
+                snapshot = snmpcollect.collect(sess)
+        return topo_service.clean_snapshot(snapshot), None
+    except (snmp.SnmpError, easysmart.EasySmartError, secretbox.SecretError) as exc:
+        return None, str(exc)
+    except Exception:  # noqa: BLE001 – unerwartete Antwort des Switches: im Assistenten melden, nicht abstürzen
+        log.exception("Switch %s: Test fehlgeschlagen", sw["host"])
+        return None, "Unerwartete Antwort des Switches – Details stehen im Server-Log."
+
+
+def _also(site_id: int, raw: str | None) -> list[dict]:
+    ids = [int(x) for x in (raw or "").split(",") if x.isdigit()][:20]
+    if not ids:
+        return []
+    marks = ",".join("?" * len(ids))
+    return [dict(c, label=switchfind.label(c)) for c in q(
+        f"SELECT * FROM net_switch_candidates WHERE site_id = ? AND id IN ({marks}) AND state = 'new' AND ip IS NOT NULL",
+        (site_id, *ids))]
 
 
 @bp.get("/sites/<int:site_id>/topologie/switche/<int:switch_id>/pruefen")
 @login_required("admin")
 def topology_check(site_id: int, switch_id: int):
     """Assistent Schritt 3: Verbindung vom Wachtl-Server aus testen und Ergebnis zeigen."""
-    from . import snmp, snmpcollect
+    from . import snmpcollect
 
     site = _site(site_id)
     sw = _switch(site_id, switch_id)
-    result, error = None, None
-    try:
-        with snmp.Session(sw["host"], topo_service.credentials(sw), port=sw["port"], timeout=2.0, retries=1) as sess:
-            snapshot = topo_service.clean_snapshot(snmpcollect.collect(sess))
+    result = None
+    snapshot, error = _test(sw)
+    if snapshot is not None:
         result = snmpcollect.summary(snapshot)
         topo_service.store_result(sw, snapshot, None, repo.now())
-    except (snmp.SnmpError, secretbox.SecretError) as exc:
-        error = str(exc)
-        if sw["status"] != "draft":
-            topo_service.store_result(sw, None, error, repo.now())
-    except Exception:  # noqa: BLE001 – unerwartete Antwort des Switches: im Assistenten melden, nicht abstürzen
-        log.exception("Switch %s: Test fehlgeschlagen", sw["host"])
-        error = "Unerwartete Antwort des Switches – Details stehen im Server-Log."
+    elif sw["status"] != "draft" and not error.startswith("Unerwartete"):
+        topo_service.store_result(sw, None, error, repo.now())
     repo.audit(current_user()["username"], "topology.switch_test", f"switch:{switch_id}", error or "erfolgreich")
     sw = _switch(site_id, switch_id)
     try:
         hint = topo_service.credential_hint(secretbox.unseal(sw["secret"]))
     except secretbox.SecretError:
         hint = "–"
-    return render_template("topo_check.html", sw=sw, result=result, error=error, hint=hint, **_common(site, "switche"))
+    return render_template("topo_check.html", sw=sw, result=result, error=error, hint=hint,
+                           also=_also(site_id, request.args.get("auch")), auch=request.args.get("auch") or "",
+                           **_common(site, "switche"))
 
 
 @bp.post("/sites/<int:site_id>/topologie/switche/<int:switch_id>/aktivieren")
@@ -447,11 +545,40 @@ def topology_activate(site_id: int, switch_id: int):
     sw = _switch(site_id, switch_id)
     ex("UPDATE net_switches SET status = 'active', poll_requested = ?, updated_at = ? WHERE id = ?",
        (repo.now(), repo.now(), switch_id))
-    repo.audit(current_user()["username"], "topology.switch_activate", f"switch:{switch_id}", sw["host"])
-    topo_service.refresh_findings(site_id, repo.now())
+    user = current_user()["username"]
+    repo.audit(user, "topology.switch_activate", f"switch:{switch_id}", sw["host"])
     full_s, quick_s = topo_service.intervals()
-    flash(f"{topo_service.switch_label(sw)} wird jetzt alle {full_s // 60} Minuten vollständig abgefragt"
-          + (f", der Port-Status alle {quick_s} Sekunden." if quick_s else "."), "ok")
+    msg = (f"{topo_service.switch_label(sw)} wird jetzt alle {full_s // 60} Minuten vollständig abgefragt"
+           + (f", der Port-Status alle {quick_s} Sekunden." if quick_s else "."))
+    added, failed = [], []
+    for c in _also(site_id, request.form.get("auch")):
+        # dieselben Zugangsdaten für weitere gefundene Switches – nur die, die der Benutzer angehakt hat
+        ts = repo.now()
+        port = sw["port"] if (c["access"] == sw["access"]) else (80 if sw["access"] == "easysmart" else 161)
+        if c["access"] != (sw["access"] or "snmp") or q1(
+                "SELECT id FROM net_switches WHERE site_id = ? AND host = ? AND port = ?", (site_id, c["ip"], port)):
+            continue
+        new_id = ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, status, access, origin, "
+                     "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'draft', ?, 'erkannt', ?, ?)",
+                     (site_id, c["name"], c["ip"], port, sw["snmp_version"], sw["secret"], sw["access"], ts, ts))
+        row = _switch(site_id, new_id)
+        snapshot, error = _test(row)
+        if snapshot is None:
+            ex("DELETE FROM net_switches WHERE id = ?", (new_id,))
+            failed.append(f"{c['label']} ({error.rstrip('.')})")
+            continue
+        ex("UPDATE net_switches SET status = 'active', poll_requested = ?, updated_at = ? WHERE id = ?",
+           (ts, ts, new_id))
+        topo_service.store_result(_switch(site_id, new_id), snapshot, None, ts)
+        repo.audit(user, "topology.switch_create", f"switch:{new_id}",
+                   f"{c['ip']}, Zugangsdaten wie bei switch:{switch_id}")
+        added.append(c["label"])
+    if added:
+        msg += f" Mit denselben Zugangsdaten eingetragen: {', '.join(added)}."
+    if failed:
+        msg += f" Nicht übernommen (Zugangsdaten passen nicht oder keine Antwort): {'; '.join(failed)}."
+    topo_service.refresh_findings(site_id, repo.now())
+    flash(msg, "ok")
     if request.form.get("next") == "neu":
         return redirect(url_for("web.topology_new", site_id=site_id, wie=switch_id))
     return redirect(url_for("web.topology_switch", site_id=site_id, switch_id=switch_id))
