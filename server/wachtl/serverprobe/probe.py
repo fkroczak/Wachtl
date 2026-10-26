@@ -107,7 +107,8 @@ class ServerProbe:
             if self.stop_event.wait(30):
                 return
         loops = [threading.Thread(target=fn, daemon=True, name=fn.__name__)
-                 for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop, self.topology_loop)]
+                 for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop, self.topology_loop,
+                           self.discovery_loop)]
         if self.tray:
             loops.append(threading.Thread(target=self.notice_loop, daemon=True, name="notice_loop"))
         for t in loops:
@@ -236,6 +237,12 @@ class ServerProbe:
         from . import topology
 
         topology.loop(lambda: self.api if self.config is not None else None, self.stop_event)
+
+    def discovery_loop(self) -> None:
+        """Rundruf nach Switches ohne SNMP im eigenen Netz (TP-Link Easy Smart, Netgear ProSAFE Plus)."""
+        from . import discovery
+
+        discovery.loop(lambda: self.api if self.config is not None else None, self.stop_event)
 
     def heartbeat_loop(self) -> None:
         while not self.stop_event.is_set():

@@ -25,6 +25,7 @@
   'web.outages_view': '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
   'web.report_view': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   'web.reports_view': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  'web.topology_index': '<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>',
   'web.admin': '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
 } %}
 <div class="shell">
@@ -35,12 +36,14 @@
   </div>
   <div class="side-drawer" id="side-drawer" data-menu>
   <nav class="side-nav" aria-label="Hauptnavigation">
-    {% set nav = [('web.overview', 'Übersicht')] + ([] if single_site else [('web.sites_view', 'Standorte')]) + [('web.probes_view', 'Probes'),
+    {% set nav = [('web.overview', 'Übersicht')] + ([] if single_site else [('web.sites_view', 'Standorte')])
+                 + [('web.topology_index', 'Topologie'), ('web.probes_view', 'Probes'),
                   ('web.alerts', 'Alarme'), ('web.outages_view', 'Störungen'), ('web.report_view', 'Bericht'), ('web.reports_view', 'Meldungen'),
                   ('web.findings_view', 'Hinweise')]
                  + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
     {% for endpoint, label in nav %}
-    {% set here = request.endpoint == endpoint or (single_site and endpoint == 'web.overview' and request.endpoint == 'web.site') %}
+    {%- set here = request.endpoint == endpoint or (single_site and endpoint == 'web.overview' and request.endpoint == 'web.site')
+                   or (endpoint == 'web.topology_index' and (request.endpoint or '').startswith('web.topology')) %}
     <a href="{{ url_for(endpoint) }}"{% if here %} class="active" aria-current="page"{% endif %}><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">{{ icons[endpoint]|safe }}</svg>{{ label }}
       {%- if endpoint == 'web.reports_view' and open_reports %} <span class="nav-count" aria-hidden="true">{{ open_reports }}</span><span class="sr-only"> ({{ open_reports }} offen)</span>{% endif %}
       {%- if endpoint == 'web.alerts' %} <span class="nav-count alarm" data-alert-count aria-hidden="true"{% if not active_alerts %} hidden{% endif %}>{{ active_alerts }}</span><span class="sr-only" data-alert-count-sr>{% if active_alerts %} ({{ active_alerts }} aktiv){% endif %}</span>{% endif %}</a>
