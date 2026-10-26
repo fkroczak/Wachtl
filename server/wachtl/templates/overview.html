@@ -11,7 +11,7 @@
 {% set active_probes = probes|selectattr('status','equalto','active')|list %}
 <section class="cards stats" aria-label="Kennzahlen">
   <a class="card stat" href="{{ url_for('web.sites_view') }}"><span class="num">{{ sites|length }}</span><span>Standorte</span></a>
-  <a class="card stat {{ 'bad' if offline else '' }}" href="{{ url_for('web.probes_view', tab='alle') }}"><span class="num">{{ active_probes|length - offline|length }} / {{ active_probes|length }}</span><span>Probes online</span></a>
+  <a class="card stat {{ 'bad' if offline else '' }}" href="{{ url_for('web.probes_view') }}"><span class="num">{{ active_probes|length - offline|length }} / {{ active_probes|length }}</span><span>Probes online</span></a>
   <a class="card stat {{ 'bad' if alerts else '' }}" href="{{ url_for('web.alerts') }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
   <a class="card stat {{ 'bad' if n_problems else '' }}" href="{{ url_for('web.probes_view') }}"><span class="num">{{ n_problems }}</span><span>Messungen mit Problemen</span></a>
   <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="{{ url_for('web.outages_view', range='24h') }}"><span class="num">{{ recent_outages|length }}</span><span>Störungen (24 h)</span></a>

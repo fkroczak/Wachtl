@@ -212,7 +212,7 @@ class PageSemanticsTest(AppTestCase):
                 "/admin", "/admin/audit", "/account", "/account/design", "/meldungen", "/meldungen?status=all",
                 f"/probes/{pid}/checks/1?at={repo.now() - 600}", "/standorte", "/hinweise"] \
             + [f"/admin/checks/new/{t}" for t in checktypes.TYPES] \
-            + [f"/probes?tab={t}" for t in ("probleme", "alle", "bandbreite", "sprache")] \
+            + ["/probes"] \
             + [f"/admin?tab={t}" for t in ("standardpaket", "checks", "messung", "alarme", "benachrichtigungen",
                                            "benutzer")] \
             + [f"/sites/1?tab={t}" for t in ("ereignisse", "meldungen", "messungen")] \
