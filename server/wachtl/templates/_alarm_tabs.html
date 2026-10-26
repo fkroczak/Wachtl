@@ -1,0 +1,9 @@
+{#- Gemeinsame Reiter für Alarme, Störungsmeldungen und PC-Hinweise (ein Menüpunkt) -#}
+{% macro alarm_tabs(current) -%}
+<nav class="tabs" aria-label="Alarme und Meldungen">
+  {%- for ep, text in [('web.alerts', 'Alarme'), ('web.reports_view', 'Störungsmeldungen'), ('web.findings_view', 'PC-Hinweise')] %}
+  <a href="{{ url_for(ep) }}"{% if ep == current %} class="active" aria-current="page"{% endif %}>{{ text }}
+    {%- if ep == 'web.reports_view' and open_reports %} <span class="tab-count" aria-hidden="true">{{ open_reports }}</span><span class="sr-only"> ({{ open_reports }} offen)</span>{% endif %}</a>
+  {%- endfor %}
+</nav>
+{%- endmacro %}

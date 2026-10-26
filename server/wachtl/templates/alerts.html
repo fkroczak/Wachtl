@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "_alarm_tabs.html" import alarm_tabs with context %}
 {% block title %}Alarme{% endblock %}
 {% from "_links.html" import alert_links with context %}
 {% block content %}
-<h1>Alarme</h1>
+<h1>Alarme &amp; Meldungen</h1>
+{{ alarm_tabs('web.alerts') }}
 
 <h2>Aktiv</h2>
 {% if firing %}

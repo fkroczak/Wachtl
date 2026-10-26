@@ -1,8 +1,10 @@
 {% extends "base.html" %}
+{% from "_alarm_tabs.html" import alarm_tabs with context %}
 {% block title %}Hinweise von PCs{% endblock %}
 {% from "_findings.html" import findings_table with context %}
 {% block content %}
-<h1>Hinweise von PCs</h1>
+<h1>Alarme &amp; Meldungen</h1>
+{{ alarm_tabs('web.findings_view') }}
 <p class="muted">Was die Probes auf ihrem PC selbst erkannt haben (Netzwerkkarte, Kabel, Treiber, DHCP) – aktive und die der letzten 7 Tage.</p>
 {% if client_findings %}{{ findings_table(client_findings) }}
 {% else %}<p class="muted">Keine Hinweise von PCs in den letzten 7 Tagen.</p>{% endif %}

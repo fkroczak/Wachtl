@@ -1,7 +1,9 @@
 {% extends "base.html" %}
+{% from "_alarm_tabs.html" import alarm_tabs with context %}
 {% block title %}Meldungen{% endblock %}
 {% block content %}
-<h1>Störungsmeldungen</h1>
+<h1>Alarme &amp; Meldungen</h1>
+{{ alarm_tabs('web.reports_view') }}
 <p class="muted">Benutzer melden hier Netzprobleme über das Wachtl-Symbol neben der Uhr. Jede Meldung steht auch als Markierung im Graph der Probe.
   So sieht man, ob Latenz, Verlust oder Bandbreite zu diesem Zeitpunkt auffällig waren.</p>
 
