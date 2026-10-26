@@ -62,7 +62,7 @@
         {% if d.label != d.ip %}<br><span class="muted">{{ d.ip }}{% if d.hostname and d.hostname != d.label %} · {{ d.hostname }}{% endif %}</span>{% endif %}
         {% for f in d.flags %}<span class="badge {{ 'critical' if f == 'ip_conflict' else 'warning' if f in ('irregular', 'new') else 'info' }}">{{ FLAG_LABELS[f] }}</span> {% endfor %}
         {% if has_role(user, 'operator') %}
-        <details class="note-edit"><summary>Bezeichnung</summary>
+        <details class="note-edit"><summary class="muted">{{ "Bezeichnung ändern" if d.note else "Bezeichnung vergeben" }}<span class="sr-only">: {{ d.ip }}</span></summary>
           <form method="post" action="{{ url_for('web.netscan_note', device_id=d.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="zeitraum" value="{{ rng }}">
             <label for="note-{{ d.id }}">Bezeichnung für {{ d.ip }}</label>

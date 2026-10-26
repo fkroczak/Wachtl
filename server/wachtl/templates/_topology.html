@@ -12,7 +12,8 @@
     <a href="{{ url_for(ep, site_id=site.id) }}"{% if key == view %} aria-current="page"{% endif %}>{{ text }}{% if key == 'probleme' and problem_count %} <span class="tab-count">{{ problem_count }}</span>{% endif %}</a>
     {%- endfor %}
   </nav>
-  {% if has_role(user, 'admin') %}<a class="button primary" href="{{ url_for('web.topology_new', site_id=site.id) }}">Switch hinzufügen</a>{% endif %}
+  {#- nicht im Assistenten selbst: dort führte der Knopf auf die eigene Seite #}
+  {% if has_role(user, 'admin') and request.endpoint not in ('web.topology_new', 'web.topology_edit', 'web.topology_check') %}<a class="button primary" href="{{ url_for('web.topology_new', site_id=site.id) }}">Switch hinzufügen</a>{% endif %}
 </div>
 {% if poller and not poller.online %}
 <p class="flash warn" role="status">Die Server-Probe ist {{ 'nicht eingerichtet' if not poller.probe else 'gerade nicht erreichbar' }}. Sie fragt die Switches regelmäßig ab – bis sie läuft, bleiben die Daten auf dem Stand der letzten Abfrage. Der Test im Assistenten funktioniert trotzdem.</p>
@@ -65,8 +66,13 @@
     <rect class="tn-box" x="{{ b.x }}" y="{{ b.y }}" width="{{ lay.node_w }}" height="56" rx="10"/>
     <rect class="tn-ic" x="{{ b.x + 10 }}" y="{{ b.y + 12 }}" width="32" height="32" rx="8"/>
     <path class="tn-glyph" transform="translate({{ b.x + 17 }} {{ b.y + 19 }}) scale(0.75)" d="{{ GLYPHS[n.kind] }}"/>
-    <text class="tn-l" x="{{ b.x + 52 }}" y="{{ b.y + 24 }}">{{ n.label|truncate(19, True, '…', 0) }}</text>
-    <text class="tn-s" x="{{ b.x + 52 }}" y="{{ b.y + 42 }}">{{ (sub ~ (' · ' ~ b.chip if b.chip else ''))|truncate(24, True, '…', 0) }}</text>
+    {#- Zeichenzahl allein passt nicht zu jeder Schriftbreite: das innere svg schneidet am Kartenrand ab #}
+    <svg x="{{ b.x + 52 }}" y="{{ b.y }}" width="{{ lay.node_w - 58 }}" height="56" overflow="hidden">
+      <text class="tn-l" x="0" y="24">{{ n.label|truncate(17, True, '…', 0) }}</text>
+      {#- die Geräteanzahl bleibt ganz stehen, gekürzt wird der Ort davor #}
+      {%- set chip = (' · ' ~ b.chip) if b.chip else '' %}
+      <text class="tn-s" x="0" y="42">{{ sub|truncate([19 - chip|length, 4]|max, True, '…', 0) }}{{ chip }}</text>
+    </svg>
     {%- if n.findings %}<g class="tmark"><circle cx="{{ b.x + lay.node_w - 6 }}" cy="{{ b.y + 4 }}" r="12"/><text x="{{ b.x + lay.node_w - 6 }}" y="{{ b.y + 8 }}" text-anchor="middle">{{ n.findings|join(',')|truncate(5, True, '…', 0) }}</text></g>{% endif %}
   </g>
   {%- if href %}</a>{% endif %}
@@ -80,13 +86,18 @@
 {% macro tree_list(topo, site, nid) -%}
 {%- set n = topo.nodes[nid] %}
 <li>{% if n.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id) }}">{{ n.label }}</a>{% elif n.kind == 'candidate' and n.access != 'none' and has_role(user, 'admin') %}<a href="{{ url_for('web.topology_new', site_id=site.id, kandidat=n.candidate_id) }}">{{ n.label }}</a>{% else %}{{ n.label }}{% endif %}
-  <span class="muted small">{{ KIND_TEXT[n.kind] }}{% set ll = link_label(topo, n) if n.link and n.parent else '' %}{% if ll %} · {{ ll }}{% endif %}{% if STATUS_TEXT[n.status] %} · {{ STATUS_TEXT[n.status] }}{% endif %}{% if n.kind in ('candidate', 'unmanaged') and n.sub %} · {{ n.sub }}{% endif %}{% if n.devices %} · {{ n.devices|length }} Geräte{% endif %}</span>
+  {%- set ll = link_label(topo, n) if n.link and n.parent else '' %}
+  {#- Art nur, wenn sie nicht schon der Name ist (sonst „Internet Internet“) #}
+  {%- set bits = [KIND_TEXT[n.kind] if KIND_TEXT[n.kind] != n.label else '', ll, STATUS_TEXT[n.status],
+                  n.sub if n.kind in ('candidate', 'unmanaged') else '',
+                  (n.devices|length ~ (' Gerät' if n.devices|length == 1 else ' Geräte')) if n.devices else '']|select|list %}
+  {%- if bits %} <span class="muted small">{{ bits|join(' · ') }}</span>{% endif %}
   {%- if n.children %}<ul>{% for c in n.children %}{{ tree_list(topo, site, c) }}{% endfor %}</ul>{% endif %}
 </li>
 {%- endmacro %}
 
 {#- Frontansicht: Ports als Kacheln; mini = nur Übersicht ohne Links -#}
-{% macro faceplate(blocks, site, sw_id, selected=None, mini=False, name='') -%}
+{% macro faceplate(blocks, site, sw_id, selected=None, mini=False, name='', verlauf=None) -%}
 {%- for blk in blocks %}
 {%- if mini %}
 <div class="face face-mini" role="img" aria-label="Ports von {{ name }}: farbig = belegt, Farbe nach Geschwindigkeit, rot = Fehler">
@@ -100,18 +111,18 @@
 <div class="face">
   <div class="face-rows">
   {%- for row in (blk.top, blk.bottom) %}
-    <div class="face-row">{% for p in row %}{{ _port(p, site, sw_id, selected) }}{% endfor %}</div>
+    <div class="face-row">{% for p in row %}{{ _port(p, site, sw_id, selected, verlauf) }}{% endfor %}</div>
   {%- endfor %}
   </div>
-  {%- if blk.sfp %}<div class="face-sfp">{% for p in blk.sfp %}{{ _port(p, site, sw_id, selected) }}{% endfor %}</div>{% endif %}
+  {%- if blk.sfp %}<div class="face-sfp">{% for p in blk.sfp %}{{ _port(p, site, sw_id, selected, verlauf) }}{% endfor %}</div>{% endif %}
 </div>
 {%- endif %}
 {%- endfor %}
 {%- endmacro %}
 
-{% macro _port(p, site, sw_id, selected) -%}
+{% macro _port(p, site, sw_id, selected, verlauf=None) -%}
 {%- set who = (p.neighbor.name if p.neighbor else (p.devices[0].label if p.devices else '')) %}
-<a class="pt pt-{{ p.state }}{{ ' pt-sel' if p.index == selected }}" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw_id, port=p.index) }}#port"
+<a class="pt pt-{{ p.state }}{{ ' pt-sel' if p.index == selected }}" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw_id, port=p.index, verlauf=verlauf) }}#port"
    aria-label="Port {{ p.short }}: {{ 'frei' if not p.up else (speed_text(p.speed) ~ (', ' ~ who if who else '') ~ (', Uplink' if p.role == 'uplink' else '') ~ (', PoE' if p.poe else '') ~ (', Fehler' if p.state == 'err' else '')) }}"
    {%- if p.index == selected %} aria-current="true"{% endif %}><span class="pt-n">{{ p.short|truncate(5, True, '', 0) }}</span>{% if p.role == 'uplink' %}<span class="pt-m" aria-hidden="true">↑</span>{% elif p.poe %}<span class="pt-m" aria-hidden="true">⚡</span>{% endif %}</a>
 {%- endmacro %}

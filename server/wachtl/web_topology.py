@@ -510,14 +510,15 @@ def _test(sw: dict) -> tuple[dict | None, str | None]:
         return None, "Unerwartete Antwort des Switches – Details stehen im Server-Log."
 
 
-def _also(site_id: int, raw: str | None) -> list[dict]:
+def _also(site_id: int, raw: str | None, access: str | None) -> list[dict]:
+    """Angehakte weitere Switches – nur die mit derselben Zugangsart, denn nur für sie gelten dieselben Zugangsdaten."""
     ids = [int(x) for x in (raw or "").split(",") if x.isdigit()][:20]
     if not ids:
         return []
     marks = ",".join("?" * len(ids))
     return [dict(c, label=switchfind.label(c)) for c in q(
         f"SELECT * FROM net_switch_candidates WHERE site_id = ? AND id IN ({marks}) AND state = 'new' AND ip IS NOT NULL",
-        (site_id, *ids))]
+        (site_id, *ids)) if c["access"] == (access or "snmp")]
 
 
 @bp.get("/sites/<int:site_id>/topologie/switche/<int:switch_id>/pruefen")
@@ -542,7 +543,7 @@ def topology_check(site_id: int, switch_id: int):
     except secretbox.SecretError:
         hint = "–"
     return render_template("topo_check.html", sw=sw, result=result, error=error, hint=hint,
-                           also=_also(site_id, request.args.get("auch")), auch=request.args.get("auch") or "",
+                           also=_also(site_id, request.args.get("auch"), sw["access"]), auch=request.args.get("auch") or "",
                            **_common(site, "switche"))
 
 
@@ -558,11 +559,11 @@ def topology_activate(site_id: int, switch_id: int):
     msg = (f"{topo_service.switch_label(sw)} wird jetzt alle {full_s // 60} Minuten vollständig abgefragt"
            + (f", der Port-Status alle {quick_s} Sekunden." if quick_s else "."))
     added, failed = [], []
-    for c in _also(site_id, request.form.get("auch")):
+    for c in _also(site_id, request.form.get("auch"), sw["access"]):
         # dieselben Zugangsdaten für weitere gefundene Switches – nur die, die der Benutzer angehakt hat
         ts = repo.now()
         port = sw["port"] if (c["access"] == sw["access"]) else (80 if sw["access"] == "easysmart" else 161)
-        if c["access"] != (sw["access"] or "snmp") or q1(
+        if q1(
                 "SELECT id FROM net_switches WHERE site_id = ? AND host = ? AND port = ?", (site_id, c["ip"], port)):
             continue
         new_id = ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, status, access, origin, "
@@ -597,10 +598,16 @@ def topology_poll(site_id: int, switch_id: int):
     sw = _switch(site_id, switch_id)
     ex("UPDATE net_switches SET poll_requested = ? WHERE id = ?", (repo.now(), switch_id))
     poller = _poller()
-    flash(f"Abfrage von {topo_service.switch_label(sw)} beauftragt – das Ergebnis kommt in etwa 30 Sekunden."
-          if poller["online"] else "Abfrage beauftragt. Die Server-Probe ist gerade nicht erreichbar; sie fragt ab, "
-          "sobald sie wieder läuft.", "ok")
-    return redirect(request.form.get("next") or url_for("web.topology_switch", site_id=site_id, switch_id=switch_id))
+    if poller["online"]:
+        msg = f"Abfrage von {topo_service.switch_label(sw)} beauftragt – das Ergebnis kommt in etwa 30 Sekunden."
+    elif poller["probe"]:
+        msg = "Abfrage beauftragt. Die Server-Probe ist gerade nicht erreichbar; sie fragt ab, sobald sie wieder läuft."
+    else:   # wie das Banner der Seite: ohne Server-Probe fragt niemand ab
+        msg = "Abfrage beauftragt. Die Server-Probe ist nicht eingerichtet; die Abfrage läuft erst, wenn sie eingerichtet ist."
+    flash(msg, "ok")
+    return redirect(request.form.get("next") or url_for("web.topology_switch", site_id=site_id, switch_id=switch_id,
+                                                        port=request.form.get("port", type=int),
+                                                        verlauf=request.form.get("verlauf") or None))
 
 
 @bp.post("/sites/<int:site_id>/topologie/switche/<int:switch_id>/status")

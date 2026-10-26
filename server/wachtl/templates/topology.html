@@ -21,9 +21,11 @@
   <p>Den Anfang des Baums baut Wachtl selbst: Jede Probe meldet ihr Gateway, Wachtl erkennt Hersteller und Modell
      (FRITZ!Box, UniFi, Sophos, FortiGate, Juniper SSR, LANCOM …) und hängt die Geräte aus dem Netzwerkscan darunter.
      Sobald eine Probe am Standort läuft, erscheint er hier.</p>
-  <p>Wachtl fragt die Switches per SNMP ab: welche Switches miteinander verbunden sind, welche Ports belegt sind und
-     welches Gerät an welchem Port hängt. Daraus entsteht hier ein Baum vom Internet bis zum einzelnen PC.</p>
-  <p>Unterstützt werden SNMPv1, SNMPv2c und SNMPv3. Der Assistent fragt je Switch die Zugangsdaten ab und testet sie sofort.</p>
+  <p>Wachtl fragt die Switches per SNMP ab – günstige TP-Link-Easy-Smart-Switches ohne SNMP über ihre Weboberfläche:
+     welche Switches miteinander verbunden sind, welche Ports belegt sind und welches Gerät an welchem Port hängt.
+     Daraus entsteht hier ein Baum vom Internet bis zum einzelnen PC.</p>
+  <p>Unterstützt werden SNMPv1, SNMPv2c, SNMPv3 und die Weboberfläche von TP-Link Easy Smart. Der Assistent fragt je Switch
+     die Zugangsdaten ab und testet sie sofort.</p>
   {% if has_role(user, 'admin') %}<p><a class="button primary" href="{{ url_for('web.topology_new', site_id=site.id) }}">Ersten Switch einrichten</a></p>
   {% else %}<p class="muted">Ein Administrator kann Switches mit ihren Zugangsdaten eintragen.</p>{% endif %}
 </section>
@@ -135,3 +137,4 @@
 </div>
 {% endif %}
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='topology.js') }}" defer></script>{% endblock %}

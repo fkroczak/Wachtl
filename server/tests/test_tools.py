@@ -231,3 +231,14 @@ class IpInfoTest(AppTestCase):
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.get_json()["job"]["probe_id"], server)   # PC gewählt, läuft trotzdem auf dem Server
         self.assertIn("IP-Info", self.client.get("/werkzeuge").get_data(as_text=True))
+
+
+class StartInputTest(JobFlowTest):
+    def test_bad_probe_id_is_400_not_500(self):
+        self.login()
+        csrf = self.csrf_token()
+        for probe in ("abc", [1], {"x": 1}, 10 ** 30, -1):
+            r = self.client.post("/werkzeuge/start", json={"probe": probe, "tool": "ping", "host": "1.1.1.1"},
+                                 headers={"X-CSRF-Token": csrf})
+            self.assertEqual(r.status_code, 400, probe)
+            self.assertIn("aktive Probe", r.get_json()["error"])

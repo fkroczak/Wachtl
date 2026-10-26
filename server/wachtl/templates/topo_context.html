@@ -33,6 +33,12 @@
       {% endfor %}
     </div>
   </div>
+  {% if ctx.loss %}
+  <ul class="topo-legend ctx-loss-key" aria-label="Legende des Paketverlusts">
+    <li>Paketverlust:</li><li><span class="sq lv0" aria-hidden="true"></span>unter 1 %</li>
+    <li><span class="sq lv1" aria-hidden="true"></span>1 bis 20 %</li><li><span class="sq lv2" aria-hidden="true"></span>ab 20 %</li>
+  </ul>
+  {% endif %}
 </section>
 
 <section class="card" aria-labelledby="h-evs">

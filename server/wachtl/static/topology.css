@@ -15,7 +15,12 @@
 .topo-legend .sw.sp-dash { background: repeating-linear-gradient(90deg, var(--off) 0 3px, transparent 3px 6px); }
 .topo-legend .sq { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid var(--field-border); }
 .topo-figure { margin: 0.5rem 0 0; }
-.topo-scroll { padding-bottom: 0.3rem; }
+.topo-scroll { padding-bottom: 0.3rem;
+  /* Schattenkante, solange links oder rechts noch Baum versteckt ist (verschwindet am Rand) */
+  background: linear-gradient(to right, var(--surface) 40%, transparent) left / 1.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 40%, transparent) right / 1.5rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(0 0 0 / 0.2), transparent) left / 0.6rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(0 0 0 / 0.2), transparent) right / 0.6rem 100% no-repeat scroll; }
 svg.topo { display: block; margin: 0 auto; max-width: none; font-family: inherit; }
 .tl { fill: none; stroke: var(--band); stroke-width: 2.5; }
 .tl.sp-10 { stroke: var(--accent); stroke-width: 3; } .tl.sp-1 { stroke: var(--ok); }
@@ -96,9 +101,10 @@ svg.topo a:focus-visible .tn-box { stroke: var(--focus); stroke-width: 3; }
 /* Pfad */
 .topo-search { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: flex-end; }
 .topo-search .field { flex: 1 1 280px; max-width: 34rem; margin: 0; }
-.topo-chain { display: flex; flex-wrap: wrap; align-items: stretch; list-style: none; margin: 0.6rem 0 0; padding: 0; gap: 0.3rem; }
-.topo-hop { flex: 0 1 10rem; min-width: 7.5rem; border: 1px solid var(--field-border); border-radius: var(--radius); padding: 0.7rem;
-  display: flex; flex-direction: column; gap: 0.3rem; overflow-wrap: break-word; min-width: 0; }
+.topo-chain { display: flex; flex-wrap: nowrap; align-items: stretch; list-style: none; margin: 0.6rem 0 0; padding: 0 0 0.3rem; gap: 0.3rem;
+  overflow-x: auto; }
+.topo-hop { flex: 0 1 10rem; min-width: 8rem; border: 1px solid var(--field-border); border-radius: var(--radius); padding: 0.7rem;
+  display: flex; flex-direction: column; gap: 0.3rem; overflow-wrap: break-word; }
 .topo-hop .badge { align-self: flex-start; }
 .topo-hop-warn { border: 2px solid var(--warn); }
 .topo-link { flex: 1 1 5rem; min-width: 4.5rem; display: flex; flex-direction: column; justify-content: center; align-items: center;
@@ -123,7 +129,12 @@ svg.topo a:focus-visible .tn-box { stroke: var(--focus); stroke-width: 3; }
 .topo-result h3 { margin-top: 0; }
 .topo-list-narrow { display: none; }
 .topo-list-narrow h3 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; } .topo-list-narrow ul ul { padding-left: 1.1rem; }
-@media (max-width: 700px) { .topo-list-narrow { display: block; } details.topo-list { display: none; } }
+@media (max-width: 700px) { .topo-list-narrow { display: block; } details.topo-list { display: none; }
+  /* Pfad von oben nach unten: Gerät, Kabel, Gerät … bis zum Internet */
+  .topo-chain { flex-direction: column; overflow-x: visible; }
+  .topo-hop { flex: none; }
+  .topo-link { flex: none; flex-direction: row; justify-content: flex-start; gap: 0.7rem; min-height: 2.6rem; padding-left: 1rem; text-align: left; }
+  .topo-link i { order: -1; width: 3px; height: 2.4rem; flex: none; } }
 /* Verlauf: Zeitreise, Zeitleiste, Chronik, Port-Verlauf, Störung im Kontext */
 .topo-side { display: flex; flex-direction: column; gap: 0.6rem; }
 .topo-sidenav { align-self: flex-start; }
@@ -165,5 +176,7 @@ a.ctx-lab { text-decoration: none; min-height: 32px; display: flex; flex-directi
 .ctx-loss i { display: block; background: var(--band); border-radius: 1px 1px 0 0; height: 6%; }
 .ctx-loss .lv1 { height: 30%; background: var(--warn); } .ctx-loss .lv2 { height: 65%; background: var(--bad); }
 .ctx-loss .lv3 { height: 100%; background: var(--bad); }
+.ctx-loss-key { margin-top: 0.6rem; }
+.topo-legend .sq.lv0 { background: var(--band); } .topo-legend .sq.lv1 { background: var(--warn); } .topo-legend .sq.lv2 { background: var(--bad); }
 .topo-verdict { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.7rem 1rem; margin: 0 0 1rem; background: var(--surface); }
 .topo-verdict-bad { border-color: var(--bad); } .topo-verdict-warn { border-color: var(--warn); } .topo-verdict-ok { border-color: var(--ok); }
