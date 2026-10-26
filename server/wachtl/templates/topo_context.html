@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head, lanes_legend with context %}
+{% block title %}Störung im Kontext · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+<h2>Was passierte gleichzeitig · {{ ctx.start|dt }}{% if ctx.end > ctx.start %} bis {{ ctx.end|hm }}{% endif %}</h2>
+<p class="muted small">{% if ctx.probe %}Probe <a href="{{ url_for('web.probe', probe_id=ctx.probe.id) }}">{{ ctx.probe.hostname }}</a>{% if not ctx.path %} – ihr PC ist keinem Switch-Port zugeordnet; gezeigt werden alle Switches des Standorts{% endif %}.{% else %}Alle Switches des Standorts.{% endif %}
+  Der markierte Bereich ist die Störung, davor und danach je mindestens 15 Minuten.</p>
+
+{% set v = ctx.verdict %}
+<div class="topo-verdict topo-verdict-{{ v[0] }}" role="status"><strong>{{ {'bad': 'Wahrscheinliche Ursache', 'warn': 'Möglicher Zusammenhang', 'ok': 'Switch-Netz unauffällig'}[v[0]] }}:</strong> {{ v[1] }}</div>
+
+<section class="card" aria-labelledby="h-lanes">
+  <div class="page-head"><h3 id="h-lanes">Messung und Switches übereinander</h3>{{ lanes_legend() }}</div>
+  <div class="scroll">
+    <div class="ctx-grid">
+      <span></span>
+      <div class="ctx-axis" aria-hidden="true">{% for t in ctx.axis %}<span>{{ t|hm }}</span>{% endfor %}</div>
+      {% if ctx.loss %}
+      <span class="ctx-lab">Paketverlust<small>{{ ctx.probe.hostname }}{% if ctx.loss_target %} → {{ ctx.loss_target }}{% endif %}</small></span>
+      <div class="ctx-loss" role="img" aria-label="Paketverlust je Abschnitt: höchstens {{ (ctx.loss|map(attribute='v')|max)|round|int }} Prozent">
+        {%- for c in ctx.loss %}<i class="lv{{ c.lvl }}{{ ' in-win' if ctx.win_from <= loop.index0 <= ctx.win_to }}"></i>{% endfor -%}
+      </div>
+      {% elif ctx.probe %}
+      <span class="ctx-lab">Paketverlust<small>{{ ctx.probe.hostname }}</small></span><p class="muted small">{{ ctx.loss_error or 'Keine Messwerte in diesem Zeitraum.' }}</p>
+      {% endif %}
+      {% for l in ctx.lanes %}
+      <span class="ctx-lab{{ ' ctx-bad' if l.bad }}">{{ l.name }}<small>{{ l.sub }}</small></span>
+      <div class="lane lane-{{ ctx.cells }}" role="img" aria-label="{{ l.name }}: {{ 'Auffälligkeit im Zeitraum der Störung' if l.bad else 'im Zeitraum der Störung stabil' }}">
+        {%- for c in l.cells %}<i class="{{ c }}{{ ' in-win' if ctx.win_from <= loop.index0 <= ctx.win_to }}"></i>{% endfor -%}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<section class="card" aria-labelledby="h-evs">
+  <h3 id="h-evs">Änderungen im Switch-Netz um diese Zeit</h3>
+  {% if ctx.events %}
+  <div class="scroll"><table>
+    <thead><tr><th>Zeit</th><th>Art</th><th>Switch</th><th>Was</th></tr></thead>
+    <tbody>{% for e in ctx.events %}<tr><td class="nowrap">{{ e.ts|dt }}</td><td><span class="badge {{ e.severity }}">{{ e.kind_label }}</span></td>
+      <td><a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=e.switch_id, port=e.if_index) }}{{ '#port' if e.if_index }}">{{ e.switch_label }}</a></td>
+      <td>{{ e.detail }} · <a href="{{ url_for('web.topology', site_id=site.id, ereignis=e.id) }}" aria-label="Baum nach dieser Änderung: {{ e.detail }}">Baum</a></td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">Keine Änderungen gespeichert.</p>{% endif %}
+</section>
+{% endblock %}
