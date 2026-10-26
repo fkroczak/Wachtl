@@ -52,13 +52,15 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
     {% endfor %}</tbody>
   </table></div>
-  {% else %}<p class="muted">Keine offenen Tokens. Unten Standort wählen und Setup herunterladen – das legt einen Token an.</p>
+  {% else %}<p class="muted">Keine offenen Tokens. Unten {{ '' if single_site else 'Standort wählen und ' }}Setup herunterladen – das legt einen Token an.</p>
   {% endif %}
   <form method="post" action="{{ url_for('web.token_create') }}" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if single_site %}<input type="hidden" name="site_id" value="{{ single_site.id }}">{% else %}
     <label>Standort
       <select name="site_id" required>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select>
     </label>
+    {% endif %}
     <label>Für wie viele PCs <input name="max_uses" type="number" min="1" max="500" value="25"></label>
     <label>Gültig (Tage) <input name="days" type="number" min="1" max="90" value="30"></label>
     <label>Proxy (optional) <input name="proxy" maxlength="200" placeholder="http://proxy:3128"></label>
@@ -103,7 +105,7 @@
           <label for="pkg-scope">Gilt für</label>
           <select name="scope" id="pkg-scope">
             <option value="all">alle Probes</option>
-            {% if sites %}<option value="site">einen Standort</option>{% endif %}
+            {% if sites and not single_site %}<option value="site">einen Standort</option>{% endif %}
           </select>
         </div>
         {% if sites %}

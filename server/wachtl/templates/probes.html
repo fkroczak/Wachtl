@@ -20,7 +20,7 @@
   {% for p in offline %}
     <tr>
       <td><span class="dot down"></span> offline</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
       <td>Probe</td><td>–</td>
       <td>Kein Heartbeat – keine der Messungen dieser Probe läuft</td>
       <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
@@ -29,7 +29,7 @@
   {% for p, st in problems %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
       <td>{{ KIND_LABELS[st.kind] }}</td>
       <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a></td>
       <td>{{ st.detail }}</td>
@@ -44,13 +44,13 @@
 {% elif tab == 'alle' %}
 <h2 class="sr-only">Alle Probes</h2>
 {% if probes|length > 1 %}
-<p class="filter"><label for="filter">Probe oder Standort suchen</label>
+<p class="filter"><label for="filter">Probe{{ ' oder Standort' if not single_site }} suchen</label>
   <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
 <p class="muted" data-filter-empty role="status" hidden>Keine Probe passt zum Suchbegriff.</p>
 {% endif %}
 {% if probes %}
 <table>
-  <thead><tr><th>Status</th><th>Probe</th><th>Standort</th><th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
+  <thead><tr><th>Status</th><th>Probe</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
   <tbody>
   {% set site_cust = {} %}{% for s in sites %}{% set _ = site_cust.update({s.id: s.customer_no or ''}) %}{% endfor %}
   {% for p in probes %}
@@ -60,7 +60,7 @@
         {{ probe_state(p) }}
       </td>
       <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</td>
-      <td><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></td>
+      {% if not single_site %}<td><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></td>{% endif %}
       <td><span class="ok-t">{{ st.ok }}</span> / <span class="warn-t">{{ st.warn }}</span> / <span class="down-t">{{ st.down }}</span> / <span class="stale-t">{{ st.stale }}</span>{% if st.waiting %} <span class="muted small">(+{{ st.waiting }} warten)</span>{% endif %}</td>
       <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
       <td>{{ p.buffer_items or 0 }}</td>
@@ -80,7 +80,7 @@
   {% for p, st in bandwidth %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
       <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
       <td>{{ KIND_LABELS[st.kind] }}</td>
       {% for d in ('down', 'up') %}
@@ -104,7 +104,7 @@
     {% set r = st.values.rtp %}
     <tr>
       <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a> <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span></td>
+      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
       <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
       {% if r and r.error %}<td colspan="4"><span class="badge critical">Fehler</span> <span class="small">{{ r.error|explain_error }}</span></td>
       {% elif r %}<td>{{ r.mos|mos }}</td><td>{{ r.rtt_ms|ms }}</td><td>{{ r.loss_pct|pct }}</td><td>{{ r.jitter_ms|ms }}</td>

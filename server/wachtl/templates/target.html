@@ -2,7 +2,7 @@
 {% block title %}{{ check.name }}{% if hop %} Hop {{ hop }}{% endif %} – {{ probe.hostname }}{% endblock %}
 {% from "_reports.html" import report_table with context %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
+<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
   {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
 {% if hop %}
 <h1>Hop {{ hop }} <span class="muted">· {{ hop_ip or 'keine Antwort' }}</span></h1>

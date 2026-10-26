@@ -318,7 +318,7 @@ class WebTest(AppTestCase):
         self.login()
         for url in ("/", "/sites/1", f"/probes/{data['probe_id']}", f"/probes/{data['probe_id']}/checks/1",
                     "/alerts", "/admin", "/admin/audit", "/account", "/account/design"):
-            self.assertEqual(self.client.get(url).status_code, 200, url)
+            self.assertEqual(self.client.get(url, follow_redirects=True).status_code, 200, url)
 
     def test_webhook_and_ack(self):
         self.make_user("op", "operator")
@@ -513,7 +513,7 @@ class LiveStatusGapsTest(AppTestCase):
 
         with mock.patch("wachtl.services.vm.instant", side_effect=instant):
             for url in ("/", "/sites/1", f"/probes/{enrolled['probe_id']}"):
-                r = self.client.get(url)
+                r = self.client.get(url, follow_redirects=True)
                 self.assertEqual(r.status_code, 200, url)
 
 
@@ -631,3 +631,52 @@ class SiteEditTest(AppTestCase):
         self.assertEqual(q1("SELECT site_id FROM probes WHERE id = ?", (pid,))["site_id"], b)
         self.client.post(f"/probes/{pid}/site", data={"site_id": 9999, "csrf_token": self.tok})
         self.assertEqual(q1("SELECT site_id FROM probes WHERE id = ?", (pid,))["site_id"], b)
+
+
+class SingleSiteTest(AppTestCase):
+    """Nur ein Standort: die Oberfläche blendet den Standort aus; ab dem zweiten ist alles wieder da."""
+
+    def setUp(self):
+        super().setUp()
+        p = mock.patch("wachtl.services.vm.live_status", return_value=LIVE)
+        p.start()
+        self.addCleanup(p.stop)
+        self.pid = self.enroll("PC-01")["probe_id"]
+        self.make_user()
+        self.login()
+
+    def pages(self):
+        return {url: self.client.get(url, follow_redirects=True).get_data(as_text=True)
+                for url in ("/", "/outages", "/meldungen", "/admin", f"/probes/{self.pid}?tab=details",
+                            "/probes?tab=alle", "/admin/checks/new/ping", "/bericht")}
+
+    def test_hidden_with_one_site_and_back_with_two(self):
+        sid = q1("SELECT id FROM sites")["id"]
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(r.headers["Location"].endswith(f"/sites/{sid}"))
+        html = self.pages()
+        self.assertNotIn('href="/standorte"', html["/"])                    # kein Menüpunkt „Standorte“
+        self.assertNotIn('aria-label="Standorte"', html["/"])               # keine Standortliste
+        self.assertIn("Verlauf – letzte", html["/"])                        # Verlauf steht auf der Standortseite
+        self.assertIn('aria-current="page"', html["/"].split("Übersicht</a>")[0].rsplit("<a ", 1)[1])
+        self.assertNotIn("Nach Standort", html["/outages"])
+        self.assertNotIn('name="site"', html["/outages"])
+        self.assertNotIn('name="site"', html["/meldungen"])
+        self.assertNotIn('name="site"', html["/bericht"])
+        self.assertIn(f'<input type="hidden" name="site_id" value="{sid}">', html["/admin"])
+        self.assertNotIn("Standort dieser Probe", html[f"/probes/{self.pid}?tab=details"])
+        self.assertNotIn("<th>Standort</th>", html["/probes?tab=alle"])
+        self.assertNotIn("Ein Standort</option>", html["/admin/checks/new/ping"])
+
+        self.make_site("Filiale")
+        self.assertEqual(self.client.get("/").status_code, 200)
+        html = self.pages()
+        self.assertIn('href="/standorte"', html["/"])
+        self.assertIn('aria-label="Standorte"', html["/"])
+        self.assertIn("Nach Standort", html["/outages"])
+        self.assertIn('name="site"', html["/meldungen"])
+        self.assertIn('name="site"', html["/bericht"])
+        self.assertIn("Standort dieser Probe", html[f"/probes/{self.pid}?tab=details"])
+        self.assertIn("<th>Standort</th>", html["/probes?tab=alle"])
+        self.assertIn("Ein Standort</option>", html["/admin/checks/new/ping"])
