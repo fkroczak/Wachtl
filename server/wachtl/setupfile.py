@@ -18,12 +18,23 @@ MAX_BLOCK = 7000          # das Setup liest die letzten 8 KB
 SETUP_GLOBS = ("WachtlSetup-*.exe", "WachtlProbeSetup-*.exe")
 
 
+def _version_key(f: Path) -> tuple:
+    """Sortierschlüssel nach Versionsnummer im Dateinamen (0.9.10 > 0.9.3), bei Gleichstand nach Dateidatum."""
+    m = re.search(r"-(\d+(?:\.\d+)*)\.exe$", f.name, re.IGNORECASE)
+    version = tuple(int(x) for x in m.group(1).split(".")) if m else ()
+    return version, f.stat().st_mtime
+
+
 def find_setup(probe_dir: str) -> Path | None:
-    """Neuestes Setup im Probe-Ordner: bevorzugt das gemeinsame WachtlSetup, sonst das alte Probe-Setup."""
+    """Neuestes Setup im Probe-Ordner: bevorzugt das gemeinsame WachtlSetup, sonst das alte Probe-Setup.
+
+    Maßgeblich ist die Versionsnummer, nicht das Dateidatum: eine später kopierte ältere Datei
+    darf das aktuelle Setup nicht verdrängen.
+    """
     if not probe_dir:
         return None
     for pattern in SETUP_GLOBS:
-        files = sorted(Path(probe_dir).glob(pattern), key=lambda f: f.stat().st_mtime)
+        files = sorted(Path(probe_dir).glob(pattern), key=_version_key)
         if files:
             return files[-1]
     return None

@@ -435,6 +435,22 @@ class PrefilledSetupTest(AppTestCase):
         self.tok = self.session_csrf()
         self.client.post("/admin/sites", data={"name": "Filiale Nürnberg", "csrf_token": self.tok})
 
+    def test_newest_version_wins_over_newer_file_date(self):
+        import os
+        import time
+
+        from wachtl.setupfile import find_setup
+
+        old = os.path.join(self.probe_dir, "WachtlSetup-0.9.2.exe")
+        with open(old, "wb") as f:
+            f.write(b"MZ-alt")
+        later = time.time() + 60
+        os.utime(old, (later, later))   # ältere Version, aber jüngeres Dateidatum
+        self.assertEqual(find_setup(self.probe_dir).name, "WachtlSetup-0.9.3.exe")
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.9.10.exe"), "wb") as f:
+            f.write(b"MZ-neu")
+        self.assertEqual(find_setup(self.probe_dir).name, "WachtlSetup-0.9.10.exe")
+
     def test_direct_download_from_admin_form(self):
         from wachtl import setupfile
         from wachtl.db import q1
