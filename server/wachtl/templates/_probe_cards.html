@@ -1,6 +1,6 @@
 {#- Probe-Kacheln (Standortseite, Probes-Seite). Import: with context.
     Farbe nach Zustand: rot = gestört/offline, gelb = auffällig, grün = ok, grau = deaktiviert -#}
-{% macro probe_cards(widgets, details=False, show_site=False) -%}
+{% macro probe_cards(widgets, details=False, show_site=False, add_tile=None) -%}
 <ul class="cards widgets">
   {%- for w in widgets %}{% set p = w.probe %}
   <li class="card pw {{ w.level }}"{% if details %} data-filter-item="{{ w.customer_no or '' }}"{% endif %}>
@@ -54,5 +54,8 @@
     {% endif %}
   </li>
   {%- endfor %}
+  {%- if add_tile %}
+  <li class="card pw pw-add">{{ add_tile() }}</li>
+  {%- endif %}
 </ul>
 {%- endmacro %}

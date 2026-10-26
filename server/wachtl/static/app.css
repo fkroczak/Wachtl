@@ -437,6 +437,16 @@ form.report-action input { width: 9rem; }
 .pw.warn { border: 2px solid var(--warn); border-left-width: 6px; background: color-mix(in srgb, var(--warn) 7%, var(--surface)); }
 .pw.ok { border-left: 6px solid var(--ok); }
 .pw-meta { margin-top: auto; }
+/* Kachel „Probe hinzufügen“: schemenhaft, großes Plus */
+.pw.pw-add { border: 2px dashed var(--border); background: transparent; justify-content: center; align-items: center;
+  text-align: center; min-height: 14rem; }
+.pw.pw-add:hover, .pw.pw-add:focus-within { border-color: var(--accent); }
+.pw-add-form { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.pw-add-form > * { margin: 0; }
+.pw-plus { display: inline-flex; align-items: center; justify-content: center; width: 4rem; height: 4rem; padding: 0;
+  border: 2px dashed currentColor; border-radius: 50%; background: transparent; color: var(--text-muted);
+  font-size: 2.6rem; font-weight: 300; line-height: 1; cursor: pointer; text-decoration: none; }
+.pw-plus:hover, .pw-plus:focus-visible { color: var(--accent); border-style: solid; text-decoration: none; }
 .pw-meta a { position: relative; z-index: 1; }
 .pw.inactive { color: var(--text-muted); }
 .pw-issues { padding-left: 1.1rem; font-size: 0.9rem; overflow-wrap: anywhere; }

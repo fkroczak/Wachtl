@@ -108,8 +108,8 @@ try {
         $st = $states | Where-Object { $_.probe_id -eq $pair[0] -and $_.check_id -eq $pair[1] }
         if ($st.state -ne 'ok') { throw "Sprachtest $($pair[1]) auf Probe $($pair[0]) nicht ok: $($st.state) $($st.detail)" }
     }
-    if ((Get-Page '/probes?tab=sprache').Content -notmatch 'Sprachqualität') { throw 'Seite „Probes“ ohne Reiter „Sprachqualität“' }
-    $summary.Add('Check-Status beider Sprachtests: ok; Übersicht zeigt „Sprachqualität“')
+    if ((Get-Page '/probes').Content -notmatch '<dt>Sprache</dt>') { throw 'Seite „Probes“ zeigt den Sprachtest nicht in der Kachel' }
+    $summary.Add('Check-Status beider Sprachtests: ok; Probe-Kachel zeigt „Sprache“')
 
     # Gegenstelle wieder aus: der Reflektor der Probe muss den Port freigeben
     Post-Form "/probes/$($probe.id)/settings" @{ iperf_port = '5202'; iperf_address = '' } | Out-Null

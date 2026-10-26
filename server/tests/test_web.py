@@ -667,6 +667,7 @@ class SingleSiteTest(AppTestCase):
         self.assertIn(f'<input type="hidden" name="site_id" value="{sid}">', html["/admin"])
         self.assertNotIn("Standort dieser Probe", html[f"/probes/{self.pid}?tab=details"])
         self.assertNotIn('class="pw-meta muted small"><a href="/sites/', html["/probes"])
+        self.assertIn('class="card pw pw-add"', html["/probes"])  # Kachel „Probe hinzufügen“ für Admins
         self.assertNotIn("Ein Standort</option>", html["/admin/checks/new/ping"])
 
         self.make_site("Filiale")

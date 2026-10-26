@@ -15,8 +15,30 @@
   <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
 <p class="muted" data-filter-empty role="status" hidden>Keine Probe passt zum Suchbegriff.</p>
 {% endif %}
-<h2 class="sr-only">Alle Probes</h2>
-{{ probe_cards(widgets, details=True, show_site=not single_site) }}
-{% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
+{% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} Setup über das Plus herunterladen und auf dem PC starten – oder <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>.{% endif %}</p>{% endif %}
 
+{#- Kachel „Probe hinzufügen“: lädt direkt ein vorbelegtes Setup (Token für 25 PCs, 30 Tage) -#}
+{% macro add_probe() -%}
+  {%- if probe_setup and sites %}
+  <form method="post" action="{{ url_for('web.token_create') }}" class="pw-add-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="max_uses" value="25"><input type="hidden" name="days" value="30">
+    <input type="hidden" name="description" value="Probes-Seite">
+    {% if single_site %}<input type="hidden" name="site_id" value="{{ single_site.id }}">
+    {% else %}<label class="small">Standort
+      <select name="site_id" required>{% for s in sites %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
+    <button class="pw-plus" name="action" value="setup" aria-describedby="pw-add-text"><span aria-hidden="true">+</span><span class="sr-only">Setup für neue Probe herunterladen</span></button>
+    <p id="pw-add-text" class="muted small">Probe hinzufügen: Setup herunterladen, auf dem PC starten, <em>Installieren</em> klicken.
+      <a href="{{ admin_url('enrollment') }}">Weitere Optionen</a></p>
+  </form>
+  {%- else %}
+  <a class="pw-plus" href="{{ admin_url('enrollment') }}"><span aria-hidden="true">+</span><span class="sr-only">Probe hinzufügen</span></a>
+  <p class="muted small">{{ 'Zuerst einen Standort anlegen.' if not sites else 'Auf diesem Server liegt noch kein Setup.' }}</p>
+  {%- endif %}
+{%- endmacro %}
+
+<h2 class="sr-only">Alle Probes</h2>
+{% if widgets or has_role(user, 'admin') %}
+{{ probe_cards(widgets, details=True, show_site=not single_site, add_tile=add_probe if has_role(user, 'admin') else None) }}
+{% endif %}
 {% endblock %}

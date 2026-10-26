@@ -498,7 +498,8 @@ def probes_view():
     for w in widgets:
         w["customer_no"] = cust.get(w["probe"]["site_id"], "")
     levels = {lvl: sum(w["level"] == lvl for w in widgets) for lvl in ("bad", "warn", "ok", "inactive")}
-    return render_template("probes.html", **f, widgets=widgets, levels=levels)
+    return render_template("probes.html", **f, widgets=widgets, levels=levels,
+                           probe_setup=repo.probe_setup_file(current_app.config["PROBE_DIR"]))
 
 
 @bp.get("/hinweise")

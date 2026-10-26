@@ -14,8 +14,7 @@ const PASSWORD = process.env.WACHTL_E2E_PASSWORD || "e2e-admin-passwort";
 const PAGES = [
   ["Übersicht", "/"],
   ["Standorte", "/standorte"],
-  ["Probes", "/probes?tab=alle"],
-  ["Probes: Bandbreite", "/probes?tab=bandbreite"],
+  ["Probes", "/probes"],
   ["Hinweise", "/hinweise"],
   ["Standort: Alle Messungen", `/sites/${ids.site}?tab=messungen`],
   ["Netzwerk", `/sites/${ids.site}/netzwerk`],
