@@ -29,7 +29,9 @@
 <aside class="sidebar">
   <div class="side-head">
     <a class="brand" href="{{ url_for('web.overview') }}"><img src="{{ url_for('static', filename='wachtl-logo.svg') }}" class="logo-light" alt="" width="32" height="32"><img src="{{ url_for('static', filename='wachtl-logo-dark.svg') }}" class="logo-dark" alt="" width="32" height="32">Wachtl</a>
+    <button type="button" class="menu-toggle" aria-expanded="false" aria-controls="side-drawer" data-menu-toggle><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path class="i-open" d="M4 7h16M4 12h16M4 17h16"/><path class="i-close" d="M6 6l12 12M18 6 6 18"/></svg><span class="sr-only">Menü</span></button>
   </div>
+  <div class="side-drawer" id="side-drawer" data-menu>
   <nav class="side-nav" aria-label="Hauptnavigation">
     {% set nav = [('web.overview', 'Übersicht'), ('web.sites_view', 'Standorte'), ('web.probes_view', 'Probes'),
                   ('web.alerts', 'Alarme'), ('web.outages_view', 'Ausfälle'), ('web.reports_view', 'Meldungen'),
@@ -65,7 +67,9 @@
       </form>
     </div>
   </details>
+  </div>
 </aside>
+<div class="menu-backdrop" data-menu-backdrop hidden></div>
 <div class="page">
 {% endif %}
 <main id="inhalt" tabindex="-1">
