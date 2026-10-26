@@ -3,6 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Unveröffentlicht
+
+- **Switch-Topologie**: Neuer Reiter Standort › **Topologie**. Wachtl fragt die Switches per SNMP ab (**SNMPv1, v2c und v3** mit MD5/SHA-1/SHA-2 und DES/AES-128/192/256) und zeigt einen **Baum** vom Internet über das Gateway bis zu jedem Switch und Gerät – mit Port und Geschwindigkeit an jeder Verbindung. Klick auf einen Switch: Seitenbereich mit Uplink, Ports, Nachbarn und „Weboberfläche öffnen“. **Switch aufgeschaltet**: Frontansicht aller Ports; ein Klick zeigt Gerät, VLAN, PoE, Fehler und die Messwerte einer Wachtl-Probe am Port. Dazu **Switch-Karten**, **Probleme** (Port-Fehler, Verbindungen unter 1 Gbit/s, Halbduplex, Kabelkreise, nicht verwaltete Switches, Switches ohne Zugangsdaten) und **Pfad suchen** (jedes Kabel vom Gerät bis ins Internet). Ein **Assistent** fragt je Switch die Zugangsdaten ab, testet sie sofort und übernimmt sie auf Wunsch für den nächsten Switch. Zugangsdaten liegen verschlüsselt in der Datenbank. Details: [TOPOLOGIE.md](TOPOLOGIE.md).
+
 ## Neu in 0.9.5
 
 - **PDF-Bericht für den Provider**: Neuer Menüpunkt **Bericht** (auch auf der Seite Ausfälle). Für einen oder alle Standorte und einen Zeitraum (24 h, 7 Tage, 30 Tage oder frei, bis 400 Tage) entsteht ein PDF mit allen Störungen und Vorkommnissen. Vorne steht die **Einschätzung, wo das Problem liegt** (Internetanschluss/Provider, lokales Netz, einzelner PC, einzelnes Ziel), mit Sicherheit und Belegen. Es folgen ein Zeitstrahl, auf dem auch **5-Sekunden-Aussetzer** sichtbar sind, Störungen je Tag und Uhrzeit, **Leitungsschwankungen** (Latenz, Jitter, Paketverlust; Gateway und Internet im Vergleich), die sekundengenaue Störungsliste, die Pfadanalyse („Verlust beginnt ab Hop …“), Bandbreite und Sprachqualität, Hinweise der PCs und Meldungen der Benutzer, der Netzwerkscan und die Messmethode im Anhang. Kunde, Ersteller und eine Bemerkung an den Provider lassen sich eintragen.

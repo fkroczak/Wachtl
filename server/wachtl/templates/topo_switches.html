@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head, faceplate with context %}
+{% block title %}Switches · Topologie · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller, drafts) }}
+<h2 class="sr-only">Switches</h2>
+{% if not cards and not unmanaged %}
+<p class="muted">Noch keine Switches eingetragen.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.topology_new', site_id=site.id) }}">Ersten Switch einrichten</a>{% endif %}</p>
+{% endif %}
+<div class="topo-cards">
+  {% for c in cards %}{% set n = c.node %}
+  <article class="card topo-card{{ ' topo-card-warn' if n.status in ('bad', 'warn') }}" aria-labelledby="sw-{{ c.row.id }}">
+    <div class="topo-side-head">
+      <div>
+        <h3 id="sw-{{ c.row.id }}"><a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=c.row.id) }}">{{ n.label }}</a></h3>
+        <p class="small muted">{{ c.row.location or c.row.sys_location or 'ohne Ort' }} · {{ c.row.host }}</p>
+      </div>
+      {% if n.status == 'bad' %}<span class="badge critical">antwortet nicht</span>{% elif c.row.status == 'disabled' %}<span class="badge off">pausiert</span>{% elif n.status == 'off' %}<span class="badge off">keine Daten</span>{% else %}<span class="badge on">erreichbar</span>{% endif %}
+    </div>
+    <p class="topo-uplink small">
+      {% if c.parent %}<span aria-hidden="true">↑</span> {{ c.uplink or 'Uplink' }} → {% if c.parent.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=c.parent.switch_id) }}">{{ c.parent.label }}</a>{% else %}{{ c.parent.label }}{% endif %}
+      {% elif n.children %}<span class="muted">oberster Switch im Baum</span>{% else %}<span class="muted">noch keiner Verbindung zugeordnet</span>{% endif %}
+    </p>
+    {% if c.total %}{{ faceplate(c.ports, site, c.row.id, mini=True, name=n.label) }}{% endif %}
+    <div class="topo-meters small">
+      <label>Ports belegt: {{ c.used }} / {{ c.total }} <meter min="0" max="{{ c.total or 1 }}" value="{{ c.used }}">{{ c.used }} von {{ c.total }}</meter></label>
+      {% if c.snap.poe and c.snap.poe.power_w %}<label>PoE: {{ c.snap.poe.used_w or 0 }} / {{ c.snap.poe.power_w }} W <meter min="0" max="{{ c.snap.poe.power_w }}" value="{{ c.snap.poe.used_w or 0 }}" high="{{ (c.snap.poe.power_w * 0.8)|int }}">{{ c.snap.poe.used_w or 0 }} W</meter></label>
+      {% else %}<span class="muted">kein PoE</span>{% endif %}
+    </div>
+    <div class="actions">
+      <a class="button primary" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=c.row.id) }}" aria-label="Aufschalten: {{ n.label }}">Aufschalten</a>
+      <a class="button" href="{{ c.links.web }}" target="_blank" rel="noopener noreferrer" aria-label="Weboberfläche: {{ n.label }}">Weboberfläche</a>
+    </div>
+  </article>
+  {% endfor %}
+  {% for n in unmanaged %}
+  <article class="card topo-card topo-card-ghost" aria-labelledby="un-{{ loop.index }}">
+    <div class="topo-side-head">
+      <div><h3 id="un-{{ loop.index }}">{{ n.label }}</h3><p class="small muted">{{ n.ip or n.sub }}</p></div>
+      <span class="badge off">{{ 'ohne Zugangsdaten' if n.kind == 'neighbor' else 'nicht verwaltet' }}</span>
+    </div>
+    {% set parent = topo.nodes[n.parent] if n.parent else None %}
+    <p class="topo-uplink small">{% if parent %}<span aria-hidden="true">↑</span> {{ link_label(topo, n) or 'verbunden' }} → {{ parent.label }}{% endif %}</p>
+    <p class="small">{{ 'Per LLDP/CDP gefunden. Mit Zugangsdaten erscheinen seine Ports und Geräte.' if n.kind == 'neighbor' else n.devices|length ~ ' Geräte an einem Port – vermutlich ein Tisch-Switch ohne SNMP.' }}</p>
+    {% if n.kind == 'neighbor' and n.ip and has_role(user, 'admin') %}<div class="actions"><a class="button" href="{{ url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) }}" aria-label="Zugangsdaten eintragen: {{ n.label }}">Zugangsdaten eintragen</a></div>{% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+/* Switch-Topologie (docs/TOPOLOGIE.md) – nur auf diesen Seiten geladen. Farben nur über die Tokens aus app.css. */
+:root { --on-fill: light-dark(#ffffff, #111214); --face: light-dark(#2b2f36, #0c0d0f); }
+.topo-head { margin: 0.6rem 0 1rem; }
+.topo-layout, .topo-two { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start; }
+.topo-main { flex: 999 1 560px; min-width: 0; }
+.topo-side { flex: 1 1 300px; min-width: 0; }
+.topo-two > .card { flex: 1 1 380px; min-width: 0; }
+#inhalt > .card + .card, #inhalt > .card + .topo-two, #inhalt > .topo-two + .card, #inhalt > .topo-layout + .card { margin-top: 1rem; }
+.topo-tools { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center; }
+.topo-legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; list-style: none; margin: 0; padding: 0; font-size: 0.8rem; color: var(--text-muted); }
+.topo-legend li { display: inline-flex; align-items: center; gap: 0.4rem; }
+.topo-legend .sw { display: inline-block; width: 1.4rem; height: 3px; border-radius: 2px; background: var(--band); }
+.topo-legend .sw.sp-10 { background: var(--accent); } .topo-legend .sw.sp-1 { background: var(--ok); }
+.topo-legend .sw.sp-100 { background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 8px); }
+.topo-legend .sw.sp-dash { background: repeating-linear-gradient(90deg, var(--off) 0 3px, transparent 3px 6px); }
+.topo-legend .sq { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; border: 1px solid var(--field-border); }
+.topo-figure { margin: 0.5rem 0 0; }
+.topo-scroll { padding-bottom: 0.3rem; }
+svg.topo { display: block; margin: 0 auto; max-width: none; font-family: inherit; }
+.tl { fill: none; stroke: var(--band); stroke-width: 2.5; }
+.tl.sp-10 { stroke: var(--accent); stroke-width: 3; } .tl.sp-1 { stroke: var(--ok); }
+.tl.sp-100 { stroke: var(--warn); stroke-dasharray: 6 4; }
+.tl.tl-dash { stroke: var(--off); stroke-dasharray: 4 4; }
+.tl.tl-chip { stroke: var(--band); stroke-width: 1.5; }
+.tchip rect { fill: var(--surface-2); stroke: var(--border); } .tchip text { fill: var(--text-muted); font-size: 12px; }
+.tlab rect { fill: var(--surface); stroke: var(--border); } .tlab text { fill: var(--text); font-size: 11px; font-weight: 600; }
+.tlab-slow text { fill: var(--warn); }
+.tn-box { fill: var(--surface); stroke: var(--field-border); stroke-width: 1; }
+.tn-ic { fill: var(--accent-soft); }
+.tn-glyph { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.tn-l { fill: var(--text); font-size: 13px; font-weight: 600; } .tn-s { fill: var(--text-muted); font-size: 12px; }
+.tn-unmanaged .tn-box, .tn-neighbor .tn-box { stroke-dasharray: 5 4; }
+.tn-unmanaged .tn-ic, .tn-neighbor .tn-ic, .tn-internet .tn-ic { fill: var(--surface-2); }
+.tn-unmanaged .tn-glyph, .tn-neighbor .tn-glyph, .tn-internet .tn-glyph { stroke: var(--text-muted); }
+.st-warn .tn-box { stroke: var(--warn); } .st-warn .tn-glyph { stroke: var(--warn); }
+.st-bad .tn-box { stroke: var(--bad); stroke-width: 2; } .st-bad .tn-glyph { stroke: var(--bad); }
+.st-off .tn-box { stroke-dasharray: 3 3; }
+.tn-sel .tn-box { stroke: var(--accent); stroke-width: 2.5; fill: var(--accent-soft); }
+.tn-sel .tn-ic { fill: var(--accent); } .tn-sel .tn-glyph { stroke: var(--on-fill); }
+svg.topo a:hover .tn-box { stroke: var(--accent); }
+svg.topo a:focus { outline: none; }
+svg.topo a:focus-visible .tn-box { stroke: var(--focus); stroke-width: 3; }
+.tmark circle { fill: var(--bad); stroke: var(--surface); stroke-width: 2; } .tmark text { fill: var(--on-fill); font-size: 11px; font-weight: 700; }
+.topo-list { margin-top: 0.8rem; } .topo-list ul { margin: 0.3rem 0; padding-left: 1.2rem; }
+.topo-side-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+.topo-side-head h2, .topo-side-head h3 { margin: 0; }
+.topo-side h3 { font-size: 0.9rem; margin: 1rem 0 0.3rem; }
+.topo-ports-title { margin: 0.8rem 0 0.3rem; }
+.topo-nb { list-style: none; margin: 0; padding: 0; }
+.topo-nb li { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.4rem 0; border-top: 1px solid var(--border); font-size: 0.9rem; }
+/* Frontansicht */
+.face { display: flex; gap: 1rem; align-items: center; background: var(--face); border-radius: 10px; padding: 0.8rem 1rem; width: max-content; margin: 0.5rem 0; }
+.face-rows { display: flex; flex-direction: column; gap: 0.35rem; }
+.face-row { display: grid; grid-auto-flow: column; grid-auto-columns: 2.75rem; gap: 0.35rem; min-height: 2.75rem; }
+.face-sfp { display: grid; grid-template-columns: repeat(2, 2.75rem); gap: 0.35rem; padding-left: 1rem; border-left: 1px solid var(--off); }
+.pt { position: relative; display: flex; align-items: flex-end; justify-content: center; height: 2.75rem; border-radius: 6px; border: 2px solid transparent;
+  font-size: 0.75rem; font-weight: 600; text-decoration: none; padding-bottom: 0.15rem; background: #454a53; color: #e6e8eb; }
+.pt-sp-10 { background: var(--accent); color: var(--on-fill); } .pt-sp-1 { background: var(--ok); color: var(--on-fill); }
+.pt-sp-100 { background: var(--warn); color: var(--on-fill); } .pt-err { background: var(--bad); color: var(--on-fill); }
+.pt-sp-none { background: var(--off); color: var(--on-fill); }
+.pt-free { background: #454a53; color: #e6e8eb; }
+.pt:hover { border-color: #93c5fd; }
+.pt-sel { border-color: #ffffff; box-shadow: 0 0 0 3px var(--focus); }
+.pt-m { position: absolute; top: 1px; right: 4px; font-size: 0.7rem; }
+.topo-legend .sq.pt-free { background: #454a53; }
+.face-mini { background: none; padding: 0; gap: 0.5rem; }
+.face-mini .face-row { grid-auto-columns: 0.8rem; min-height: 0; gap: 3px; }
+.face-mini .face-rows { gap: 3px; } .face-mini .face-sfp { grid-template-columns: repeat(2, 0.8rem); gap: 3px; padding-left: 0.5rem; }
+.pm { display: block; height: 0.7rem; border-radius: 2px; background: var(--surface-2); border: 1px solid var(--field-border); }
+.pm.pt-sp-10 { background: var(--accent); } .pm.pt-sp-1 { background: var(--ok); } .pm.pt-sp-100 { background: var(--warn); }
+.pm.pt-err { background: var(--bad); } .pm.pt-sp-none { background: var(--off); }
+.pm.pt-sp-10, .pm.pt-sp-1, .pm.pt-sp-100, .pm.pt-err, .pm.pt-sp-none { border-color: transparent; }
+.row-sel td { background: var(--accent-soft); }
+.topo-path { margin-top: 0; }
+.topo-swhead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; align-items: flex-start; }
+.topo-swhead h2 { margin: 0; } .topo-swhead p { margin: 0.3rem 0 0; }
+/* Switch-Karten */
+.topo-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 1rem; }
+.topo-card { display: flex; flex-direction: column; gap: 0.6rem; }
+.topo-card h3 { margin: 0; font-size: 1rem; } .topo-card p { margin: 0; }
+.topo-card-warn { border-color: var(--warn); }
+.topo-card-ghost { border-style: dashed; }
+.topo-uplink { background: var(--surface-2); border-radius: var(--radius-sm); padding: 0.4rem 0.6rem; }
+.topo-meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.topo-meters label { display: flex; flex-direction: column; gap: 0.2rem; color: var(--text-muted); }
+.topo-meters meter { width: 100%; }
+.topo-card .actions { margin: 0; }
+/* Probleme */
+.topo-issues { list-style: none; margin: 0; padding: 0; }
+.topo-issue { display: flex; gap: 0.8rem; padding: 0.8rem 0; border-top: 1px solid var(--border); }
+.topo-issue h3 { margin: 0; font-size: 0.95rem; } .topo-issue p { margin: 0.3rem 0; } .topo-issue .actions { margin: 0.3rem 0 0; }
+.topo-issue-ack { opacity: 0.75; }
+.tnum { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  font-size: 0.8rem; font-weight: 700; color: var(--on-fill); background: var(--accent); }
+.tnum-critical { background: var(--bad); } .tnum-warning { background: var(--warn); }
+/* Pfad */
+.topo-search { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: flex-end; }
+.topo-search .field { flex: 1 1 280px; max-width: 34rem; margin: 0; }
+.topo-chain { display: flex; flex-wrap: wrap; align-items: stretch; list-style: none; margin: 0.6rem 0 0; padding: 0; gap: 0.3rem; }
+.topo-hop { flex: 0 1 10rem; min-width: 7.5rem; border: 1px solid var(--field-border); border-radius: var(--radius); padding: 0.7rem;
+  display: flex; flex-direction: column; gap: 0.3rem; overflow-wrap: break-word; min-width: 0; }
+.topo-hop .badge { align-self: flex-start; }
+.topo-hop-warn { border: 2px solid var(--warn); }
+.topo-link { flex: 1 1 5rem; min-width: 4.5rem; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 0.3rem; text-align: center; color: var(--text-muted); }
+.topo-link i { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--band); }
+.topo-link.sp-10 i { background: var(--accent); } .topo-link.sp-1 i { background: var(--ok); } .topo-link.sp-100 i { background: var(--warn); }
+.topo-link-err i { background: var(--bad); } .topo-link-err { color: var(--bad); }
+/* Assistent */
+.topo-steps { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; list-style: none; padding: 0; margin: 0 0 1rem; color: var(--text-muted); font-size: 0.9rem; }
+.topo-steps li { display: inline-flex; align-items: center; gap: 0.4rem; }
+.topo-steps span { display: inline-flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; border-radius: 50%;
+  border: 1px solid var(--field-border); font-weight: 600; }
+.topo-steps [aria-current] { color: var(--text); font-weight: 600; }
+.topo-steps [aria-current] span { background: var(--accent); border-color: var(--accent); color: var(--on-fill); }
+.topo-steps .done span { border-color: var(--ok); color: var(--ok); }
+.topo-suggest ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.topo-suggest, .topo-result { margin-bottom: 1rem; }
+.topo-result { border-color: var(--ok); } .topo-result-bad { border-color: var(--bad); }
+.topo-result h3 { margin-top: 0; }
+.topo-list-narrow { display: none; }
+.topo-list-narrow h3 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; } .topo-list-narrow ul ul { padding-left: 1.1rem; }
+@media (max-width: 700px) { .topo-list-narrow { display: block; } details.topo-list { display: none; } }

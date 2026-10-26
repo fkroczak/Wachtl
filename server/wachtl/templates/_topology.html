@@ -1,0 +1,129 @@
+{#- Bausteine der Switch-Topologie (docs/TOPOLOGIE.md): Kopf mit Reitern, Baum (SVG), Frontansicht. -#}
+{% from "_tabs.html" import tabs as tabnav %}
+
+{% macro head(site, tabs, view, views, problem_count, poller, drafts=None) -%}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=site.id) }}">{{ site.name }}</a> / Topologie</nav>
+<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
+{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
+{{ tabnav(tab_items, 'topologie') }}
+<div class="page-head topo-head">
+  <nav class="seg" aria-label="Ansicht der Topologie">
+    {%- for key, text in views.items() %}
+    {%- set ep = {'baum': 'web.topology', 'switche': 'web.topology_switches', 'probleme': 'web.topology_problems', 'pfad': 'web.topology_path'}[key] %}
+    <a href="{{ url_for(ep, site_id=site.id) }}"{% if key == view %} aria-current="page"{% endif %}>{{ text }}{% if key == 'probleme' and problem_count %} <span class="tab-count">{{ problem_count }}</span>{% endif %}</a>
+    {%- endfor %}
+  </nav>
+  {% if has_role(user, 'admin') %}<a class="button primary" href="{{ url_for('web.topology_new', site_id=site.id) }}">Switch hinzufügen</a>{% endif %}
+</div>
+{% if poller and not poller.online %}
+<p class="flash warn" role="status">Die Server-Probe ist {{ 'nicht eingerichtet' if not poller.probe else 'gerade nicht erreichbar' }}. Sie fragt die Switches regelmäßig ab – bis sie läuft, bleiben die Daten auf dem Stand der letzten Abfrage. Der Test im Assistenten funktioniert trotzdem.</p>
+{% endif %}
+{% if drafts and has_role(user, 'admin') %}
+<p class="flash" role="status">Noch nicht fertig eingerichtet:
+  {% for d in drafts %}<a href="{{ url_for('web.topology_check', site_id=site.id, switch_id=d.id) }}">{{ d.name or d.host }}</a>{{ ', ' if not loop.last }}{% endfor %}
+  – Verbindung testen und speichern.</p>
+{% endif %}
+{%- endmacro %}
+
+{% set GLYPHS = {
+  'switch': 'M2 7h20v10H2zM6 12h.01M10 12h.01M14 12h.01M18 12h.01',
+  'neighbor': 'M2 7h20v10H2zM6 12h.01M10 12h.01M14 12h.01M18 12h.01',
+  'gateway': 'M2 13h20v8H2zM6 17h.01M10 17h.01M8 9a6 6 0 0 1 8 0M5 6a10 10 0 0 1 14 0',
+  'internet': 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
+  'ap': 'M12 18h.01M8.5 14.5a5 5 0 0 1 7 0M5.5 11.5a9 9 0 0 1 13 0',
+  'unmanaged': 'M2 7h20v10H2zM10 10.5a2 2 0 1 1 2 2v1',
+} %}
+{% set KIND_TEXT = {'switch': 'Switch', 'neighbor': 'Switch ohne Zugangsdaten', 'gateway': 'Gateway', 'internet': 'Internet',
+                    'ap': 'Access Point', 'unmanaged': 'nicht verwalteter Switch (vermutet)'} %}
+{% set STATUS_TEXT = {'bad': 'antwortet nicht', 'off': 'noch keine Daten', 'warn': '', 'ok': ''} %}
+
+{#- Baum als SVG. mode: select (Klick wählt Switch für den Seitenbereich) | detail (Klick öffnet Switch) -#}
+{% macro tree(lay, site, selected=None, mode='select', caption='') -%}
+<figure class="topo-figure">
+<figcaption id="topo-cap" class="sr-only">{{ caption or 'Topologie-Baum des Standorts. Dieselben Angaben stehen in der Liste unter dem Baum.' }}</figcaption>
+<div class="scroll topo-scroll">
+<svg class="topo" viewBox="0 0 {{ lay.width }} {{ lay.height }}" width="{{ lay.width }}" height="{{ lay.height }}" role="group" aria-labelledby="topo-cap">
+  {%- for l in lay.lines %}<path d="{{ l.d }}" class="tl {{ l.cls }}{{ ' tl-dash' if l.dashed }}"/>{% endfor %}
+  {%- for c in lay.chips %}<line x1="{{ c.lx }}" y1="{{ c.ly1 }}" x2="{{ c.lx }}" y2="{{ c.ly2 }}" class="tl tl-chip"/>
+  <g class="tchip"><rect x="{{ c.x }}" y="{{ c.y }}" width="{{ c.w }}" height="26" rx="13"/><text x="{{ c.lx }}" y="{{ c.y + 17 }}" text-anchor="middle">{{ c.text }}</text></g>{% endfor %}
+  {%- for t in lay.labels %}<g class="tlab{{ ' tlab-slow' if t.slow }}"><rect x="{{ t.x }}" y="{{ t.y }}" width="{{ t.w }}" height="20" rx="6"/><text x="{{ t.x + 6 }}" y="{{ t.y + 14 }}">{{ t.text }}</text></g>{% endfor %}
+  {%- for b in lay.boxes %}{% set n = b.node %}
+  {%- set sub = STATUS_TEXT[n.status] or n.sub or n.ip or '' %}
+  {%- set label = KIND_TEXT[n.kind] ~ ' ' ~ n.label ~ (', ' ~ sub if sub else '') ~ (', ' ~ b.chip if b.chip else '') %}
+  {%- set href = (url_for('web.topology', site_id=site.id, switch=n.switch_id) if mode == 'select' else url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id)) if n.switch_id
+       else (url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) if n.kind == 'neighbor' and n.ip and has_role(user, 'admin') else None) %}
+  {%- if href %}<a href="{{ href }}" aria-label="{{ label }}{{ ' (ausgewählt)' if selected and n.switch_id == selected }}{{ ' – Zugangsdaten eintragen' if n.kind == 'neighbor' }}">{% endif %}
+  <g class="tn tn-{{ n.kind }} st-{{ n.status }}{{ ' tn-sel' if selected and n.switch_id == selected }}"{% if not href %} role="img" aria-label="{{ label }}"{% endif %}>
+    <rect class="tn-box" x="{{ b.x }}" y="{{ b.y }}" width="{{ lay.node_w }}" height="56" rx="10"/>
+    <rect class="tn-ic" x="{{ b.x + 10 }}" y="{{ b.y + 12 }}" width="32" height="32" rx="8"/>
+    <path class="tn-glyph" transform="translate({{ b.x + 17 }} {{ b.y + 19 }}) scale(0.75)" d="{{ GLYPHS[n.kind] }}"/>
+    <text class="tn-l" x="{{ b.x + 52 }}" y="{{ b.y + 24 }}">{{ n.label|truncate(19, True, '…', 0) }}</text>
+    <text class="tn-s" x="{{ b.x + 52 }}" y="{{ b.y + 42 }}">{{ (sub ~ (' · ' ~ b.chip if b.chip else ''))|truncate(24, True, '…', 0) }}</text>
+    {%- if n.findings %}<g class="tmark"><circle cx="{{ b.x + lay.node_w - 6 }}" cy="{{ b.y + 4 }}" r="12"/><text x="{{ b.x + lay.node_w - 6 }}" y="{{ b.y + 8 }}" text-anchor="middle">{{ n.findings|join(',')|truncate(5, True, '…', 0) }}</text></g>{% endif %}
+  </g>
+  {%- if href %}</a>{% endif %}
+  {%- endfor %}
+</svg>
+</div>
+</figure>
+{%- endmacro %}
+
+{#- Baum als verschachtelte Liste: Text-Alternative zum SVG, auch für Screenreader und Suche im Browser -#}
+{% macro tree_list(topo, site, nid) -%}
+{%- set n = topo.nodes[nid] %}
+<li>{% if n.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id) }}">{{ n.label }}</a>{% else %}{{ n.label }}{% endif %}
+  <span class="muted small">{{ KIND_TEXT[n.kind] }}{% set ll = link_label(topo, n) if n.link and n.parent else '' %}{% if ll %} · {{ ll }}{% endif %}{% if STATUS_TEXT[n.status] %} · {{ STATUS_TEXT[n.status] }}{% endif %}{% if n.devices %} · {{ n.devices|length }} Geräte{% endif %}</span>
+  {%- if n.children %}<ul>{% for c in n.children %}{{ tree_list(topo, site, c) }}{% endfor %}</ul>{% endif %}
+</li>
+{%- endmacro %}
+
+{#- Frontansicht: Ports als Kacheln; mini = nur Übersicht ohne Links -#}
+{% macro faceplate(blocks, site, sw_id, selected=None, mini=False, name='') -%}
+{%- for blk in blocks %}
+{%- if mini %}
+<div class="face face-mini" role="img" aria-label="Ports von {{ name }}: farbig = belegt, Farbe nach Geschwindigkeit, rot = Fehler">
+  <div class="face-rows">
+    <div class="face-row">{% for p in blk.top %}<span class="pm pt-{{ p.state }}"></span>{% endfor %}</div>
+    <div class="face-row">{% for p in blk.bottom %}<span class="pm pt-{{ p.state }}"></span>{% endfor %}</div>
+  </div>
+  {%- if blk.sfp %}<div class="face-sfp">{% for p in blk.sfp %}<span class="pm pt-{{ p.state }}"></span>{% endfor %}</div>{% endif %}
+</div>
+{%- else %}
+<div class="face">
+  <div class="face-rows">
+  {%- for row in (blk.top, blk.bottom) %}
+    <div class="face-row">{% for p in row %}{{ _port(p, site, sw_id, selected) }}{% endfor %}</div>
+  {%- endfor %}
+  </div>
+  {%- if blk.sfp %}<div class="face-sfp">{% for p in blk.sfp %}{{ _port(p, site, sw_id, selected) }}{% endfor %}</div>{% endif %}
+</div>
+{%- endif %}
+{%- endfor %}
+{%- endmacro %}
+
+{% macro _port(p, site, sw_id, selected) -%}
+{%- set who = (p.neighbor.name if p.neighbor else (p.devices[0].label if p.devices else '')) %}
+<a class="pt pt-{{ p.state }}{{ ' pt-sel' if p.index == selected }}" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw_id, port=p.index) }}#port"
+   aria-label="Port {{ p.short }}: {{ 'frei' if not p.up else (speed_text(p.speed) ~ (', ' ~ who if who else '') ~ (', Uplink' if p.role == 'uplink' else '') ~ (', PoE' if p.poe else '') ~ (', Fehler' if p.state == 'err' else '')) }}"
+   {%- if p.index == selected %} aria-current="true"{% endif %}><span class="pt-n">{{ p.short|truncate(5, True, '', 0) }}</span>{% if p.role == 'uplink' %}<span class="pt-m" aria-hidden="true">↑</span>{% elif p.poe %}<span class="pt-m" aria-hidden="true">⚡</span>{% endif %}</a>
+{%- endmacro %}
+
+{% macro legend() -%}
+<ul class="topo-legend" aria-label="Legende">
+  <li><span class="sw sp-10" aria-hidden="true"></span>10 Gbit/s und mehr</li>
+  <li><span class="sw sp-1" aria-hidden="true"></span>1 Gbit/s</li>
+  <li><span class="sw sp-100" aria-hidden="true"></span>100 Mbit/s oder weniger</li>
+  <li><span class="sw sp-dash" aria-hidden="true"></span>vermutet</li>
+</ul>
+{%- endmacro %}
+
+{% macro port_legend() -%}
+<ul class="topo-legend" aria-label="Legende der Ports">
+  <li><span class="sq pt-sp-10" aria-hidden="true"></span>10 Gbit/s</li>
+  <li><span class="sq pt-sp-1" aria-hidden="true"></span>1 Gbit/s</li>
+  <li><span class="sq pt-sp-100" aria-hidden="true"></span>100 Mbit/s</li>
+  <li><span class="sq pt-err" aria-hidden="true"></span>Fehler</li>
+  <li><span class="sq pt-free" aria-hidden="true"></span>frei</li>
+  <li>↑ Uplink · ⚡ PoE</li>
+</ul>
+{%- endmacro %}

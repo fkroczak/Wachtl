@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head with context %}
+{% block title %}Pfad suchen · Topologie · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+<section class="card" aria-labelledby="h-search">
+  <h2 id="h-search">Pfad eines Geräts</h2>
+  <form method="get" action="{{ url_for('web.topology_path', site_id=site.id) }}" class="topo-search">
+    <div class="field">
+      <label for="f-geraet">Gerät: Name, IP-Adresse oder MAC</label>
+      <input id="f-geraet" name="geraet" type="search" maxlength="100" value="{{ query }}" aria-describedby="f-geraet-help">
+      <small id="f-geraet-help" class="field-help">Zeigt jedes Kabel und jeden Port vom Gerät bis zum Internet.</small>
+    </div>
+    <button class="primary">Pfad zeigen</button>
+  </form>
+  {% if query and not hits and not path %}
+  <p class="muted">Kein Gerät mit bekanntem Port gefunden. Geräte erscheinen, sobald ein Switch ihre MAC-Adresse an einem Port gelernt hat; Namen und IP-Adressen kommen aus dem Netzwerkscan.</p>
+  {% elif hits and not path %}
+  <h3>{{ hits|length }} Treffer – bitte wählen</h3>
+  <ul>{% for h in hits %}<li><a href="{{ url_for('web.topology_path', site_id=site.id, geraet=query, mac=h.mac) }}">{{ h.label }}</a> <span class="muted small">{{ h.ip or '' }} {{ h.mac }}</span></li>{% endfor %}</ul>
+  {% endif %}
+</section>
+
+{% if path %}
+<section class="card" aria-labelledby="h-path">
+  <div class="page-head">
+    <h2 id="h-path">{{ path.device.label }} → {{ path.hops[-1].label }}</h2>
+    <p class="small muted">{{ path.hops|length - 2 }} Geräte dazwischen · Engstelle {{ speed_text(path.bottleneck) }}{% if path.problems %} · <span class="warn-t">{{ path.problems }} Auffälligkeit{{ 'en' if path.problems > 1 }}</span>{% endif %}</p>
+  </div>
+  <ol class="topo-chain">
+    {% for h in path.hops %}
+    <li class="topo-hop{{ ' topo-hop-warn' if h.problem }}">
+      <strong>{% if h.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=h.switch_id) }}">{{ h.label }}</a>{% else %}{{ h.label }}{% endif %}</strong>
+      <span class="small muted">{{ h.sub or '' }}</span>
+      {% if h.switch_id %}<span class="small">{% if h['in'] %}rein Port {{ h['in'] }}{% endif %}{% if h['in'] and h.out %} · {% endif %}{% if h.out %}raus Port {{ h.out }}{% endif %}</span>{% endif %}
+      {% if h.kind == 'device' and h.device.is_probe %}<span class="badge info">Wachtl-Probe</span>{% endif %}
+      {% if h.problem %}<span class="badge warning">Fehler am Port</span>{% endif %}
+    </li>
+    {% if not loop.last %}{% set lk = path.links[loop.index0] %}
+    <li class="topo-link {{ lk.state }}{{ ' topo-link-err' if lk.errors >= 50 }}" aria-label="Kabel: {{ lk.text }}, {{ speed_text(lk.speed) }}{{ ', ' ~ lk.errors ~ ' Fehler in 24 Stunden' if lk.errors >= 50 }}">
+      <span class="small">{{ lk.text }}</span><i aria-hidden="true"></i><span class="small">{{ speed_text(lk.speed) if lk.speed else '' }}{% if lk.errors >= 50 %} · {{ lk.errors }} Fehler{% endif %}</span>
+    </li>
+    {% endif %}
+    {% endfor %}
+  </ol>
+</section>
+
+<div class="topo-two">
+  <section class="card" aria-labelledby="h-pm">
+    <h2 id="h-pm">Wachtl-Messung von diesem Gerät</h2>
+    {% if measure %}
+    <p class="small">Messwerte der Probe <a href="{{ url_for('web.probe', probe_id=measure.probe.id) }}">{{ measure.probe.hostname }}</a>. Beginnt ein Verlust schon beim ersten Ziel im LAN, liegt die Ursache meist am ersten Kabel.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Ziel</th><th>Zustand</th></tr></thead>
+      <tbody>{% for st in measure.states %}<tr><td><a href="{{ check_url(measure.probe, st.check) }}">{{ st.check.name }}</a></td>
+        <td><span class="dot {{ {'ok': 'ok', 'warn': 'warn', 'down': 'down'}.get(st.state, '') }}" aria-hidden="true"></span> {{ st.detail or st.label }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}
+    <p class="muted">Auf diesem Gerät läuft keine Wachtl-Probe. Die Angaben oben stammen von den Switches.</p>
+    {% endif %}
+  </section>
+  <section class="card" aria-labelledby="h-ev">
+    <h2 id="h-ev">Verlauf auf diesem Weg</h2>
+    {% if events %}
+    <ul class="small">{% for e in events %}<li>{{ e.ts|dt }}: {{ e.name or e.sys_name or e.host }} – {{ e.detail }}</li>{% endfor %}</ul>
+    {% else %}<p class="muted">Keine Änderungen gespeichert.</p>{% endif %}
+  </section>
+</div>
+{% endif %}
+{% endblock %}

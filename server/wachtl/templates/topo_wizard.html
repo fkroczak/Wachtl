@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head with context %}
+{% from "_forms.html" import field, error_summary %}
+{% block title %}{{ 'Zugangsdaten ändern' if sw else 'Switch hinzufügen' }} · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+{% set fv = form %}
+{% set fe = field_errors %}
+<ol class="topo-steps" aria-label="Schritte">
+  <li aria-current="step"><span>1</span> Switch und Zugang</li>
+  <li><span>2</span> Verbindung testen</li>
+  <li><span>3</span> Speichern</li>
+</ol>
+<h2>{{ 'Zugangsdaten von ' ~ (sw.name or sw.sys_name or sw.host) ~ ' ändern' if sw else 'Switch hinzufügen' }}</h2>
+<p class="muted">Wachtl liest den Switch nur (SNMP-Lesezugriff). Die Zugangsdaten werden verschlüsselt gespeichert und nie wieder angezeigt.
+   Die Abfrage läuft vom Wachtl-Server aus – er muss den Switch über UDP-Port 161 erreichen.</p>
+
+{{ error_summary(errors) }}
+
+{% if suggestions and not sw %}
+<section class="card topo-suggest" aria-labelledby="h-sugg">
+  <h3 id="h-sugg">Vorschläge</h3>
+  <ul>{% for s in suggestions %}<li><a href="{{ url_for('web.topology_new', site_id=site.id, host=s.host, name=s.name, wie=fv.copy_from) }}">{{ s.name }}</a> <span class="muted small">{{ s.host }} · {{ s.why }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% set copying = fv.copy_from|string not in ('', 'None') %}
+{% set version = fv.snmp_version or existing.version or '2c' %}
+{% set level = fv.sec_level or sec_level(existing) if existing.version == '3' else (fv.sec_level or 'authPriv') %}
+<form method="post" action="{{ url_for('web.topology_edit', site_id=site.id, switch_id=sw.id) if sw else url_for('web.topology_new', site_id=site.id) }}"
+      class="settings-form" data-check-form novalidate>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset>
+    <legend>Switch</legend>
+    <div class="grid-form">
+      {% call(attrs) field("host", "Adresse", help="IP-Adresse oder Hostname, unter der der Switch verwaltet wird.", error=fe.host) %}
+        <input name="host" required maxlength="253" value="{{ fv.host or '' }}" autocomplete="off" spellcheck="false" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("name", "Bezeichnung", help="Leer = Name, den der Switch selbst meldet.", error=fe.name) %}
+        <input name="name" maxlength="80" value="{{ fv.name or '' }}" placeholder="z. B. SW-EG-01" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("location", "Ort im Gebäude", help="Optional, z. B. Technikschrank Erdgeschoss.", error=fe.location) %}
+        <input name="location" maxlength="80" value="{{ fv.location or '' }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("port", "UDP-Port", help="Fast immer 161.", error=fe.port) %}
+        <input name="port" type="number" min="1" max="65535" value="{{ fv.port or 161 }}" {{ attrs }}>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Zugang (SNMP)</legend>
+    <div class="grid-form">
+      {% if others %}
+      {% call(attrs) field("copy_from", "Zugangsdaten", help="Viele Switches teilen sich dieselben Zugangsdaten – dann einfach übernehmen.", error=fe.copy_from) %}
+        <select name="copy_from" {{ attrs }}>
+          <option value="">neue Zugangsdaten eingeben</option>
+          {% for o in others %}<option value="{{ o.id }}" {{ 'selected' if fv.copy_from|string == o.id|string }}>wie bei {{ o.name or o.sys_name or o.host }} (SNMPv{{ o.snmp_version }})</option>{% endfor %}
+        </select>
+      {% endcall %}
+      {% endif %}
+      {% call(attrs) field("snmp_version", "SNMP-Version", help="SNMPv3 ist verschlüsselt und empfohlen. v2c und v1 übertragen die Community im Klartext.",
+                          error=fe.snmp_version, show_if="copy_from:" if others else None, hidden=copying) %}
+        <select name="snmp_version" {{ 'disabled' if copying }} {{ attrs }}>{% for k, label in SNMP_VERSIONS %}<option value="{{ k }}" {{ 'selected' if k == version }}>{{ label }}</option>{% endfor %}</select>
+      {% endcall %}
+      {% set v12 = not copying and version in ('1', '2c') %}
+      {% call(attrs) field("community", "Community", help="Lese-Community aus den SNMP-Einstellungen des Switches.", error=fe.community,
+                          show_if="snmp_version:1,2c", hidden=not v12) %}
+        <input name="community" type="password" maxlength="64" autocomplete="new-password" {{ 'disabled' if not v12 }}
+          placeholder="{{ 'gesetzt – leer lassen = unverändert' if existing.version in ('1', '2c') and existing.community else '' }}" {{ attrs }}>
+      {% endcall %}
+      {% set v3 = not copying and version == '3' %}
+      {% call(attrs) field("user", "Benutzer", error=fe.user, show_if="snmp_version:3", hidden=not v3) %}
+        <input name="user" maxlength="32" value="{{ fv.user or '' }}" autocomplete="off" spellcheck="false" {{ 'disabled' if not v3 }} {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("sec_level", "Sicherheitsstufe", help="Muss zur Einstellung des Benutzers am Switch passen.", error=fe.sec_level,
+                          show_if="snmp_version:3", hidden=not v3) %}
+        <select name="sec_level" {{ 'disabled' if not v3 }} {{ attrs }}>{% for k, label in SEC_LEVELS %}<option value="{{ k }}" {{ 'selected' if k == level }}>{{ label }}</option>{% endfor %}</select>
+      {% endcall %}
+      {% set va = v3 and level in ('authNoPriv', 'authPriv') %}
+      {% call(attrs) field("auth_proto", "Anmeldeverfahren (Auth)", error=fe.auth_proto, show_if="sec_level:authNoPriv,authPriv", hidden=not va) %}
+        <select name="auth_proto" {{ 'disabled' if not va }} {{ attrs }}>{% for k, label in AUTH_CHOICES %}<option value="{{ k }}" {{ 'selected' if k == (fv.auth_proto or 'sha') }}>{{ label }}</option>{% endfor %}</select>
+      {% endcall %}
+      {% call(attrs) field("auth_key", "Passwort Anmeldung", help="8 bis 64 Zeichen.", error=fe.auth_key, show_if="sec_level:authNoPriv,authPriv", hidden=not va) %}
+        <input name="auth_key" type="password" maxlength="64" autocomplete="new-password" {{ 'disabled' if not va }}
+          placeholder="{{ 'gesetzt – leer lassen = unverändert' if existing.auth_key else '' }}" {{ attrs }}>
+      {% endcall %}
+      {% set vp = v3 and level == 'authPriv' %}
+      {% call(attrs) field("priv_proto", "Verschlüsselung (Priv)", error=fe.priv_proto, show_if="sec_level:authPriv", hidden=not vp) %}
+        <select name="priv_proto" {{ 'disabled' if not vp }} {{ attrs }}>{% for k, label in PRIV_CHOICES %}<option value="{{ k }}" {{ 'selected' if k == (fv.priv_proto or 'aes') }}>{{ label }}</option>{% endfor %}</select>
+      {% endcall %}
+      {% call(attrs) field("priv_key", "Passwort Verschlüsselung", help="8 bis 64 Zeichen; oft dasselbe wie für die Anmeldung.", error=fe.priv_key, show_if="sec_level:authPriv", hidden=not vp) %}
+        <input name="priv_key" type="password" maxlength="64" autocomplete="new-password" {{ 'disabled' if not vp }}
+          placeholder="{{ 'gesetzt – leer lassen = unverändert' if existing.priv_key else '' }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("context", "Kontext", help="Nur nötig, wenn der Switch es verlangt; sonst leer lassen.", error=fe.context, show_if="snmp_version:3", hidden=not v3) %}
+        <input name="context" maxlength="32" value="{{ fv.context or '' }}" {{ 'disabled' if not v3 }} {{ attrs }}>
+      {% endcall %}
+    </div>
+  </fieldset>
+  <div class="actions">
+    <button class="primary">Weiter: Verbindung testen</button>
+    <a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw.id) if sw and sw.status != 'draft' else url_for('web.topology_switches', site_id=site.id) }}">Abbrechen</a>
+  </div>
+</form>
+{% endblock %}

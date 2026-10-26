@@ -105,7 +105,7 @@ class ServerProbe:
             if self.stop_event.wait(30):
                 return
         loops = [threading.Thread(target=fn, daemon=True, name=fn.__name__)
-                 for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop)]
+                 for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop, self.topology_loop)]
         for t in loops:
             t.start()
         self.stop_event.wait()
@@ -226,6 +226,12 @@ class ServerProbe:
         backoff = 0
         while not self.stop_event.wait(max(2, int((self.config or {}).get("upload_interval_s") or 10)) + backoff):
             backoff = 0 if self.upload_pending() else min(300, max(5, backoff * 2))
+
+    def topology_loop(self) -> None:
+        """Switch-Abfragen per SNMP (docs/TOPOLOGIE.md); läuft nur, solange der Server Aufträge hat."""
+        from . import topology
+
+        topology.loop(lambda: self.api if self.config is not None else None, self.stop_event)
 
     def heartbeat_loop(self) -> None:
         while not self.stop_event.is_set():
