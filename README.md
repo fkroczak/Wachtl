@@ -45,6 +45,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | PDF-Bericht (1.0) | Alle Störungen eines Zeitraums als PDF für den Provider: Einschätzung, wo das Problem liegt, Zeitstrahl mit Kurzausfällen, Leitungsschwankungen, Störungsliste, Pfadanalyse, Netzwerkscan |
 | Netzwerkscan (1.0) | Geräte im Kundennetz, Anwesenheit, unregelmäßige Geräte, IP-Konflikte, Portscan mit Diensterkennung und Links zum Verbinden ([docs/NETZWERKSCAN.md](docs/NETZWERKSCAN.md)) |
 | Switch-Topologie (1.0) | SNMPv1/v2c/v3 je Switch mit Assistent (Zugang testen, verschlüsselt speichern); Baum Internet → Gateway → Switches → Geräte mit Ports und Geschwindigkeit, Switch-Frontansicht mit Port-Details und Probe-Messwerten, Probleme (Port-Fehler, langsame Uplinks, Kabelkreise, nicht verwaltete Switches), Pfad eines Geräts bis ins Internet ([docs/TOPOLOGIE.md](docs/TOPOLOGIE.md)) |
+| Switches finden (1.1) | Switches von TP-Link, D-Link, Zyxel, Netgear, Aruba, Cisco … automatisch erkennen (Hersteller, Weboberfläche, LLDP/CDP, Rundruf); fehlende Zugangsdaten abfragen und für weitere Funde übernehmen; TP-Link Easy Smart ohne SNMP über die Weboberfläche; wahrscheinliche Knotenpunkte ohne Verwaltung im Baum ([docs/TOPOLOGIE.md](docs/TOPOLOGIE.md#switches-automatisch-finden)) |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).

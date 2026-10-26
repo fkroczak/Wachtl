@@ -13,27 +13,32 @@
   <li><span>3</span> Speichern</li>
 </ol>
 <h2>{{ 'Zugangsdaten von ' ~ (sw.name or sw.sys_name or sw.host) ~ ' ändern' if sw else 'Switch hinzufügen' }}</h2>
-<p class="muted">Wachtl liest den Switch nur (SNMP-Lesezugriff). Die Zugangsdaten werden verschlüsselt gespeichert und nie wieder angezeigt.
-   Die Abfrage läuft vom Wachtl-Server aus – er muss den Switch über UDP-Port 161 erreichen.</p>
+<p class="muted">Wachtl liest den Switch nur (SNMP-Lesezugriff bzw. Ansehen der Weboberfläche). Die Zugangsdaten werden verschlüsselt gespeichert und nie wieder angezeigt.
+   Die Abfrage läuft vom Wachtl-Server aus – er muss den Switch erreichen (SNMP: UDP-Port 161, Weboberfläche: TCP-Port 80).</p>
 
 {{ error_summary(errors) }}
 
+{% set suggestions = suggestions|rejectattr('host', 'equalto', fv.host)|list if fv.host else suggestions %}
 {% if suggestions and not sw %}
 <section class="card topo-suggest" aria-labelledby="h-sugg">
   <h3 id="h-sugg">Vorschläge</h3>
-  <ul>{% for s in suggestions %}<li><a href="{{ url_for('web.topology_new', site_id=site.id, host=s.host, name=s.name, wie=fv.copy_from) }}">{{ s.name }}</a> <span class="muted small">{{ s.host }} · {{ s.why }}</span></li>{% endfor %}</ul>
+  <ul>{% for s in suggestions %}<li><a href="{{ url_for('web.topology_new', site_id=site.id, kandidat=s.id, wie=fv.copy_from) if s.id else url_for('web.topology_new', site_id=site.id, host=s.host, name=s.name, wie=fv.copy_from) }}">{{ s.name }}</a> <span class="muted small">{{ s.host }} · {{ s.why }}</span></li>{% endfor %}</ul>
 </section>
 {% endif %}
 
-{% set copying = fv.copy_from|string not in ('', 'None') %}
+{% set copying = fv.copy_from|string not in ('', 'None') or access != 'snmp' %}
 {% set version = fv.snmp_version or existing.version or '2c' %}
 {% set level = fv.sec_level or sec_level(existing) if existing.version == '3' else (fv.sec_level or 'authPriv') %}
 <form method="post" action="{{ url_for('web.topology_edit', site_id=site.id, switch_id=sw.id) if sw else url_for('web.topology_new', site_id=site.id) }}"
       class="settings-form" data-check-form novalidate>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if fv.kandidat or request.args.get('kandidat') %}<input type="hidden" name="kandidat" value="{{ fv.kandidat or request.args.get('kandidat') }}">{% endif %}
   <fieldset>
     <legend>Switch</legend>
     <div class="grid-form">
+      {% call(attrs) field("access", "Zugangsart", help="Die meisten verwalteten Switches (D-Link, Zyxel, Aruba, Netgear, Cisco, TP-Link JetStream/Omada …) sprechen SNMP. Günstige TP-Link-Easy-Smart-Switches können kein SNMP – Wachtl liest dann ihre Weboberfläche.", error=fe.access, wide=True) %}
+        <select name="access" {{ attrs }}>{% for k, label in ACCESS_KINDS %}<option value="{{ k }}" {{ 'selected' if k == access }}>{{ label }}</option>{% endfor %}</select>
+      {% endcall %}
       {% call(attrs) field("host", "Adresse", help="IP-Adresse oder Hostname, unter der der Switch verwaltet wird.", error=fe.host) %}
         <input name="host" required maxlength="253" value="{{ fv.host or '' }}" autocomplete="off" spellcheck="false" {{ attrs }}>
       {% endcall %}
@@ -43,25 +48,36 @@
       {% call(attrs) field("location", "Ort im Gebäude", help="Optional, z. B. Technikschrank Erdgeschoss.", error=fe.location) %}
         <input name="location" maxlength="80" value="{{ fv.location or '' }}" {{ attrs }}>
       {% endcall %}
-      {% call(attrs) field("port", "UDP-Port", help="Fast immer 161.", error=fe.port) %}
-        <input name="port" type="number" min="1" max="65535" value="{{ fv.port or 161 }}" {{ attrs }}>
+      {% set snmp_on = access == 'snmp' %}
+      {% call(attrs) field("port", "UDP-Port", help="Fast immer 161.", error=fe.port, show_if="access:snmp", hidden=not snmp_on) %}
+        <input name="port" type="number" min="1" max="65535" value="{{ (fv.port if access == 'snmp' else '') or 161 }}" {{ 'disabled' if not snmp_on }} {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("web_port", "TCP-Port", help="Port der Weboberfläche, fast immer 80.", error=fe.web_port, show_if="access:easysmart", hidden=snmp_on) %}
+        <input name="web_port" type="number" min="1" max="65535" value="{{ (fv.web_port if access != 'snmp' else '') or 80 }}" {{ 'disabled' if snmp_on }} {{ attrs }}>
       {% endcall %}
     </div>
   </fieldset>
 
   <fieldset>
-    <legend>Zugang (SNMP)</legend>
+    <legend>Zugang</legend>
     <div class="grid-form">
+      {% call(attrs) field("web_user", "Benutzer der Weboberfläche", help="Ab Werk „admin“.", error=fe.web_user, show_if="access:easysmart", hidden=snmp_on) %}
+        <input name="web_user" maxlength="32" value="{{ fv.web_user or 'admin' }}" autocomplete="off" spellcheck="false" {{ 'disabled' if snmp_on }} {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("web_password", "Passwort der Weboberfläche", help="Dasselbe Passwort wie beim Anmelden im Browser. Wachtl liest nur und ändert nichts.", error=fe.web_password, show_if="access:easysmart", hidden=snmp_on) %}
+        <input name="web_password" type="password" maxlength="64" autocomplete="new-password" {{ 'disabled' if snmp_on }}
+          placeholder="{{ 'gesetzt – leer lassen = unverändert' if existing.kind == 'easysmart' and existing.password else '' }}" {{ attrs }}>
+      {% endcall %}
       {% if others %}
-      {% call(attrs) field("copy_from", "Zugangsdaten", help="Viele Switches teilen sich dieselben Zugangsdaten – dann einfach übernehmen.", error=fe.copy_from) %}
-        <select name="copy_from" {{ attrs }}>
+      {% call(attrs) field("copy_from", "Zugangsdaten", help="Viele Switches teilen sich dieselben Zugangsdaten – dann einfach übernehmen.", error=fe.copy_from, show_if="access:snmp", hidden=not snmp_on) %}
+        <select name="copy_from" {{ 'disabled' if not snmp_on }} {{ attrs }}>
           <option value="">neue Zugangsdaten eingeben</option>
           {% for o in others %}<option value="{{ o.id }}" {{ 'selected' if fv.copy_from|string == o.id|string }}>wie bei {{ o.name or o.sys_name or o.host }} (SNMPv{{ o.snmp_version }})</option>{% endfor %}
         </select>
       {% endcall %}
       {% endif %}
       {% call(attrs) field("snmp_version", "SNMP-Version", help="SNMPv3 ist verschlüsselt und empfohlen. v2c und v1 übertragen die Community im Klartext.",
-                          error=fe.snmp_version, show_if="copy_from:" if others else None, hidden=copying) %}
+                          error=fe.snmp_version, show_if="copy_from:" if others else "access:snmp", hidden=copying) %}
         <select name="snmp_version" {{ 'disabled' if copying }} {{ attrs }}>{% for k, label in SNMP_VERSIONS %}<option value="{{ k }}" {{ 'selected' if k == version }}>{{ label }}</option>{% endfor %}</select>
       {% endcall %}
       {% set v12 = not copying and version in ('1', '2c') %}
@@ -99,6 +115,18 @@
       {% endcall %}
     </div>
   </fieldset>
+  {% if also %}
+  <fieldset>
+    <legend>Weitere gefundene Switches</legend>
+    <p class="small muted">Gelten dieselben Zugangsdaten auch für diese Switches? Angehakte testet Wachtl nach dem Speichern und trägt sie ein, wenn die Anmeldung klappt.</p>
+    <ul class="topo-also">
+      {% for c in also %}
+      <li><label><input type="checkbox" name="auch" value="{{ c.id }}" {{ 'checked' if c.id|string in chosen }}> {{ c.label }}
+        <span class="muted small">{{ c.ip }} · {{ c.access_text }}</span></label></li>
+      {% endfor %}
+    </ul>
+  </fieldset>
+  {% endif %}
   <div class="actions">
     <button class="primary">Weiter: Verbindung testen</button>
     <a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw.id) if sw and sw.status != 'draft' else url_for('web.topology_switches', site_id=site.id) }}">Abbrechen</a>

@@ -8,7 +8,9 @@ hierher. Daraus entsteht bei jedem Seitenaufruf der Baum:
    liegt dazwischen (die Mengen der dahinter gesehenen Switches sind disjunkt) → Kabel A.p ⇄ B.q.
 3. Geräte hängen an dem Port, an dem ihre MAC gelernt wurde und der keine Verbindung zu einem Switch ist.
    Viele Geräte an einem Port ohne LLDP-Nachbarn → vermutlich ein nicht verwalteter Switch.
-4. Wurzel: der Switch, an dem das Standard-Gateway hängt; sonst der mit den meisten Verbindungen.
+4. Switches ohne MAC-Tabelle (TP-Link Easy Smart) und gefundene, nicht abfragbare Switches (services/switchfind.py)
+   hängen an dem Port, an dem ein verwalteter Switch ihre MAC sieht – die Geräte dahinter gehören zu ihnen.
+5. Wurzel: der Switch, an dem das Standard-Gateway hängt; sonst der mit den meisten Verbindungen.
 """
 from __future__ import annotations
 
@@ -35,7 +37,10 @@ PRIV_CHOICES = (("aes", "AES-128"), ("aes256", "AES-256"), ("aes192", "AES-192")
 POLL_MIN = 15                    # regelmäßige Abfrage alle 15 Minuten
 ERRORS_WARN = 50                 # neue Eingangsfehler in 24 h, ab denen ein Port auffällt
 ERRORS_CRIT = 1000
-UNMANAGED_MIN_MACS = 3           # so viele Geräte an einem Port ohne Nachbarn → nicht verwalteter Switch vermutet
+UNMANAGED_MIN_MACS = 3           # so viele Geräte an einem Port ohne Nachbarn → wahrscheinlich ein nicht verwalteter Switch
+UNMANAGED_MAYBE_MACS = 2         # zwei Geräte an einem Port → möglicherweise ein Tisch-Switch
+# Virtuelle Maschinen (VMware, Hyper-V, KVM/QEMU, Xen, VirtualBox, Parallels): viele MACs an einem Port = Host, kein Switch
+VM_OUIS = ("00:50:56", "00:0C:29", "00:05:69", "00:1C:14", "00:15:5D", "52:54:00", "00:16:3E", "08:00:27", "00:1C:42")
 FLAP_MOVES = 3                   # so oft dieselbe MAC zwischen Ports in 24 h → Schleifenverdacht
 KEEP_DAYS = 90
 TEXT_MAX = 200
@@ -47,6 +52,8 @@ KIND_LABELS = {
     "half_duplex": "Halbduplex", "mac_flap": "Schleifenverdacht", "unmanaged": "Nicht verwalteter Switch",
     "no_credentials": "Switch ohne Zugangsdaten", "no_fdb": "Keine MAC-Tabelle",
 }
+ACCESS_KINDS = (("snmp", "SNMP (empfohlen, für fast alle verwalteten Switches)"),
+                ("easysmart", "Weboberfläche – TP-Link Easy Smart (ohne SNMP, z. B. TL-SG105E, TL-SG108PE)"))
 
 
 # -- Zugangsdaten -------------------------------------------------------------------
@@ -113,6 +120,22 @@ def parse_credentials(form, existing: dict | None = None) -> tuple[dict, list]:
     return out, errors
 
 
+def parse_web_credentials(form, existing: dict | None = None) -> tuple[dict, list]:
+    """Anmeldung an der Weboberfläche (TP-Link Easy Smart). Leeres Passwort behält den gespeicherten Wert."""
+    from ..checktypes import FieldError
+
+    existing = existing if (existing or {}).get("kind") == "easysmart" else {}
+    errors: list = []
+    user = (form.get("web_user") or "").strip()
+    password = form.get("web_password") or existing.get("password", "")
+    if not user or len(user) > 32 or not user.isprintable():
+        errors.append(FieldError("Benutzer: 1 bis 32 Zeichen (ab Werk „admin“).", "web_user"))
+    if not password or len(password) > 64:
+        errors.append(FieldError("Passwort: bitte eintragen (das Passwort der Weboberfläche des Switches).",
+                                 "web_password"))
+    return {"kind": "easysmart", "version": "web", "user": user, "password": password}, errors
+
+
 def sec_level(creds: dict) -> str:
     if creds.get("priv_proto", "none") != "none":
         return "authPriv"
@@ -121,6 +144,8 @@ def sec_level(creds: dict) -> str:
 
 def credential_hint(creds: dict) -> str:
     """Zugang ohne Geheimnisse beschreiben (Tabelle, Audit-Log)."""
+    if creds.get("kind") == "easysmart":
+        return f"Weboberfläche (TP-Link Easy Smart), Benutzer {creds.get('user')}"
     if creds.get("version") in ("1", "2c"):
         return f"SNMPv{creds['version']}, Community"
     parts = [f"SNMPv3, Benutzer {creds.get('user')}"]
@@ -147,7 +172,8 @@ def jobs(ts: int | None = None, limit: int = 20) -> list[dict]:
         except SecretError as exc:
             ex("UPDATE net_switches SET last_poll = ?, last_error = ? WHERE id = ?", (ts, str(exc), sw["id"]))
             continue
-        out.append({"switch_id": sw["id"], "host": sw["host"], "port": sw["port"], "credentials": creds})
+        out.append({"switch_id": sw["id"], "host": sw["host"], "port": sw["port"], "credentials": creds,
+                    "access": sw.get("access") or "snmp"})
     return out
 
 
@@ -396,6 +422,10 @@ class Node:
     children: list[str] = field(default_factory=list)
     devices: list[dict] = field(default_factory=list)   # Geräte direkt an diesem Knoten (nicht verwaltet / AP)
     findings: list[int] = field(default_factory=list)   # Nummern der Befunde (Problem-Ansicht)
+    mac: str | None = None
+    via: str | None = None      # Quelle eines Nachbarn: lldp | cdp
+    candidate_id: int | None = None                     # gefundener Switch (net_switch_candidates)
+    access: str | None = None   # Zugangsart eines gefundenen Switches: snmp | easysmart | none
 
 
 @dataclass
@@ -408,6 +438,7 @@ class Topology:
     devices: dict[str, dict]                   # MAC → Gerät (Netzwerkscan, ARP)
     gateway_ip: str | None = None
     findings: list[dict] = field(default_factory=list)
+    behind: dict[str, str] = field(default_factory=dict)  # MAC → Knoten (Switch ohne MAC-Tabelle), an dem sie hängt
 
 
 def _norm(name: str | None) -> str:
@@ -418,7 +449,7 @@ def switch_label(sw: dict) -> str:
     return sw.get("name") or sw.get("sys_name") or sw.get("host") or f"Switch {sw.get('id')}"
 
 
-def build(site_id: int, ts: int | None = None) -> Topology:
+def build(site_id: int, ts: int | None = None, with_candidates: bool = True) -> Topology:
     """Baum eines Standorts aus den gespeicherten Abfragen und dem Netzwerkscan."""
     ts = ts or repo.now()
     rows = q("SELECT * FROM net_switches WHERE site_id = ? AND status <> 'draft' ORDER BY id", (site_id,))
@@ -433,12 +464,19 @@ def build(site_id: int, ts: int | None = None) -> Topology:
                (site_id,)):
         devices[d["mac"]] = {"mac": d["mac"], "ip": d["ip"], "hostname": d["hostname"], "device_id": d["id"],
                              "label": d["note"] or d["hostname"] or d["ip"] or d["mac"], "is_probe": bool(d["is_probe"])}
-    return analyze(rows, devices, errs)
+    cands = []
+    if with_candidates:
+        from . import switchfind
+
+        cands = [c for c in switchfind.candidates(site_id) if c.get("mac")]
+    return analyze(rows, devices, errs, cands)
 
 
-def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, int], int] | None = None) -> Topology:
-    """Reine Auswertung (ohne Datenbank, testbar)."""
+def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, int], int] | None = None,
+            candidates: list[dict] | None = None) -> Topology:
+    """Reine Auswertung (ohne Datenbank, testbar). candidates: gefundene, noch nicht eingetragene Switches."""
     errs = errs or {}
+    behind: dict[str, str] = {}
     devices = {m: dict(d) for m, d in devices.items()}
     nodes: dict[str, Node] = {}
     switches: dict[int, dict] = {}
@@ -541,7 +579,8 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
                             e.get("bridge") else "neighbor"
                         nodes[nid] = Node(nid, kind_, name or e.get("mgmt_ip") or "Nachbar",
                                           (e.get("sys_descr") or e.get("platform") or "")[:60], ip=e.get("mgmt_ip"),
-                                          status="ok" if kind_ != "neighbor" else "warn")
+                                          status="ok" if kind_ != "neighbor" else "warn",
+                                          mac=_mac(e.get("chassis_id")), via=kind)
                         if _mac(e.get("chassis_id")):
                             ident_mac[_mac(e.get("chassis_id"))] = nid
                     add_link(me, ap, nid, None, e.get("port_descr") or e.get("port_id"),
@@ -566,6 +605,23 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
                     pa, pb = switches[a]["ports"][ap], switches[b]["ports"][bq]
                     add_link(f"s{a}", ap, f"s{b}", bq, pb.name, pa.speed or pb.speed, "mac")
                     break
+
+    # 3b. Switches ohne MAC-Tabelle (z. B. TP-Link Easy Smart): an dem Port, der nur sie sieht
+    linked_nodes = {n for lk in linked.values() for n in (lk.a, lk.b)}
+    for sid, s in switches.items():
+        me = s["node"]
+        if s["snapshot"].get("fdb") or me in linked_nodes:
+            continue
+        spots = [(a, ap) for (a, ap), seen in sees.items() if seen == {sid}]
+        if spots:
+            a, ap = min(spots, key=lambda x: len(switches[x[0]]["ports"][x[1]].macs))
+            add_link(f"s{a}", ap, me, None, None, switches[a]["ports"][ap].speed, "mac")
+            port = switches[a]["ports"][ap]
+            port.sees_switches = False
+            own = [m for m in port.macs if m not in ident_mac]
+            nodes[me].devices = [devices.get(m) or {"mac": m, "label": m} for m in own]
+            for m in own:
+                behind[m] = me
     links = list(linked.values())
     link_ports: set[tuple[str, int | None]] = set()
     for lk in links:
@@ -576,23 +632,46 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
             if sid is not None and pidx in switches[sid]["ports"]:
                 switches[sid]["ports"][pidx].link = lk
 
-    # 4. Geräte an Zugangs-Ports; viele Geräte ohne Nachbarn → nicht verwalteter Switch vermutet
+    # 4. Geräte an Zugangs-Ports. Gefundener Switch an diesem Port → eigener Knoten mit den Geräten dahinter;
+    #    sonst mehrere Geräte ohne Nachbarn → wahrscheinlich (ab 3) bzw. möglicherweise (2) ein nicht verwalteter Switch
     locations: dict[str, tuple[int, int]] = {}
+    cand_by_mac = {c["mac"]: c for c in candidates or [] if c.get("mac") and c["mac"] not in ident_mac}
     for sid, s in switches.items():
         for p in s["ports"].values():
             if p.link or p.sees_switches:
+                if p.link and nodes[p.link.b].kind == "switch" and nodes[p.link.b].devices and p.link.a == s["node"]:
+                    for d in nodes[p.link.b].devices:          # hinter einem Switch ohne MAC-Tabelle
+                        locations.setdefault(d["mac"], (sid, p.index))
                 continue
             own = [m for m in p.macs if m not in ident_mac]
             for m in own:
                 locations.setdefault(m, (sid, p.index))
+            cand = next((cand_by_mac[m] for m in own if m in cand_by_mac), None)
+            if cand:
+                nid = f"c{cand['id']}"
+                others = [m for m in own if m != cand["mac"]]
+                p.devices = [d for d in (devices.get(m) or {"mac": m, "label": m} for m in own) if d["mac"] != cand["mac"]]
+                nodes[nid] = Node(nid, "candidate", cand.get("label") or "Switch",
+                                  "ohne Abfrage" if cand.get("access") == "none" else "Zugangsdaten fehlen",
+                                  status="warn" if cand.get("access") != "none" else "ok", ip=cand.get("ip"),
+                                  devices=p.devices, mac=cand["mac"], candidate_id=cand["id"], access=cand.get("access"))
+                for m in others:
+                    behind[m] = nid
+                lk = Link(s["node"], p.index, nid, None, None, p.speed, "mac")
+                links.append(lk)
+                p.link = lk
+                continue
             p.devices = [devices.get(m) or {"mac": m, "label": m} for m in own]
             nb = p.neighbor or {}
-            if nb.get("ap") or (len(own) >= UNMANAGED_MIN_MACS and not nb.get("phone")):
+            real = [m for m in own if not m.startswith(VM_OUIS)]
+            if nb.get("ap") or (len(real) >= UNMANAGED_MAYBE_MACS and not nb.get("phone")):
                 is_ap = bool(nb.get("ap"))
+                sure = len(real) >= UNMANAGED_MIN_MACS
                 nid = f"u{sid}:{p.index}"
                 nodes[nid] = Node(nid, "ap" if is_ap else "unmanaged",
-                                  nb.get("name") or ("Access Point" if is_ap else "Nicht verwalteter Switch?"),
-                                  count_text(len(own)) if not is_ap else f"{max(len(own) - 1, 0)} WLAN-Geräte",
+                                  nb.get("name") or ("Access Point" if is_ap else "Nicht verwalteter Switch"),
+                                  f"{max(len(own) - 1, 0)} WLAN-Geräte" if is_ap else
+                                  f"{'wahrscheinlich' if sure else 'möglich'} · {count_text(len(own))}",
                                   status="ok" if is_ap else "warn", devices=p.devices)
                 lk = Link(s["node"], p.index, nid, None, nb.get("port"), p.speed, "vermutet" if not is_ap else "lldp")
                 links.append(lk)
@@ -608,10 +687,15 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
         gid = "gw"
         nodes[gid] = Node(gid, "gateway", gw.get("label") or gw.get("hostname") or f"Gateway {gw_ip}", gw_ip or "",
                           ip=gw_ip)
-        lk = Link(f"s{sid}", pidx, gid, None, None, switches[sid]["ports"][pidx].speed, "gateway")
-        links.append(lk)
         port = switches[sid]["ports"][pidx]
-        port.link = lk
+        if gw_mac in behind:            # hinter einem Switch ohne MAC-Tabelle bzw. einem gefundenen Switch
+            host = nodes[behind[gw_mac]]
+            lk = Link(host.id, None, gid, None, None, None, "gateway")
+            host.devices = [d for d in host.devices if d.get("mac") != gw_mac]
+        else:
+            lk = Link(f"s{sid}", pidx, gid, None, None, port.speed, "gateway")
+            port.link = lk
+        links.append(lk)
         port.devices = [d for d in port.devices if d.get("mac") != gw_mac]
         root = gid
     else:
@@ -670,7 +754,7 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
             else:
                 p.role = "free"
 
-    topo = Topology(nodes, roots, switches, links, locations, devices, gw_ip)
+    topo = Topology(nodes, roots, switches, links, locations, devices, gw_ip, behind=behind)
     topo.findings = findings(topo)
     return topo
 
@@ -710,11 +794,13 @@ def findings(topo: Topology) -> list[dict]:
 
     for sid, s in topo.switches.items():
         r, node = s["row"], topo.nodes[s["node"]]
+        web = r.get("access") == "easysmart"
         if r.get("last_error") and r.get("status") == "active":
-            add("unreachable", "critical", f"unreachable:{sid}", f"{node.label} antwortet nicht auf SNMP",
+            add("unreachable", "critical", f"unreachable:{sid}",
+                f"{node.label} antwortet nicht{' (Weboberfläche)' if web else ' auf SNMP'}",
                 f"{r['last_error'].rstrip('.')}. Letzte erfolgreiche Abfrage: {_ago(r.get('last_ok'))}.", node.id, sid)
         snap = s["snapshot"]
-        if snap and not snap.get("fdb") and not snap.get("lldp") and not snap.get("cdp"):
+        if snap and not web and not snap.get("fdb") and not snap.get("lldp") and not snap.get("cdp"):
             add("no_fdb", "info", f"no_fdb:{sid}", f"{node.label} liefert keine MAC-Tabelle und keine Nachbarn",
                 "Ohne MAC-Tabelle (BRIDGE-MIB) und LLDP lässt sich nicht erkennen, was an den Ports hängt. "
                 "Bei Cisco-Switches mit mehreren VLANs liefert SNMPv2c die Tabelle je VLAN nur mit „Community@VLAN“.",
@@ -732,7 +818,8 @@ def findings(topo: Topology) -> list[dict]:
                     "Einstellungen (fest eingestellt gegen automatisch).", node.id, sid, p.index)
     for nid, node in topo.nodes.items():
         lk = node.link
-        if lk and node.kind in ("switch", "neighbor", "ap") and lk.speed and lk.speed < 1000 and lk.via != "vermutet":
+        if lk and node.kind in ("switch", "neighbor", "ap", "candidate") and lk.speed and lk.speed < 1000 and \
+                lk.via != "vermutet":
             parent = topo.nodes.get(node.parent)
             add("slow_link", "warning", f"slow:{lk.a}:{lk.a_port}", f"Verbindung zu {node.label} nur {speed_text(lk.speed)}",
                 f"{parent.label if parent else '?'} ⇄ {node.label} ({link_label(topo, node)}). Beide Seiten könnten "
@@ -741,10 +828,16 @@ def findings(topo: Topology) -> list[dict]:
         if node.kind == "unmanaged":
             parent = topo.nodes.get(node.parent)
             p = topo.switches[parent.switch_id]["ports"].get(lk.a_port) if parent and parent.switch_id else None
+            sure = node.sub.startswith("wahrscheinlich")
             add("unmanaged", "info", f"unmanaged:{lk.a}:{lk.a_port}", f"Nicht verwalteter Switch an "
                 f"{parent.label if parent else '?'} Port {p.short if p else '?'}",
-                f"{len(node.devices)} Geräte hängen an einem Port. Wahrscheinlich ein Tisch-Switch oder ein "
-                "anderes Gerät ohne SNMP.", nid, parent.switch_id if parent else None, lk.a_port)
+                f"{len(node.devices)} Geräte hängen an einem Port. "
+                f"{'Wahrscheinlich' if sure else 'Möglicherweise'} ein Tisch-Switch oder ein anderer Switch ohne "
+                "Verwaltung (Knotenpunkt).", nid, parent.switch_id if parent else None, lk.a_port)
+        if node.kind == "candidate" and node.access != "none":
+            add("no_credentials", "info", f"cand:{node.candidate_id}", f"{node.label} ohne Zugangsdaten",
+                f"Automatisch gefunden{f' ({node.ip})' if node.ip else ''}. Mit Zugangsdaten erscheinen auch seine "
+                "Ports, Fehler und PoE.", nid, host=node.ip)
         if node.kind == "neighbor":
             add("no_credentials", "info", f"nocred:{node.id}", f"{node.label} ohne Zugangsdaten",
                 f"Per LLDP/CDP gefunden{f' ({node.ip})' if node.ip else ''}, aber nicht abgefragt. "
@@ -771,7 +864,10 @@ def _ago(ts: int | None) -> str:
 
 
 def refresh_findings(site_id: int, ts: int) -> list[dict]:
-    """Befunde neu berechnen und speichern (erstes Auftreten bleibt erhalten)."""
+    """Gefundene Switches neu bewerten, Befunde neu berechnen und speichern (erstes Auftreten bleibt erhalten)."""
+    from . import switchfind
+
+    switchfind.refresh(site_id, ts)
     topo = build(site_id, ts)
     current = list(topo.findings)
     # Schleifenverdacht aus dem Verlauf: dieselbe MAC wechselt in 24 h mehrfach den Port
@@ -857,6 +953,13 @@ def path_for(topo: Topology, mac: str) -> dict | None:
     hops = [{"kind": "device", "label": dev.get("label") or mac, "sub": dev.get("ip") or mac, "device": dev}]
     links = [{"speed": port.speed, "text": f"Port {port.short}", "errors": port.errors_24h, "duplex": port.duplex,
               "state": port.state}]
+    via = topo.nodes.get(topo.behind.get(mac, ""))
+    if via is not None:                 # Switch ohne MAC-Tabelle dazwischen: Port dort unbekannt
+        links[0] = {"speed": None, "text": "Port unbekannt", "errors": 0, "duplex": None, "state": "sp-none"}
+        hops.append({"kind": via.kind, "label": via.label, "sub": via.ip or via.sub, "node": via.id,
+                     "switch_id": via.switch_id, "in": None, "out": None, "problem": False})
+        links.append({"speed": port.speed, "text": f"Port {port.short}", "errors": port.errors_24h,
+                      "duplex": port.duplex, "state": port.state})
     cur = topo.nodes[sw["node"]]
     in_port = port
     while cur is not None:
@@ -903,9 +1006,9 @@ def layout(topo: Topology, show_devices: bool = True) -> dict:
             return None
         if node.kind == "switch":
             n = sum(len(p.devices) for p in topo.switches[node.switch_id]["ports"].values()
-                    if not (p.link and p.link.via in ("vermutet", "lldp") and p.link.b.startswith("u")))
+                    if not (p.link and p.link.b.startswith(("u", "c")))) + len(node.devices)
             return count_text(n) if n else None
-        if node.kind in ("unmanaged", "ap") and node.devices:
+        if node.kind in ("unmanaged", "ap", "candidate") and node.devices:
             return count_text(len(node.devices))
         return None
 

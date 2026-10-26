@@ -19,6 +19,7 @@ const PAGES = [
   ["Hinweise", "/hinweise"],
   ["Standort: Alle Messungen", `/sites/${ids.site}?tab=messungen`],
   ["Standort: Netzwerk", `/sites/${ids.site}?tab=netzwerk`],
+  ["Topologie: Standorte", "/topologie"],
   ["Topologie: Baum", `/sites/${ids.site}/topologie`],
   ["Topologie: Switches", `/sites/${ids.site}/topologie/switche`],
   ["Topologie: Switch", `/sites/${ids.site}/topologie/switche/${ids.switch}?port=4`],

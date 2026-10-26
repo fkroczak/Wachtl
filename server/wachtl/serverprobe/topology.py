@@ -1,4 +1,4 @@
-"""Switch-Abfragen der Server-Probe (docs/TOPOLOGIE.md): fällige Switches holen, per SNMP abfragen, melden."""
+"""Switch-Abfragen der Server-Probe (docs/TOPOLOGIE.md): fällige Switches holen, abfragen (SNMP oder Weboberfläche), melden."""
 from __future__ import annotations
 
 import logging
@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
-from .. import snmp, snmpcollect
+from .. import easysmart, snmp, snmpcollect
 
 log = logging.getLogger("wachtl.serverprobe")
 PARALLEL = 4
@@ -16,6 +16,15 @@ PARALLEL = 4
 def poll(job: dict) -> dict:
     """Einen Switch abfragen. Gibt das Ergebnis für POST results/topology zurück (nie eine Ausnahme)."""
     ts = int(time.time())
+    if job.get("access") == "easysmart":
+        try:
+            return {"switch_id": job["switch_id"], "ts": ts,
+                    "snapshot": easysmart.poll(job["host"], job.get("credentials") or {}, port=int(job.get("port") or 80))}
+        except easysmart.EasySmartError as exc:
+            return {"switch_id": job["switch_id"], "ts": ts, "error": str(exc)}
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Switch %s: Abfrage unerwartet fehlgeschlagen", job.get("host"))
+            return {"switch_id": job["switch_id"], "ts": ts, "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
     try:
         creds = snmp.Credentials(**{k: v for k, v in (job.get("credentials") or {}).items()
                                     if k in snmp.Credentials.__dataclass_fields__})

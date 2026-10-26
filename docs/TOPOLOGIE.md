@@ -4,7 +4,8 @@ Wachtl fragt die Switches eines Standorts per SNMP ab und zeigt daraus einen Bau
 Gerät: welche Switches wie verbunden sind, welche Ports belegt sind, welches Gerät an welchem Port hängt – und was
 dabei auffällt (Port-Fehler, langsame Verbindungen, nicht verwaltete Switches, Kabelkreise).
 
-Im Web-UI: Standort › **Topologie** mit vier Ansichten:
+Im Web-UI: Menüpunkt **Topologie** links (bei einem Standort direkt dessen Baum, bei mehreren zuerst eine Kachel je
+Standort mit Switches, Problemen und gefundenen Switches) oder Standort › **Topologie**, jeweils mit vier Ansichten:
 
 | Ansicht | Inhalt |
 | --- | --- |
@@ -41,6 +42,57 @@ im Web-UI nie wieder angezeigt und tauchen nicht im Audit-Log auf. Wer nur die D
 nicht lesen. Ändert sich `WACHTL_SECRET_KEY`, müssen sie neu eingegeben werden (der Switch meldet dann „Zugangsdaten
 nicht lesbar“).
 
+## Switches automatisch finden
+
+Wachtl sucht Switches selbst und trägt alles ein, was ohne Zugangsdaten geht. Quellen, alle **ohne Anmeldung am Gerät**:
+
+| Quelle | Was sie liefert |
+| --- | --- |
+| Netzwerkscan der Probes ([NETZWERKSCAN.md](NETZWERKSCAN.md)) | MAC-Adresse → Hersteller (TP-Link, D-Link, Zyxel, Netgear, Aruba/HPE, Cisco, Ubiquiti, MikroTik, LANCOM, Juniper, Extreme, Allied Telesis …); Titel und Server-Kennung der Weboberfläche → Modell (z. B. „TL-SG108E“, „GS1900-24E“, „DGS-1100-08“, „1930 24G“) |
+| LLDP/CDP der eingetragenen Switches | Nachbarn, die sich als Bridge melden, mit Name, Adresse und Beschreibung |
+| Rundruf der Server-Probe (alle 15 Minuten) | TP-Link Easy Smart (UDP 29808) und Netgear ProSAFE Plus (NSDP, UDP 63322/63324) antworten mit Modell, Name, MAC, IP und Firmware |
+| MAC-Tabellen der eingetragenen Switches | ein Gerät eines Netzwerkherstellers an einem Port mit weiteren Geräten |
+
+Je Fund bewertet Wachtl, wie sicher es ein Switch ist („sicher“, „wahrscheinlich“, „möglich“; Router, Access Points,
+Kameras und Drucker mit eindeutigem Titel fallen heraus) und wie er sich abfragen lässt:
+
+| Zugangsart | Für | Zugangsdaten |
+| --- | --- | --- |
+| SNMP | fast alle verwalteten Switches | Community bzw. SNMPv3-Benutzer |
+| Weboberfläche | TP-Link Easy Smart (TL-SG105E, TL-SG108E, TL-SG105PE, TL-SG108PE, TL-SG1016PE …) – können kein SNMP | Benutzer und Passwort der Weboberfläche |
+| keine | Netgear ProSAFE Plus (GS105E, GS108E, GS305E …) | – |
+
+Standort › Topologie › **Switches** zeigt die Funde unter **Gefundene Switches**. Der Baum hängt jeden Fund an den Port,
+an dem ein verwalteter Switch seine MAC sieht, mit den Geräten dahinter (gestrichelt, „Zugangsdaten fehlen“ bzw. „ohne
+Abfrage“). **Wachtl probiert keine Passwörter aus.** Fehlen Zugangsdaten, fragt Wachtl danach: Hinweis über dem Baum,
+Befund „ohne Zugangsdaten“ und **Zugangsdaten eingeben** am Fund. Der Assistent ist dann mit Adresse, Name und
+Zugangsart vorbelegt. Darunter stehen die übrigen Funde zum Anhaken („gelten dieselben Zugangsdaten auch hier?“):
+Beim Speichern testet Wachtl sie und trägt die ein, bei denen die Anmeldung klappt. Ein Fund, der kein Switch ist oder
+nicht überwacht werden soll, lässt sich ausblenden.
+
+Der Rundruf bleibt im eigenen Netzsegment der Server-Probe. Switches anderer Standorte findet der Netzwerkscan der
+dortigen Probes. Auf einem Windows-Server legt das Setup dafür die Firewall-Regel „Wachtl Server Switch-Suche“ an
+(UDP 29809, 63321 und 63323, nur aus dem eigenen Netz). Unter Linux läuft die Server-Probe mit `network_mode: host`.
+
+### TP-Link Easy Smart über die Weboberfläche
+
+Die Server-Probe meldet sich alle 15 Minuten an der Weboberfläche an (HTTP, TCP 80), liest Systeminformationen,
+Port-Einstellungen, Port-Statistik und – bei PoE-Modellen – die PoE-Werte und meldet sich wieder ab. Daraus entstehen
+Ports mit Link und Geschwindigkeit, Eingangsfehler (fehlerhaft empfangene Pakete, Befund „Port-Fehler“) und PoE je Port.
+Eine MAC-Tabelle und LLDP haben diese Switches nicht. Wachtl hängt sie deshalb an den Port des übergeordneten Switches,
+der als einziger sie sieht. Die Geräte dahinter gehören zum Easy-Smart-Switch, an welchem seiner Ports sie hängen,
+bleibt aber unbekannt. Ohne einen verwalteten Switch darüber steht er unter dem Baum. Die Weboberfläche lässt nur
+wenige gleichzeitige Anmeldungen zu – Wachtl meldet sich deshalb nach jeder Abfrage ab.
+
+### Wahrscheinliche Knotenpunkte
+
+Switches ganz ohne Verwaltung (Tisch-Switches, ohne Weboberfläche und SNMP) melden sich nirgends. Wachtl erkennt sie
+an den MAC-Tabellen: Hängen an einem Port eines verwalteten Switches mehrere Geräte und kein LLDP-Nachbar, steht dort
+ein **nicht verwalteter Switch** – ab 3 Geräten „wahrscheinlich“, bei 2 „möglich“ (z. B. auch PC hinter einem
+Telefon ohne LLDP). MACs virtueller Maschinen (VMware, Hyper-V, KVM, Xen, VirtualBox, Parallels) zählen nicht mit,
+ein Virtualisierungs-Host wird also nicht zum Switch. Ohne mindestens einen verwalteten Switch lässt sich so ein
+Knotenpunkt nicht erkennen.
+
 ## Abfrage
 
 - Die **Server-Probe** fragt alle 30 s beim Server nach fälligen Switches (`GET /api/probe/v1/topology/jobs`),
@@ -73,8 +125,8 @@ Befunde:
 | Langsame Verbindung | Verbindung zu einem Switch oder Access Point unter 1 Gbit/s | Warnung |
 | Halbduplex | Port mit Link im Halbduplex | Warnung |
 | Möglicher Kabelkreis | dieselbe MAC wechselt in 24 h ≥ 3-mal zwischen Geräte-Ports | Warnung |
-| Nicht verwalteter Switch | ≥ 3 Geräte an einem Port ohne LLDP-Nachbarn | Hinweis |
-| Switch ohne Zugangsdaten | per LLDP/CDP gefunden, aber nicht eingetragen | Hinweis |
+| Nicht verwalteter Switch | ≥ 2 Geräte (ohne virtuelle Maschinen) an einem Port ohne LLDP-Nachbarn | Hinweis |
+| Switch ohne Zugangsdaten | per LLDP/CDP, Netzwerkscan oder Rundruf gefunden, aber nicht eingetragen | Hinweis |
 | Keine MAC-Tabelle | Switch liefert weder MAC-Tabelle noch Nachbarn | Hinweis |
 
 Grenzen: Cisco-Switches mit mehreren VLANs liefern die MAC-Tabelle per SNMPv2c nur je VLAN („Community@VLAN“) bzw. per

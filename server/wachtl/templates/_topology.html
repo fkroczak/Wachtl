@@ -18,6 +18,11 @@
 {% if poller and not poller.online %}
 <p class="flash warn" role="status">Die Server-Probe ist {{ 'nicht eingerichtet' if not poller.probe else 'gerade nicht erreichbar' }}. Sie fragt die Switches regelmäßig ab – bis sie läuft, bleiben die Daten auf dem Stand der letzten Abfrage. Der Test im Assistenten funktioniert trotzdem.</p>
 {% endif %}
+{% if need_creds and view != 'switche' %}
+<p class="flash" role="status">{{ need_creds|length }} {{ 'Switch wurde' if need_creds|length == 1 else 'Switches wurden' }} automatisch gefunden und {{ 'braucht' if need_creds|length == 1 else 'brauchen' }} noch Zugangsdaten:
+  {% for c in need_creds[:4] %}{{ c.label }}{{ ', ' if not loop.last }}{% endfor %}{{ ' …' if need_creds|length > 4 }}.
+  <a href="{{ url_for('web.topology_switches', site_id=site.id) }}#gefunden">Ansehen und Zugangsdaten eingeben</a></p>
+{% endif %}
 {% if drafts and has_role(user, 'admin') %}
 <p class="flash" role="status">Noch nicht fertig eingerichtet:
   {% for d in drafts %}<a href="{{ url_for('web.topology_check', site_id=site.id, switch_id=d.id) }}">{{ d.name or d.host }}</a>{{ ', ' if not loop.last }}{% endfor %}
@@ -32,9 +37,11 @@
   'internet': 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18',
   'ap': 'M12 18h.01M8.5 14.5a5 5 0 0 1 7 0M5.5 11.5a9 9 0 0 1 13 0',
   'unmanaged': 'M2 7h20v10H2zM10 10.5a2 2 0 1 1 2 2v1',
+  'candidate': 'M2 7h20v10H2zM6 12h.01M10 12h.01M14 12h.01M18 12h.01',
 } %}
 {% set KIND_TEXT = {'switch': 'Switch', 'neighbor': 'Switch ohne Zugangsdaten', 'gateway': 'Gateway', 'internet': 'Internet',
-                    'ap': 'Access Point', 'unmanaged': 'nicht verwalteter Switch (vermutet)'} %}
+                    'ap': 'Access Point', 'unmanaged': 'nicht verwalteter Switch (vermutet)',
+                    'candidate': 'gefundener Switch'} %}
 {% set STATUS_TEXT = {'bad': 'antwortet nicht', 'off': 'noch keine Daten', 'warn': '', 'ok': ''} %}
 
 {#- Baum als SVG. mode: select (Klick wählt Switch für den Seitenbereich) | detail (Klick öffnet Switch) -#}
@@ -51,8 +58,9 @@
   {%- set sub = STATUS_TEXT[n.status] or n.sub or n.ip or '' %}
   {%- set label = KIND_TEXT[n.kind] ~ ' ' ~ n.label ~ (', ' ~ sub if sub else '') ~ (', ' ~ b.chip if b.chip else '') %}
   {%- set href = (url_for('web.topology', site_id=site.id, switch=n.switch_id) if mode == 'select' else url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id)) if n.switch_id
-       else (url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) if n.kind == 'neighbor' and n.ip and has_role(user, 'admin') else None) %}
-  {%- if href %}<a href="{{ href }}" aria-label="{{ label }}{{ ' (ausgewählt)' if selected and n.switch_id == selected }}{{ ' – Zugangsdaten eintragen' if n.kind == 'neighbor' }}">{% endif %}
+       else (url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) if n.kind == 'neighbor' and n.ip and has_role(user, 'admin')
+       else (url_for('web.topology_new', site_id=site.id, kandidat=n.candidate_id) if n.kind == 'candidate' and n.access != 'none' and has_role(user, 'admin') else None)) %}
+  {%- if href %}<a href="{{ href }}" aria-label="{{ label }}{{ ' (ausgewählt)' if selected and n.switch_id == selected }}{{ ' – Zugangsdaten eintragen' if n.kind in ('neighbor', 'candidate') }}">{% endif %}
   <g class="tn tn-{{ n.kind }} st-{{ n.status }}{{ ' tn-sel' if selected and n.switch_id == selected }}"{% if not href %} role="img" aria-label="{{ label }}"{% endif %}>
     <rect class="tn-box" x="{{ b.x }}" y="{{ b.y }}" width="{{ lay.node_w }}" height="56" rx="10"/>
     <rect class="tn-ic" x="{{ b.x + 10 }}" y="{{ b.y + 12 }}" width="32" height="32" rx="8"/>
@@ -71,8 +79,8 @@
 {#- Baum als verschachtelte Liste: Text-Alternative zum SVG, auch für Screenreader und Suche im Browser -#}
 {% macro tree_list(topo, site, nid) -%}
 {%- set n = topo.nodes[nid] %}
-<li>{% if n.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id) }}">{{ n.label }}</a>{% else %}{{ n.label }}{% endif %}
-  <span class="muted small">{{ KIND_TEXT[n.kind] }}{% set ll = link_label(topo, n) if n.link and n.parent else '' %}{% if ll %} · {{ ll }}{% endif %}{% if STATUS_TEXT[n.status] %} · {{ STATUS_TEXT[n.status] }}{% endif %}{% if n.devices %} · {{ n.devices|length }} Geräte{% endif %}</span>
+<li>{% if n.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id) }}">{{ n.label }}</a>{% elif n.kind == 'candidate' and n.access != 'none' and has_role(user, 'admin') %}<a href="{{ url_for('web.topology_new', site_id=site.id, kandidat=n.candidate_id) }}">{{ n.label }}</a>{% else %}{{ n.label }}{% endif %}
+  <span class="muted small">{{ KIND_TEXT[n.kind] }}{% set ll = link_label(topo, n) if n.link and n.parent else '' %}{% if ll %} · {{ ll }}{% endif %}{% if STATUS_TEXT[n.status] %} · {{ STATUS_TEXT[n.status] }}{% endif %}{% if n.kind in ('candidate', 'unmanaged') and n.sub %} · {{ n.sub }}{% endif %}{% if n.devices %} · {{ n.devices|length }} Geräte{% endif %}</span>
   {%- if n.children %}<ul>{% for c in n.children %}{{ tree_list(topo, site, c) }}{% endfor %}</ul>{% endif %}
 </li>
 {%- endmacro %}

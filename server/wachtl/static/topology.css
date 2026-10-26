@@ -29,9 +29,9 @@ svg.topo { display: block; margin: 0 auto; max-width: none; font-family: inherit
 .tn-ic { fill: var(--accent-soft); }
 .tn-glyph { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tn-l { fill: var(--text); font-size: 13px; font-weight: 600; } .tn-s { fill: var(--text-muted); font-size: 12px; }
-.tn-unmanaged .tn-box, .tn-neighbor .tn-box { stroke-dasharray: 5 4; }
-.tn-unmanaged .tn-ic, .tn-neighbor .tn-ic, .tn-internet .tn-ic { fill: var(--surface-2); }
-.tn-unmanaged .tn-glyph, .tn-neighbor .tn-glyph, .tn-internet .tn-glyph { stroke: var(--text-muted); }
+.tn-unmanaged .tn-box, .tn-neighbor .tn-box, .tn-candidate .tn-box { stroke-dasharray: 5 4; }
+.tn-unmanaged .tn-ic, .tn-neighbor .tn-ic, .tn-candidate .tn-ic, .tn-internet .tn-ic { fill: var(--surface-2); }
+.tn-unmanaged .tn-glyph, .tn-neighbor .tn-glyph, .tn-candidate .tn-glyph, .tn-internet .tn-glyph { stroke: var(--text-muted); }
 .st-warn .tn-box { stroke: var(--warn); } .st-warn .tn-glyph { stroke: var(--warn); }
 .st-bad .tn-box { stroke: var(--bad); stroke-width: 2; } .st-bad .tn-glyph { stroke: var(--bad); }
 .st-off .tn-box { stroke-dasharray: 3 3; }
@@ -115,6 +115,9 @@ svg.topo a:focus-visible .tn-box { stroke: var(--focus); stroke-width: 3; }
 .topo-steps [aria-current] span { background: var(--accent); border-color: var(--accent); color: var(--on-fill); }
 .topo-steps .done span { border-color: var(--ok); color: var(--ok); }
 .topo-suggest ul { margin: 0.3rem 0 0; padding-left: 1.2rem; }
+.topo-also { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.35rem; }
+#gefunden { margin-bottom: 1rem; }
+#gefunden .actions-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .topo-suggest, .topo-result { margin-bottom: 1rem; }
 .topo-result { border-color: var(--ok); } .topo-result-bad { border-color: var(--bad); }
 .topo-result h3 { margin-top: 0; }
