@@ -26,7 +26,8 @@ KIND_LABELS = {"ping": "Ping", "path": "Pfad", "iperf": "iperf3", "speedtest": "
                "netscan": "Netzwerk"}
 # so lange darf ein Dauerping ohne Wert bleiben, bevor er als „keine Daten“ gilt
 PING_STALE_S = 180
-LOSS_WARN_PCT = 2
+# jeder verlorene Ping der letzten 5 min macht die Messung auffällig – auch 0,001 % wird nicht übergangen
+LOSS_WARN_PCT = 0
 
 
 @dataclass
@@ -87,8 +88,19 @@ def _ping_state(c: dict, v: dict | None, now: int) -> CheckState:
     if v["up"] == 0:
         return CheckState(c, "down", "Ziel antwortet nicht", values=vals)
     if (v.get("loss") or 0) > LOSS_WARN_PCT:
-        return CheckState(c, "warn", f"Paketverlust {v['loss']:.1f} % (5 min)", values=vals)
+        return CheckState(c, "warn", f"Paketverlust {fmt_loss(v['loss'])} (5 min)", values=vals)
     return CheckState(c, "ok", values=vals)
+
+
+def fmt_loss(pct: float | None) -> str:
+    """Verlust in Prozent so genau, dass auch sehr kleiner Verlust nicht als 0,0 % erscheint."""
+    if pct is None:
+        return "–"
+    if pct <= 0:
+        return "0 %"
+    if pct < 0.1:
+        return f"{pct:.3g} %"
+    return f"{pct:.1f} %"
 
 
 def _path_state(c: dict, run: dict | None, now: int) -> CheckState:

@@ -105,6 +105,9 @@ public sealed class ClientFindingsConfig
 
     /// <summary>false: keine Sprechblasen im Tray (der Server erhält die Hinweise trotzdem).</summary>
     public bool Notify { get; init; } = true;
+
+    /// <summary>Ausfälle, Paketverlust und Netzwerkwechsel, die die Probe an ihren Pings erkennt, im Tray zeigen.</summary>
+    public bool Connectivity { get; init; } = true;
 }
 
 public sealed class ProbeConfig

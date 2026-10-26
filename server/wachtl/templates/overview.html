@@ -14,7 +14,7 @@
   <a class="card stat {{ 'bad' if offline else '' }}" href="{{ url_for('web.probes_view', tab='alle') }}"><span class="num">{{ active_probes|length - offline|length }} / {{ active_probes|length }}</span><span>Probes online</span></a>
   <a class="card stat {{ 'bad' if alerts else '' }}" href="{{ url_for('web.alerts') }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
   <a class="card stat {{ 'bad' if n_problems else '' }}" href="{{ url_for('web.probes_view') }}"><span class="num">{{ n_problems }}</span><span>Messungen mit Problemen</span></a>
-  <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="{{ url_for('web.outages_view', range='24h') }}"><span class="num">{{ recent_outages|length }}</span><span>Ausfälle (24 h)</span></a>
+  <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="{{ url_for('web.outages_view', range='24h') }}"><span class="num">{{ recent_outages|length }}</span><span>Störungen (24 h)</span></a>
   <a class="card stat {{ 'warn' if findings_count else '' }}" href="{{ url_for('web.findings_view') }}"><span class="num">{{ findings_count }}</span><span>Hinweise von PCs</span></a>
   <a class="card stat {{ 'warn' if reports_count else '' }}" href="{{ url_for('web.reports_view') }}"><span class="num">{{ reports_count }}</span><span>Offene Meldungen</span></a>
 </section>
@@ -79,8 +79,8 @@
 
 <section class="card" aria-labelledby="ausfaelle">
   <div class="card-head">
-    <h2 id="ausfaelle">Ausfälle der letzten 24 Stunden</h2>
-    <a href="{{ url_for('web.outages_view', range='24h') }}">{% if recent_outages|length > rows %}Alle {{ recent_outages|length }}{% else %}Alle Ausfälle ansehen{% endif %}</a>
+    <h2 id="ausfaelle">Störungen der letzten 24 Stunden</h2>
+    <a href="{{ url_for('web.outages_view', range='24h') }}">{% if recent_outages|length > rows %}Alle {{ recent_outages|length }}{% else %}Alle Störungen ansehen{% endif %}</a>
   </div>
   {% if recent_outages %}
   <ul class="mini-list">
@@ -91,7 +91,7 @@
       <span class="muted small" title="{{ o.start|dt }}">{{ o.start|ago }} · {{ o.duration|duration }}{% if o.end is none %} <span class="badge critical">aktiv</span>{% endif %}</span></div></li>
     {% endfor %}
   </ul>
-  {% else %}<p class="muted">Keine Ausfälle in den letzten 24 Stunden.</p>{% endif %}
+  {% else %}<p class="muted">Keine Störungen in den letzten 24 Stunden.</p>{% endif %}
 </section>
 </div>
 {% endblock %}
