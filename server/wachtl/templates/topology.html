@@ -17,7 +17,10 @@
   <p class="muted">Stände werden ab der ersten Abfrage eines Switches gespeichert.</p></section>
 {% elif not lay %}
 <section class="card">
-  <h2>Noch kein Switch eingetragen</h2>
+  <h2>Noch kein Gateway und kein Switch bekannt</h2>
+  <p>Den Anfang des Baums baut Wachtl selbst: Jede Probe meldet ihr Gateway, Wachtl erkennt Hersteller und Modell
+     (FRITZ!Box, UniFi, Sophos, FortiGate, Juniper SSR, LANCOM …) und hängt die Geräte aus dem Netzwerkscan darunter.
+     Sobald eine Probe am Standort läuft, erscheint er hier.</p>
   <p>Wachtl fragt die Switches per SNMP ab: welche Switches miteinander verbunden sind, welche Ports belegt sind und
      welches Gerät an welchem Port hängt. Daraus entsteht hier ein Baum vom Internet bis zum einzelnen PC.</p>
   <p>Unterstützt werden SNMPv1, SNMPv2c und SNMPv3. Der Assistent fragt je Switch die Zugangsdaten ab und testet sie sofort.</p>
@@ -25,6 +28,10 @@
   {% else %}<p class="muted">Ein Administrator kann Switches mit ihren Zugangsdaten eintragen.</p>{% endif %}
 </section>
 {% else %}
+{% if not topo.switches and not at %}
+<p class="flash" role="status">Der Baum ist automatisch aufgebaut: Gateway{% if topo.gateway and topo.gateway.vendor %} ({{ topo.gateway.label }}){% endif %} und die Geräte aus dem Netzwerkscan.
+  Welches Gerät an welchem Switch-Port hängt, zeigt er, sobald Switches eingetragen sind{% if has_role(user, 'admin') %} – <a href="{{ url_for('web.topology_new', site_id=site.id) }}">Switch einrichten</a>{% endif %}.</p>
+{% endif %}
 <div class="topo-layout">
   <section class="card topo-main" aria-labelledby="h-baum">
     <div class="page-head">
@@ -48,7 +55,8 @@
 
   <div class="topo-side">
   <nav class="seg topo-sidenav" aria-label="Seitenbereich">
-    <a href="{{ url_for('web.topology', site_id=site.id, switch=selected.row.id if selected else None) }}"{% if side == 'switch' %} aria-current="page"{% endif %}>Switch</a>
+    <a href="{{ url_for('web.topology', site_id=site.id, seite='gateway') }}"{% if side == 'gateway' %} aria-current="page"{% endif %}>Gateway</a>
+    {% if topo.switches %}<a href="{{ url_for('web.topology', site_id=site.id, switch=selected.row.id if selected else None) }}"{% if side == 'switch' %} aria-current="page"{% endif %}>Switch</a>{% endif %}
     <a href="{{ url_for('web.topology', site_id=site.id, seite='verlauf') }}"{% if side == 'verlauf' %} aria-current="page"{% endif %}>Zeitleiste</a>
   </nav>
   {% if side == 'verlauf' %}
@@ -56,6 +64,36 @@
     <h2 id="h-tl">Zeitleiste</h2>
     <p class="small muted">Punkt = Änderung (rot Störung, orange Warnung, blau Info). Antippen zeigt den Baum zu diesem Zeitpunkt.</p>
     {{ timeline(tl_data, site, ev, at) }}
+  </aside>
+  {% elif side == 'gateway' %}{% set gw = topo.gateway %}
+  <aside class="card" aria-labelledby="h-gw">
+    <div class="topo-side-head">
+      <h2 id="h-gw">{{ gw.label if gw else 'Gateway' }}</h2>
+      {% if gw and gw.confidence >= 80 %}<span class="badge on">erkannt</span>
+      {% elif gw and gw.vendor %}<span class="badge warning">vermutet</span>
+      {% else %}<span class="badge off">Hersteller unbekannt</span>{% endif %}
+    </div>
+    {% if gw %}
+    <dl class="kvlist">
+      {% if gw.vendor %}<dt>Hersteller</dt><dd>{{ gw.vendor }}{% if gw.product and gw.product not in gw.label %} · {{ gw.product }}{% endif %}</dd>{% endif %}
+      {% if gw.model and gw.model != gw.label %}<dt>Modell</dt><dd>{{ gw.model }}</dd>{% endif %}
+      <dt>Adresse</dt><dd>{{ gw.ip }}</dd>
+      {% if gw.mac %}<dt>MAC</dt><dd class="mono">{{ gw.mac }}</dd>{% endif %}
+      {% if gw.upnp.softwareVersion %}<dt>Firmware</dt><dd>{{ gw.upnp.softwareVersion }}</dd>{% endif %}
+      {% if gw.probes %}<dt>Gemeldet von</dt><dd>{{ gw.probes }} {{ 'Probe' if gw.probes == 1 else 'Probes' }}</dd>{% endif %}
+      <dt>Erkannt über</dt><dd>{{ gw.sources_text or '–' }}</dd>
+    </dl>
+    <div class="actions">
+      <a class="button primary" href="{{ gw.web }}" target="_blank" rel="noopener noreferrer">Weboberfläche öffnen</a>
+      <a class="button" href="{{ url_for('web.tools', werkzeug='ping', ziel=gw.ip) }}">Ping</a>
+      <a class="button" href="{{ url_for('web.tools', werkzeug='trace', ziel='8.8.8.8') }}">Traceroute ins Internet</a>
+      {% if gw.device_id %}<a class="button" href="{{ url_for('web.network', site_id=site.id) }}#geraet-{{ gw.device_id }}">Im Netzwerk</a>{% endif %}
+    </div>
+    <p class="small muted">Erkannt ohne Anmeldung am Gerät: Hersteller der MAC-Adresse, Weboberfläche, Zertifikat, UPnP/TR-064 und LLDP.
+      Die Weboberfläche öffnet sich <strong>von diesem PC aus</strong>.</p>
+    {% else %}
+    <p class="muted">Noch hat keine Probe dieses Standorts ihr Gateway gemeldet. Das passiert mit dem nächsten Kontakt (spätestens nach 30 s), sobald die Probes auf dem aktuellen Stand sind.</p>
+    {% endif %}
   </aside>
   {% elif selected %}{% set s = selected %}
   <aside class="card" aria-labelledby="h-sel">

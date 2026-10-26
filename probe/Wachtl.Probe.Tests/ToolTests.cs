@@ -63,7 +63,7 @@ public class ToolTests
         closed.Stop();
         try
         {
-            var updates = await Run(Job("port", new { host = "127.0.0.1", ports = new[] { open, closedPort }, timeout = 2 }));
+            var updates = await Run(Job("port", new { host = "127.0.0.1", ports = new[] { open, closedPort }, timeout = 5 }));
             var last = updates[^1];
             Assert.True(last.Done && last.Ok);
             Assert.Equal("1 von 2 Ports offen", last.Result!.Headline);

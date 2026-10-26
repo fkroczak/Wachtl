@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Wachtl.Probe.Bandwidth;
@@ -501,6 +502,36 @@ public sealed class ProbeWorker : BackgroundService
         }
     }
 
+    private (IPAddress? Ip, string? Mac, DateTime Until) _gatewayMac;
+
+    /// <summary>MAC des Gateways aus der ARP-Tabelle, 10 Minuten zwischengespeichert.</summary>
+    private async Task<string?> GatewayMacAsync(IPAddress? gateway, CancellationToken ct)
+    {
+        if (gateway is null)
+        {
+            return null;
+        }
+
+        if (gateway.Equals(_gatewayMac.Ip) && DateTime.UtcNow < _gatewayMac.Until)
+        {
+            return _gatewayMac.Mac;
+        }
+
+        string? mac = null;
+        try
+        {
+            var table = await ArpTable.ReadAsync(_logger, ct).ConfigureAwait(false);
+            table.TryGetValue(SubnetPlanner.ToUInt(gateway), out mac);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug("ARP-Tabelle nicht lesbar: {Message}", ex.Message);
+        }
+
+        _gatewayMac = (gateway, mac, DateTime.UtcNow.AddMinutes(10));
+        return mac;
+    }
+
     // -- Heartbeat -----------------------------------------------------------
     private async Task HeartbeatLoopAsync(CancellationToken ct)
     {
@@ -508,6 +539,7 @@ public sealed class ProbeWorker : BackgroundService
         {
             try
             {
+                var gateway = _gateway.Get();
                 var response = await _api!.HeartbeatAsync(new HeartbeatRequest
                 {
                     Version = AppInfo.Version,
@@ -516,6 +548,8 @@ public sealed class ProbeWorker : BackgroundService
                     BufferItems = _buffer!.Count(),
                     UptimeS = (long)(DateTimeOffset.UtcNow - _started).TotalSeconds,
                     Addresses = GatewayResolver.LocalAddresses(),
+                    Gateway = gateway?.ToString(),
+                    GatewayMac = await GatewayMacAsync(gateway, ct).ConfigureAwait(false),
                 }, ct).ConfigureAwait(false);
                 _status.MarkContact();
                 _diagnostics.RequestFlush();

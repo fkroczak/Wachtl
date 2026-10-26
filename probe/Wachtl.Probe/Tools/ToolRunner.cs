@@ -485,7 +485,9 @@ public sealed class ToolRunner
         }
 
         var ports = a.Ints("ports");
-        var timeout = TimeSpan.FromSeconds(a.Int("timeout", 3, 1, 10));
+        // Windows wiederholt den Verbindungsaufbau auch bei Abweisung (RST) rund 2 s lang – unter 3 s würde ein
+        // geschlossener Port fälschlich als „gefiltert“ gelten.
+        var timeout = TimeSpan.FromSeconds(Math.Max(3, a.Int("timeout", 3, 1, 10)));
         var table = new ToolTable { Title = "Ports", Head = new() { "Port", "Dienst", "Zustand", "Antwort", "Details" } };
         var open = 0;
         for (var i = 0; i < ports.Count; i++)

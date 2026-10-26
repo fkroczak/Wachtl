@@ -147,6 +147,10 @@ public sealed class HeartbeatRequest
     public long BufferItems { get; init; }
     public long UptimeS { get; init; }
     public List<string> Addresses { get; init; } = new();
+
+    /// <summary>Default-Gateway und seine MAC (ARP) – der Server erkennt daraus das Gateway des Standorts.</summary>
+    public string? Gateway { get; init; }
+    public string? GatewayMac { get; init; }
 }
 
 public sealed class HeartbeatResponse

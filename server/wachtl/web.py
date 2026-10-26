@@ -1817,7 +1817,10 @@ def network(site_id: int):
         "new": sum("new" in d["flags"] for d in devices),
         "services": sum(len([x for x in d["services"] if x["link"]]) for d in devices),
     }
+    from .services import gateways
+
     return render_template("netscan.html", site=s, site_links=site_switch("web.network"), scans=scans, devices=devices,
+                           gateway=gateways.summary(s["id"]),
                            events=events, kpi=kpi, rng=rng, ranges=NETSCAN_RANGES, since=since, until=until,
                            FLAG_LABELS=netscan.FLAG_LABELS)
 

@@ -108,7 +108,7 @@ class ServerProbe:
                 return
         loops = [threading.Thread(target=fn, daemon=True, name=fn.__name__)
                  for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop, self.topology_loop,
-                           self.discovery_loop, self.tool_loop)]
+                           self.discovery_loop, self.tool_loop, self.gateway_loop)]
         if self.tray:
             loops.append(threading.Thread(target=self.notice_loop, daemon=True, name="notice_loop"))
         for t in loops:
@@ -244,11 +244,34 @@ class ServerProbe:
 
         discovery.loop(lambda: self.api if self.config is not None else None, self.stop_event)
 
+    def gateway_loop(self) -> None:
+        """Gateway erkennen (Weboberfläche, Zertifikat, UPnP/TR-064) – Wurzel des Topologie-Baums."""
+        from . import gateway
+
+        gateway.loop(lambda: self.api if self.config is not None else None, self.stop_event)
+
     def tool_loop(self) -> None:
         """Werkzeuge (docs/WERKZEUGE.md): Einzeltests aus dem Web-UI ausführen."""
         from . import tools
 
         tools.loop(lambda: self.api if self.config is not None else None, self.stop_event)
+
+    def gateway_fields(self) -> dict:
+        """Default-Gateway mit MAC für den Heartbeat (Gateway-Erkennung auf dem Server)."""
+        gw = self.measurement["gateway"]()
+        if not gw:
+            return {}
+        cached = getattr(self, "_gw_mac", None)
+        if not cached or cached[0] != gw or time.monotonic() > cached[2]:
+            mac = None
+            try:
+                from . import netscan
+
+                mac = netscan.arp_table().get(gw)
+            except Exception:  # noqa: BLE001 – ohne MAC geht es auch
+                pass
+            self._gw_mac = cached = (gw, mac, time.monotonic() + 600)
+        return {"gateway": gw, "gateway_mac": cached[1]}
 
     def heartbeat_loop(self) -> None:
         while not self.stop_event.is_set():
@@ -257,6 +280,7 @@ class ServerProbe:
                     "version": __version__, "os": f"Wachtl-Server · {platform.system()} {platform.release()}",
                     "hostname": probe_hostname(), "buffer_items": len(self.buffer),
                     "uptime_s": int(time.monotonic() - self.started), "addresses": net.local_addresses(),
+                    **self.gateway_fields(),
                 })
                 self.last_contact = time.time()
                 self.handle_commands(resp.get("commands") or [])

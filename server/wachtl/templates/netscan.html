@@ -58,6 +58,7 @@
     <tr id="geraet-{{ d.id }}">
       <td><span class="dot {{ 'ok' if d.online else 'off' }}" aria-hidden="true"></span><span class="sr-only">{{ 'erreichbar' if d.online else 'nicht erreichbar' }}: </span>
         <strong>{{ d.label }}</strong>{% if d.is_probe %} <span class="badge info">Probe</span>{% endif %}
+        {%- if gateway and d.ip == gateway.ip %} <a class="badge info" href="{{ url_for('web.topology', site_id=site.id, seite='gateway') }}">Gateway{% if gateway.vendor %} · {{ gateway.label }}{% endif %}</a>{% endif %}
         {% if d.label != d.ip %}<br><span class="muted">{{ d.ip }}{% if d.hostname and d.hostname != d.label %} · {{ d.hostname }}{% endif %}</span>{% endif %}
         {% for f in d.flags %}<span class="badge {{ 'critical' if f == 'ip_conflict' else 'warning' if f in ('irregular', 'new') else 'info' }}">{{ FLAG_LABELS[f] }}</span> {% endfor %}
         {% if has_role(user, 'operator') %}

@@ -451,7 +451,8 @@ def tool_port(a: dict, report: Report, check=check_port) -> Result:
         return False, {}, f"DNS-Auflösung fehlgeschlagen: {exc}"
     rows, classes, n_open = [], [], 0
     for i, port in enumerate(a["ports"], 1):
-        state, ms, detail = check(ip, port, a["timeout"])
+        # Windows wiederholt den Aufbau auch bei Abweisung rund 2 s – sonst gälte „geschlossen“ als „gefiltert“
+        state, ms, detail = check(ip, port, max(3, a["timeout"]) if os.name == "nt" else a["timeout"])
         n_open += state == "offen"
         rows.append([str(port), PORT_NAMES.get(port, ""), state, fmt_ms(ms) + " ms" if ms is not None else "–", detail])
         classes.append("" if state == "offen" else "warn" if state == "geschlossen" else "bad")

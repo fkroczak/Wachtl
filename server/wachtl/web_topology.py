@@ -78,7 +78,8 @@ def topology(site_id: int):
     if at is not None and not 0 < at < now - 30:
         at = None
     topo = topo_service.build(site_id, at=at)
-    side = "verlauf" if at or request.args.get("seite") == "verlauf" else "switch"
+    side = "verlauf" if at or request.args.get("seite") == "verlauf" else \
+        "gateway" if request.args.get("seite") == "gateway" or not topo.switches else "switch"
     show_all = request.args.get("alle") == "1"
     timeline = None
     if side == "verlauf":
@@ -87,15 +88,17 @@ def topology(site_id: int):
         timeline = {"days": topo_history.group_by_day(rows), "all": show_all,
                     "older": topo_history.neighbor_event(site_id, ref, False, not show_all),
                     "newer": topo_history.neighbor_event(site_id, ref, True, not show_all) if at else None}
+    show_devices = request.args.get("geraete", "1") != "0"
     if not topo.switches:
-        return render_template("topology.html", lay=None, selected=None, at=at, ev=ev, side=side, tl_data=timeline,
-                               highlight=set(), **_common(site, "baum", topo))
+        # ohne Switches: Internet → Gateway → gefundene Switches und Geräte aus dem Netzwerkscan (falls bekannt)
+        lay = topo_service.layout(topo, show_devices=show_devices) if topo.roots else None
+        return render_template("topology.html", lay=lay, selected=None, show_devices=show_devices, at=at, ev=ev,
+                               side=side, tl_data=timeline, highlight=set(), **_common(site, "baum", topo))
     sel_id = request.args.get("switch", type=int)
     if sel_id not in topo.switches:
         sel_id = ev["switch_id"] if ev and ev["switch_id"] in topo.switches else _first_switch(topo)
     selected = _switch_panel(site_id, topo, sel_id)
     highlight = {topo.switches[ev["switch_id"]]["node"]} if ev and ev["switch_id"] in topo.switches else set()
-    show_devices = request.args.get("geraete", "1") != "0"
     lay = topo_service.layout(topo, show_devices=show_devices)
     return render_template("topology.html", lay=lay, selected=selected, show_devices=show_devices, at=at, ev=ev,
                            side=side, tl_data=timeline, highlight=highlight, **_common(site, "baum", topo))
@@ -165,7 +168,9 @@ def topology_index():
         problems = q1("SELECT COUNT(*) AS n FROM net_topo_findings WHERE site_id = ? AND active = TRUE AND ack_at IS NULL "
                       "AND severity <> 'info'", (site["id"],))
         found = switchfind.candidates(site["id"])
-        cards.append({"site": site, "switches": int(sw["n"] or 0), "bad": int(sw["bad"] or 0), "last_ok": sw["last_ok"],
+        from .services import gateways
+
+        cards.append({"site": site, "gateway": gateways.summary(site["id"]), "switches": int(sw["n"] or 0), "bad": int(sw["bad"] or 0), "last_ok": sw["last_ok"],
                       "problems": int(problems["n"] or 0), "found": len(found),
                       "need": sum(1 for c in found if c["access"] != "none")})
     return render_template("topo_index.html", cards=cards)
