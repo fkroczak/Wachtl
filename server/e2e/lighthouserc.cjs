@@ -33,7 +33,7 @@ module.exports = {
         "total-blocking-time": ["error", { maxNumericValue: 200, aggregationMethod: "median" }],
         "total-byte-weight": ["error", { maxNumericValue: 170 * 1024, aggregationMethod: "median" }],  // 0.10: Graph-Seite ~161 KB (+8 KB CSS)
         "resource-summary:script:size": ["error", { maxNumericValue: 30 * 1024 }],
-        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 42 * 1024 }],  // 0.10: UniFi-Design (~33 KB) + dash.css (Zeitleisten, ~8 KB) auf Übersicht, Verlauf, Störung
+        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 42 * 1024 }],  // 0.10: UniFi-Design (~33 KB) + dash.css (Zeitleiste, ~5 KB) auf Übersicht; detail.css nur Verlauf/Störung
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
         // nur Warnung
         "first-contentful-paint": ["warn", { maxNumericValue: 1500, aggregationMethod: "median" }],

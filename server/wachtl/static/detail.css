@@ -1,0 +1,44 @@
+/* Störungsanalyse und Tagesansicht (zusätzlich zu dash.css) */
+.lg-sw.s-down { background: var(--bad); }
+.tl-detail { margin-bottom: 0.5rem; }
+.tl-detail .tl-lane { background: var(--bg); height: 20px; }
+.tl-group { grid-column: 1 / -1; font-weight: 600; font-size: 0.85rem; margin-top: 0.6rem; }
+.tl-group.tl-sub { font-weight: 500; color: var(--text-muted); margin-top: 0.3rem; }
+.tl-lane .s-ok { fill: color-mix(in srgb, var(--ok) 30%, transparent); }
+.tl-lane .s-loss { fill: var(--warn); }
+.tl-lane .s-down { fill: var(--bad); }
+.tl-lane .s-silent { fill: var(--band); }
+.lg-sw.s-silent { background: var(--band); }
+.tl-lane .tl-core { fill: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tl-rtt { fill: none; stroke: var(--text); stroke-width: 1.2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.st-down .tl-label a { color: var(--bad); font-weight: 600; }
+.lg-sw.s-loss { background: var(--warn); }
+.lg-sw.s-ok { background: color-mix(in srgb, var(--ok) 30%, transparent); }
+.lg-sw.tl-core { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.lg-line { height: 2px !important; background: var(--text); }
+.inc-nav { margin-top: -0.4rem; }
+.findings { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.finding-card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.4rem; }
+.finding-card li { font-size: 0.9rem; }
+.provider-text { width: 100%; font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.85rem; }
+.tl-detail .tl-lane { height: 24px; }
+.day-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.5rem 1rem; }
+.day-head h1 { margin: 0; }
+.day-nav { margin: 0.6rem 0 0.8rem; align-items: flex-end; }
+.day-card { display: flex; flex-direction: column; gap: 0.5rem; }
+.day-card h2 { margin: 0; font-size: 1rem; }
+.tl-day { position: relative; user-select: none; }
+.tl-day .tl-lane { cursor: crosshair; }
+.tl-sel { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 1px solid var(--accent); pointer-events: none; }
+.tl-empty { grid-column: 1 / -1; }
+.tl-lane .m-report { fill: var(--report); }
+.lg-sw.m-report { background: var(--report); }
+.tl-count-report { background: color-mix(in srgb, var(--report) 14%, var(--surface)); color: var(--report); }
+.day-zoom { margin: 0.3rem 0 0; }
+.day-lists { display: grid; gap: 0 1.2rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.inc-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.4rem 0 0.6rem; }
+.tl-label .quickadd { display: inline-block; }
+.tl-label .quickadd > summary { min-width: 24px; min-height: 24px; padding: 0 0.4rem; line-height: 22px; font-size: 0.8rem; }
+.tl-label .quickadd-form { left: 0; right: auto; white-space: normal; }
+.tl-label { overflow: visible; }

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Verlauf{% if site %} {{ day_label }}{% endif %}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='dash.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='dash.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='detail.css') }}">{% endblock %}
 {% from "_timeline.html" import lane_svg, axis_row with context %}
 {% from "_quickadd.html" import quick_add with context %}
 {% block content %}
@@ -88,3 +89,4 @@
 {% endif %}
 {% endif %}
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='day.js') }}" defer></script>{% endblock %}
