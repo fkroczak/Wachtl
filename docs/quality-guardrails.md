@@ -56,7 +56,7 @@ Streuung auf GitHub-Runnern.
 | Cumulative Layout Shift | 0–0,083 → nach Korrektur 0 | ≤ 0,05 | error |
 | Total Blocking Time (Lab-Ersatz für INP) | 0–6 ms | ≤ 200 ms | error |
 | Seitengewicht gesamt | 35–91 KB | ≤ 150 KB | error |
-| JavaScript / CSS | 15 / 15 KB | ≤ 30 / 40 KB | error |
+| JavaScript / CSS | 15 / 15 KB | ≤ 30 / 38 KB | error |
 | Fremd-Ressourcen (Drittanbieter) | 0 | 0 | error |
 | First Contentful Paint | 0,91 s | ≤ 1,5 s | warn |
 | SEO-Score | 91 | ≥ 90 | warn |
@@ -69,7 +69,7 @@ Streuung auf GitHub-Runnern.
 | `unminified-css`, `unminified-javascript` | aus | Bewusst kein Build-Schritt (Offline-Appliance, CSP `'self'`); je ~15 KB, Ersparnis < 5 KB. | Wieder einschalten, falls ein Build-Schritt eingeführt wird. |
 | `render-blocking-*`, `network-dependency-tree-insight`, `document-latency-insight` | aus | Eine kleine CSS-Datei, server-gerendertes HTML; LCP liegt trotzdem bei ~1,1 s mobil. | – |
 | SEO | nur Warnung | Internes Werkzeug hinter Anmeldung, wird nicht indexiert. Seit Audit 2026-10-21 `X-Robots-Tag: noindex` → Score 63 (`is-crawlable`), gewollt. | – |
-| Budget CSS 36 → 40 KB | angehoben (Hamburger-Menü PR #24, Netzwerkscan PR #25) | Menü von rechts für schmale Bildschirme (~2,8 KB) und Geräte-Tabelle des Netzwerkscans (~0,6 KB): CSS von ~33,8 auf ~37 KB (unkomprimiert, mit HTTP-Antwort ~37,9 KB). `main` war nach #24 bereits über 36 KB. | Wie unten: mit Textkompression liegt die Datei bei ~8 KB; dann zurücksetzen. |
+| Budget CSS 36 → 38 KB | angehoben (Hamburger-Menü mobil, PR #24) | Das ausfahrende Menü rechts für schmale Bildschirme brachte die CSS-Datei auf ~36 KB unkomprimiert (ausgeliefert ~36,6 KB); `main` lag damit über der Grenze. | Wie unten: mit Textkompression zurücksetzen. |
 | Budget CSS 26 → 36 KB, Seitengewicht 160 → 170 KB | angehoben (Design im UniFi-Stil, PR #17) | Seitenleiste mit Standortliste, Reiter, 24-h-Verlauf, Standort-Kacheln, Kompaktlisten der Übersicht und Hell/Dunkel-Tokens dafür: CSS von ~25 auf ~33 KB (unkomprimiert); die Graph-Seite liegt damit bei ~161 KB. | Wie unten: mit Textkompression liegt die Datei bei ~8 KB; dann zurücksetzen. |
 | Budgets CSS 25 → 26 KB, Seitengewicht 150 → 160 KB | angehoben (Audit 2026-10-21, **zu bestätigen**) | Touch-Ziele ≥ 44 px, Ein/Aus-Badges, Suche und Meldungen am Sprungziel brachten ~0,7 KB CSS und ~1,5 KB JS; doppelte Regeln wurden dafür entfernt. Die Graph-Seite lag vorher schon bei ~152 von 153,6 KB (90 KB davon Messdaten-JSON). | Mit Textkompression (siehe oben) fallen beide Werte weit unter die alten Grenzen; dann zurücksetzen. |
 

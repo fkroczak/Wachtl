@@ -19,7 +19,8 @@
     <tbody>
     {% for s in sites %}
       <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
-        <td><form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
+        <td><a href="{{ url_for('web.site', site_id=s.id, bearbeiten=1) }}" aria-label="Bearbeiten: Standort {{ s.name }}">Bearbeiten</a>
+          <form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td></tr>
     {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
