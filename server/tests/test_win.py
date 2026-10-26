@@ -344,7 +344,7 @@ class ServeTest(unittest.TestCase):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"ok"]
 
-            servers = serve.build_servers(app, "127.0.0.1", port, 0, 0, str(crt), str(key))
+            servers = serve.build_servers(app, "127.0.0.1", port, 0, 0, str(crt), str(key), dev=True)
             servers.servers = servers.servers[:1]                  # nur HTTPS
             servers.threads = servers.threads[:1]
             servers.start()
