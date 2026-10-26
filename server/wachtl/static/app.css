@@ -447,15 +447,16 @@ label.choice input { width: 1.1rem; height: 1.1rem; margin: 0; }
 .health-name { flex: 0 0 11rem; min-width: 0; display: flex; align-items: center; gap: 0.5rem; }
 .health-name a { color: var(--text); font-weight: 500; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .healthbar { flex: 1 1 16rem; display: flex; gap: 2px; height: 22px; }
-.healthbar > span, .healthbar > a { flex: 1 1 0; border-radius: 2px; background: var(--ok-fill); }
-.healthbar > a { cursor: pointer; }
-.healthbar > a:hover, .healthbar > a:focus-visible { filter: brightness(1.25); outline: 2px solid var(--accent); outline-offset: 1px; }
+.healthbar > span { flex: 1 1 0; border-radius: 2px; background: var(--ok-fill); }
+.healthbar > [data-href] { cursor: pointer; }
+.healthbar > [data-href]:hover { filter: brightness(1.25); outline: 2px solid var(--accent); outline-offset: 1px; }
+.health-up a { font-size: 0.82rem; }
 .health-sub { margin: -0.6rem 0 0.9rem; }
 .health-why { flex-basis: 100%; padding-left: 1.2rem; color: var(--text-muted); }
 .health-why a { color: var(--text-muted); text-decoration: underline; }
 .health-why a:hover { color: var(--accent); }
 /* Umschalter für Zeiträume (Standort-Verlauf) */
-.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--surface-2); }
 .seg a { padding: 0.2rem 0.6rem; border-radius: var(--radius-sm); color: var(--text-muted); font-size: 0.82rem;
   text-decoration: none; white-space: nowrap; }
 .seg a:hover { color: var(--text); }

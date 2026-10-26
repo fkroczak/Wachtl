@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Übersicht{% endblock %}
 {% from "_links.html" import alert_links with context %}
-{% from "_health.html" import healthbar, uptime, legend, range_picker with context %}
+{% from "_health.html" import healthbar, uptime, outages_link, legend, range_picker with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <h1>Übersicht</h1>
@@ -33,7 +33,7 @@
     <li class="health-row">
       <span class="health-name"><span class="dot {{ state }}" aria-hidden="true"{% if why %} title="{{ why|map(attribute='text')|join(' · ') }}"{% endif %}></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></span>
       {{ healthbar(s, h) }}
-      <span class="health-up">{{ uptime(h) }}</span>
+      <span class="health-up">{{ uptime(h) }}{% if h.count %}<br>{{ outages_link(s, h) }}{% endif %}</span>
       {% if why and state in ('warn', 'down') %}<span class="health-why small">Jetzt: {% for w in why[:3] %}<a href="{{ w.href }}">{{ w.text }}</a>{{ ' · ' if not loop.last }}{% endfor %}{% if why|length > 3 %} · +{{ why|length - 3 }}{% endif %}</span>{% endif %}
     </li>
     {% endfor %}

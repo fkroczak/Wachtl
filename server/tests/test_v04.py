@@ -235,7 +235,8 @@ class RecentOutageTest(AppTestCase):
             self.assertIn("1 Ausfall in 24 h", probe_html)
             self.assertIn("Ausfall vor", probe_html)
             # Verlauf: der gelbe Balken führt direkt in den Graphen zum Zeitpunkt des Ausfalls
-            self.assertRegex(html, rf'<a class="hb-warn" href="/probes/{pid}/checks/{cid}\?at={now - 600}"')
+            self.assertRegex(html, rf'<span class="hb-warn" title="[^"]*" data-href="/probes/{pid}/checks/{cid}\?at={now - 600}"')
+            self.assertIn('href="/outages?site=1&amp;range=24h"', html)   # gleiche Liste per Tastatur
             # Zeitraum wählbar und gemerkt; Ausfall bleibt im längeren Verlauf sichtbar
             week = self.client.get("/?verlauf=7d").get_data(as_text=True)
             self.assertIn("Standorte – letzte 7 Tage", week)

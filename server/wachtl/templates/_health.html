@@ -19,9 +19,13 @@
 {%- endmacro %}
 {% macro healthbar(s, h) -%}
 <span class="healthbar">
-  {%- for c in h.slots %}{% if c.outages %}<a class="hb-{{ c.state }}" href="{{ slot_url(s, c) }}" title="{{ slot_title(c) }}" aria-label="{{ s.name }}, {{ slot_title(c) }}"></a>{% else %}<span class="hb-{{ c.state }}" title="{{ slot_title(c) }}"></span>{% endif %}{% endfor -%}
+  {#- Klick mit der Maus (app.js); per Tastatur führt der Link „Ausfälle“ daneben zur selben Liste -#}
+  {%- for c in h.slots %}<span class="hb-{{ c.state }}" title="{{ slot_title(c) }}"{% if c.outages %} data-href="{{ slot_url(s, c) }}"{% endif %}></span>{% endfor -%}
 </span>
 <span class="sr-only">{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in {{ health_label }}{% if h.down_s %}, {{ h.down_s|duration }} gestört{% endif %}{% else %}keine Ausfälle in {{ health_label }}{% endif %}</span>
+{%- endmacro %}
+{% macro outages_link(s, h) -%}
+<a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="{{ s.name }}: {{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in {{ health_label }} ansehen">{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }}</a>
 {%- endmacro %}
 {% macro uptime(h) %}{% if h.up is not none %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% else %}–{% endif %}{% endmacro %}
 {% macro range_picker(endpoint) -%}
