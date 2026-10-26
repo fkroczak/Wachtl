@@ -44,7 +44,7 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Sprache (0.9) | RTP-Sprachtest wie ein Telefonat (G.711/G.729) zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor: MOS, Laufzeit, Jitter und Verlust je Richtung, Alarm bei schlechter Sprachqualität ([docs/MESSUNGEN.md](docs/MESSUNGEN.md#sprache-rtpvoip)) |
 | PDF-Bericht (1.0) | Alle Störungen eines Zeitraums als PDF für den Provider: Einschätzung, wo das Problem liegt, Zeitstrahl mit Kurzausfällen, Leitungsschwankungen, Störungsliste, Pfadanalyse, Netzwerkscan |
 | Netzwerkscan (1.0) | Geräte im Kundennetz, Anwesenheit, unregelmäßige Geräte, IP-Konflikte, Portscan mit Diensterkennung und Links zum Verbinden ([docs/NETZWERKSCAN.md](docs/NETZWERKSCAN.md)) |
-| Switch-Topologie (1.0) | SNMPv1/v2c/v3 je Switch mit Assistent (Zugang testen, verschlüsselt speichern); Baum Internet → Gateway → Switches → Geräte mit Ports und Geschwindigkeit, Switch-Frontansicht mit Port-Details und Probe-Messwerten, Probleme (Port-Fehler, langsame Uplinks, Kabelkreise, nicht verwaltete Switches), Pfad eines Geräts bis ins Internet ([docs/TOPOLOGIE.md](docs/TOPOLOGIE.md)) |
+| Switch-Topologie (1.0) | SNMPv1/v2c/v3 je Switch mit Assistent (Zugang testen, verschlüsselt speichern); Baum Internet → Gateway → Switches → Geräte mit Ports und Geschwindigkeit, Switch-Frontansicht mit Port-Details und Probe-Messwerten, Probleme (Port-Fehler, langsame Uplinks, Kabelkreise, nicht verwaltete Switches), Pfad eines Geräts bis ins Internet; Verlauf mit Zeitleiste am Baum, Chronik, Port-Verlauf und Störung im Kontext (Port-Status jede Minute) ([docs/TOPOLOGIE.md](docs/TOPOLOGIE.md)) |
 | Benachrichtigungen (1.0) | Jede Störung sofort sehen: Server erkennt Ausfälle und **jeden verlorenen Ping** aus den Rohdaten, auch nachgelieferte; Hinweis im Browser, Tray auf PC und Server, E-Mail/Teams ([docs/BENACHRICHTIGUNGEN.md](docs/BENACHRICHTIGUNGEN.md)) |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
@@ -78,7 +78,7 @@ und `SHA256SUMS.txt`. Bis 0.4 waren es zwei Setups. Auf GitHub die Datei öffnen
 
 1. Server, eine von zwei Varianten:
    - Linux-VM mit Docker: [docs/INSTALL-SERVER.md](docs/INSTALL-SERVER.md) – `sudo ./setup.sh wachtl.kunde.local`
-   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.9.5.exe` starten, Rolle „Wachtl-Server“
+   - Windows Server: [docs/INSTALL-SERVER-WINDOWS.md](docs/INSTALL-SERVER-WINDOWS.md) – `WachtlSetup-0.9.6.exe` starten, Rolle „Wachtl-Server“
 2. Bauen: GitHub Actions erzeugt `wachtl-probe-win-x64` und `wachtl-server-setup` (testet das Setup dabei auf einem
    echten Windows-Server). Lokal: `probe\build.ps1` bzw. `windows\build-server.ps1` auf einem Windows-Rechner.
 3. Probes installieren: [docs/INSTALL-PROBE.md](docs/INSTALL-PROBE.md) – kompakt für den Rollout beim Kunden: [docs/ROLLOUT.md](docs/ROLLOUT.md)

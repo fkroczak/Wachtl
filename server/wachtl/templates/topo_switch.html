@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_topology.html" import head, faceplate, port_legend with context %}
+{% from "_topology.html" import head, faceplate, port_legend, lanes_legend with context %}
 {% block title %}{{ sw.node.label }} · Topologie · {{ site.name }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
 {% block content %}
@@ -38,6 +38,25 @@
   <p class="muted">Noch keine Ports bekannt – die erste Abfrage läuft mit dem nächsten Durchgang der Server-Probe oder über „Jetzt abfragen“.</p>
   {% endif %}
 </section>
+
+{% if lanes.lanes %}
+<section class="card" id="verlauf" aria-labelledby="h-lanes">
+  <div class="page-head"><h2 id="h-lanes">Port-Verlauf · {{ lanes.label }}</h2>
+    <nav class="seg" aria-label="Zeitraum des Port-Verlaufs">{% for key, r in lanes.ranges.items() %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=row.id, port=port.index if port else None, verlauf=key) }}#verlauf"{% if key == lanes.range %} aria-current="page"{% endif %}>{{ r[0] }}</a>{% endfor %}</nav></div>
+  {{ lanes_legend() }}
+  <div class="scroll">
+    <div class="ctx-grid">
+      <span></span>
+      <div class="ctx-axis" aria-hidden="true">{% for t in lanes.axis %}<span>{{ t|hm if lanes.range != '7d' else t|dm }}</span>{% endfor %}</div>
+      {% for l in lanes.lanes %}
+      <a class="ctx-lab{{ ' ctx-bad' if 'ln-flap' in l.cells or 'ln-err' in l.cells }}" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=row.id, port=l.port.index, verlauf=lanes.range) }}#port">Port {{ l.port.short }}<small>{{ l.who or '–' }}</small></a>
+      <div class="lane lane-{{ lanes.cells }}" role="img" aria-label="{{ l.summary }}">{% for c in l.cells %}<i class="{{ c }}"></i>{% endfor %}</div>
+      {% endfor %}
+    </div>
+  </div>
+  <p class="small muted">Kurze Aussetzer zwischen zwei Abfragen erkennt Wachtl über den Zeitpunkt der letzten Statusänderung am Port. Details stehen in der <a href="{{ url_for('web.topology_history', site_id=site.id, switch=row.id) }}">Chronik</a>.</p>
+</section>
+{% endif %}
 
 {% if port %}
 <div class="topo-two" id="port">
@@ -110,7 +129,7 @@
 
 <section class="card" aria-labelledby="h-access">
   <h2 id="h-access">Zugang und Verlauf</h2>
-  <dl class="kvlist"><dt>Zugang</dt><dd>{{ creds }}</dd><dt>Abfrage</dt><dd>{{ 'pausiert' if row.status == 'disabled' else 'alle 15 Minuten über die Server-Probe' }}</dd></dl>
+  <dl class="kvlist"><dt>Zugang</dt><dd>{{ creds }}</dd><dt>Abfrage</dt><dd>{{ 'pausiert' if row.status == 'disabled' else 'vollständig alle ' ~ (intervals[0] // 60) ~ ' Minuten' ~ (', Port-Status alle ' ~ intervals[1] ~ ' Sekunden' if intervals[1] else '') ~ ', über die Server-Probe' }}</dd></dl>
   {% if has_role(user, 'admin') %}
   <div class="actions">
     <a class="button" href="{{ url_for('web.topology_edit', site_id=site.id, switch_id=row.id) }}">Zugangsdaten ändern</a>
@@ -121,10 +140,10 @@
   </div>
   {% endif %}
   {% if events %}
-  <h3>Verlauf</h3>
+  <h3>Letzte Änderungen</h3>
   <div class="scroll"><table>
     <thead><tr><th>Zeit</th><th>Ereignis</th></tr></thead>
-    <tbody>{% for e in events %}<tr><td class="nowrap">{{ e.ts|dt }}</td><td>{{ {'speed_changed': 'Geschwindigkeit geändert', 'mac_moved': 'Gerät an anderem Port'}.get(e.kind, e.kind) }}: {{ e.detail }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for e in events %}<tr><td class="nowrap">{{ e.ts|dt }}</td><td><span class="badge {{ e.severity }}">{{ e.kind_label }}</span> {{ e.detail }}</td></tr>{% endfor %}</tbody>
   </table></div>
   {% endif %}
 </section>

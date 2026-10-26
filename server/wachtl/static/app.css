@@ -86,6 +86,9 @@ main:focus { outline: none; }
   padding: 0.5rem 0.9rem; border-radius: var(--radius); border: 2px solid var(--accent); }
 .skip-link:focus { top: 0.5rem; }
 code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.9em; }
+h1 .edit-pen { display: inline-flex; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; vertical-align: middle; color: var(--text-muted); }
+h1 .edit-pen:hover, h1 .edit-pen:focus-visible { color: var(--accent); }
+.edit-pen svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
 h1 { font-size: 1.55rem; font-weight: 600; letter-spacing: -0.01em; margin: 0.2rem 0 1rem; }
 h2 { font-size: 1.07rem; font-weight: 600; margin: 2rem 0 0.7rem; }
 .muted, .text-muted { color: var(--text-muted); }
