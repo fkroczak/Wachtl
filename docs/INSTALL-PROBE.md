@@ -25,11 +25,14 @@ und einen Token für die eingestellte Zahl PCs. Auf dem PC als Administrator sta
 - Ist der Server bei der Installation gar nicht erreichbar (Standort offline, VPN aus), wird die Probe trotzdem
   installiert und meldet sich selbst an, sobald der Server erreichbar ist.
 - Welche Ziele gemessen werden, legt immer der Server fest (Verwaltung › Checks).
-- Das Setup legt das Zertifikat des Servers unter **Vertrauenswürdige Stammzertifizierungsstellen** ab
-  (Anzeigename „Wachtl Server (Probe)“) – der Browser auf dem PC öffnet Wachtl danach ohne Warnung. Es wird nur
-  abgelegt, wenn es zum Pin passt, und gilt nur für die Adressen des Servers. War der Server bei der Installation
-  nicht erreichbar, holt das nächste Setup bzw. Update das nach, von Hand: `wachtl-probe.exe trust` (als Administrator).
-  Die Deinstallation entfernt es wieder (`wachtl-probe.exe trust --remove 1`).
+- Das Setup legt die **Wachtl-CA** unter **Vertrauenswürdige Stammzertifizierungsstellen** ab (Anzeigename
+  „Wachtl Server (Probe)“) – der Browser auf dem PC öffnet Wachtl danach ohne Warnung, auch nach jeder Erneuerung
+  des Server-Zertifikats. Sie wird nur abgelegt, wenn das Server-Zertifikat zum Pin passt und nachweislich von ihr
+  stammt, und gilt nur für die Adressen des Servers.
+- Die geplante Aufgabe **Wachtl Zertifikat** (SYSTEM, täglich 12:00 und nach dem Start) prüft das erneut: Sie holt es
+  nach, wenn der Server beim Setup nicht erreichbar war, und übernimmt eine neu ausgestellte CA. Von Hand:
+  `wachtl-probe.exe trust` (als Administrator). Die Deinstallation entfernt CA und Aufgabe
+  (`wachtl-probe.exe trust --remove 1`).
 
 Dasselbe Setup ohne Vorbelegung (`WachtlSetup-<Version>.exe`, Link ebenfalls unter „Probes registrieren“) fragt nach
 der Rolle (Probe ist Standard) und dann auf einer Seite nach Server, Pin, Token und optional Proxy.

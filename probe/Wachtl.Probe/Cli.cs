@@ -218,7 +218,7 @@ public static class Cli
         foreach (var server in servers)
         {
             var attempt = new CliResult(null);
-            var (code, cert) = await FetchPinnedCertificateAsync(server, pin, proxy, attempt);
+            var (code, cert, ca) = await FetchPinnedCertificateAsync(server, pin, proxy, attempt);
             if (cert is null)
             {
                 lastResult = attempt;
@@ -227,14 +227,17 @@ public static class Cli
             }
 
             using (cert)
+            using (ca)
             {
-                var outcome = RootTrust.Install(cert);
+                var root = RootTrust.SelectRoot(cert, ca);
+                var outcome = root is null ? RootTrust.Outcome.NotSelfSigned : RootTrust.Install(root);
+                var shown = root ?? cert;
                 result.Set("trusted", outcome == RootTrust.Outcome.NotSelfSigned ? "0" : "1");
                 result.Set("outcome", outcome.ToString());
-                result.Set("thumbprint", cert.Thumbprint);
+                result.Set("thumbprint", shown.Thumbprint);
                 Console.WriteLine(outcome switch
                 {
-                    RootTrust.Outcome.Added => $"Zertifikat {cert.Subject} unter „Vertrauenswürdige Stammzertifizierungsstellen“ abgelegt.",
+                    RootTrust.Outcome.Added => $"Zertifikat {shown.Subject} unter „Vertrauenswürdige Stammzertifizierungsstellen“ abgelegt.",
                     RootTrust.Outcome.AlreadyTrusted => "Zertifikat ist bereits als vertrauenswürdig hinterlegt.",
                     _ => "Der Server nutzt ein Zertifikat einer Zertifizierungsstelle – nichts abzulegen.",
                 });
@@ -252,8 +255,11 @@ public static class Cli
         return lastCode;
     }
 
-    /// <summary>Zertifikat des Servers holen; nur zurückgeben, wenn sein Schlüssel zum Pin passt.</summary>
-    private static async Task<(int Code, X509Certificate2? Certificate)> FetchPinnedCertificateAsync(
+    /// <summary>
+    /// Zertifikat des Servers holen (nur wenn sein Schlüssel zum Pin passt) und über dieselbe gepinnte Verbindung
+    /// die Wachtl-CA von /zertifikat/wachtl.crt. Ältere Server ohne diese Seite: CA ist null.
+    /// </summary>
+    private static async Task<(int Code, X509Certificate2? Certificate, X509Certificate2? Ca)> FetchPinnedCertificateAsync(
         Uri server, string pin, string? proxy, CliResult result)
     {
         X509Certificate2? pinned = null;
@@ -291,13 +297,30 @@ public static class Cli
         using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
         try
         {
-            using var response = await http.GetAsync(new Uri(server, "healthz"));
-            return (ExitOk, pinned);
+            using (await http.GetAsync(new Uri(server, "healthz")))
+            {
+            }
+
+            X509Certificate2? ca = null;
+            using var response = await http.GetAsync(new Uri(server, "zertifikat/wachtl.crt"));
+            if (response.IsSuccessStatusCode)
+            {
+                try
+                {
+                    ca = new X509Certificate2(await response.Content.ReadAsByteArrayAsync());
+                }
+                catch (System.Security.Cryptography.CryptographicException)
+                {
+                    ca = null;
+                }
+            }
+
+            return (ExitOk, pinned, ca);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             pinned?.Dispose();
-            return (Fail(ex, result), null);
+            return (Fail(ex, result), null, null);
         }
     }
 

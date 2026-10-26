@@ -125,6 +125,18 @@ def renew_certificate_if_needed(layout: Layout) -> None:
             write_env(layout.env_file, layout.env)
 
 
+RENEW_CHECK_S = 6 * 3600
+
+
+def _renew_loop(layout: Layout, stop: threading.Event) -> None:
+    """Server-Zertifikat (397 Tage) im laufenden Betrieb erneuern; der HTTPS-Server lädt es selbst nach."""
+    while not stop.wait(RENEW_CHECK_S):
+        try:
+            renew_certificate_if_needed(layout)
+        except Exception:  # noqa: BLE001
+            log.exception("Zertifikatsprüfung fehlgeschlagen")
+
+
 def cmd_run(layout: Layout, _args) -> int:
     setup_logging(layout, "supervisor")
     log.info("Wachtl Server startet, Daten in %s", layout.data_dir)
@@ -134,6 +146,7 @@ def cmd_run(layout: Layout, _args) -> int:
         log.exception("Zertifikatsprüfung fehlgeschlagen")
     stop = threading.Event()
     install_stop_handlers(stop)
+    threading.Thread(target=_renew_loop, args=(layout, stop), name="zertifikat", daemon=True).start()
     sup = Supervisor(build_specs(layout), layout.logs, stop_event=stop)
     py = str(layout.python)
     code = sup.run_once(ProcSpec("init", [py, "-m", "wachtl.win.host", "init", "--data", str(layout.data_dir)],
@@ -175,7 +188,10 @@ def cmd_status(layout: Layout, _args) -> int:
             print(f"  {name:<20} :{port:<6} {'läuft' if winsys.port_open(port) else 'AUS'}")
     try:
         cert = certs.load_certificate(layout.cert_file)
-        print(f"Zertifikat gültig bis {cert.not_valid_after_utc:%d.%m.%Y}")
+        print(f"Zertifikat gültig bis {cert.not_valid_after_utc:%d.%m.%Y} (erneuert sich 30 Tage vorher selbst)")
+        ca = certs.root_certificate(layout.cert_file)
+        if ca != cert:
+            print(f"Wachtl-CA gültig bis  {ca.not_valid_after_utc:%d.%m.%Y}")
     except OSError:
         print("Zertifikat fehlt")
     for sub in ("data", "vm-raw", "vm-agg", "backups"):

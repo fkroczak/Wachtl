@@ -27,9 +27,9 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 Das Setup erledigt anschließend:
 
 - Dateien kopieren (Python 3.12, VictoriaMetrics, Alertmanager, WinSW, Wachtl)
-- Schlüssel und selbstsigniertes Zertifikat (10 Jahre) für alle angegebenen Namen erzeugen, SPKI-Pin berechnen;
-  das Zertifikat gilt per Namensbeschränkung nur für diese Namen und IP-Adressen
-- Zertifikat unter **Vertrauenswürdige Stammzertifizierungsstellen** (Computer, Anzeigename „Wachtl Server“)
+- Wachtl-CA (10 Jahre, per Namensbeschränkung nur für diese Namen und IP-Adressen) und Server-Zertifikat
+  (397 Tage, erneuert sich im laufenden Dienst selbst) erzeugen, SPKI-Pin berechnen
+- Wachtl-CA unter **Vertrauenswürdige Stammzertifizierungsstellen** (Computer, Anzeigename „Wachtl Server“)
   ablegen – Browser auf dem Server öffnen Wachtl ohne Warnung. Die PCs mit Probe erledigt das Probe-Setup,
   alle übrigen Geräte: [Zertifikat auf anderen Geräten](BETRIEB.md#zertifikat-im-browser)
 - Datenbank anlegen, Standard-Checks (Gateway, 8.8.8.8, 1.1.1.1) und Standard-Alarme einrichten, Admin anlegen
@@ -86,7 +86,8 @@ oder die Probe im Web-UI deaktivieren.
 
 Konfiguration (Ports, Aufbewahrung) steht in `<Daten>\config\wachtl.env`. Nach Änderungen `Restart-Service WachtlServer`.
 Neue Servernamen: Setup erneut ausführen ist der einfachste Weg; alternativ `WACHTL_HOSTNAMES` anpassen – das Zertifikat
-wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin bleibt gleich.
+wird beim nächsten Start mit demselben Schlüssel neu ausgestellt, der Pin bleibt gleich. Die Wachtl-CA im
+Stammspeicher des Servers aktualisiert nur das Setup.
 
 ### Tray-Symbol
 
@@ -101,7 +102,7 @@ Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
 | --- | --- |
 | `C:\Program Files\Wachtl Server\` | Programm (python, app, bin, service), `wachtl-server.cmd` |
 | `<Daten>\config\wachtl.env` | Ports, Aufbewahrung, Geheimnisse |
-| `<Daten>\certs\` | `wachtl.key`, `wachtl.crt` (auch zum Herunterladen unter `https://<Server>/zertifikat`) |
+| `<Daten>\certs\` | `wachtl.key`, `wachtl.crt` (Server-Zertifikat mit Kette), `wachtl-ca.key`, `wachtl-ca.crt` (Wachtl-CA, auch unter `https://<Server>/zertifikat`) |
 | `<Daten>\data\wachtl.db` | SQLite-Datenbank (Standorte, Probes, Checks, Benutzer, Alarme, Audit) |
 | `<Daten>\vm-raw\`, `<Daten>\vm-agg\` | Messwerte: 1-s-Rohdaten und 1-min-Verlauf |
 | `<Daten>\logs\` | `supervisor.log`, `web.log`, `serverprobe.log`, `vm-raw.log`, `vm-agg.log`, `vmalert.log`, `alertmanager.log`, `setup.log`, `backup.log` |

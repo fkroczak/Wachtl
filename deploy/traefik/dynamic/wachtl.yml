@@ -1,4 +1,5 @@
-# Traefik: TLS mit dem selbstsignierten Zertifikat aus ./certs, alles an den Flask-Collector.
+# Traefik: TLS mit dem Server-Zertifikat aus ./certs (Kette mit Wachtl-CA, erneuert von zertifikat.sh),
+# alles an den Flask-Collector.
 http:
   routers:
     wachtl:

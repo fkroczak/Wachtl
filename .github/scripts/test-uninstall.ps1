@@ -40,6 +40,7 @@ if ($Part -eq 'Probe') {
     if (Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'Wachtl Tray' -ErrorAction SilentlyContinue) { $problems.Add('Autostart-Eintrag Wachtl Tray') }
     if (Get-Process wachtl-tray -ErrorAction SilentlyContinue | Where-Object Path -like "${env:ProgramFiles}\Wachtl\*") { $problems.Add('wachtl-tray.exe der Probe läuft noch') }
     if (Get-NetTCPConnection -LocalPort 47252 -State Listen -ErrorAction SilentlyContinue) { $problems.Add('Tray-Endpunkt 127.0.0.1:47252 lauscht noch') }
+    if (Get-ScheduledTask -TaskName 'Wachtl Zertifikat' -ErrorAction SilentlyContinue) { $problems.Add('Geplante Aufgabe Wachtl Zertifikat') }
     if (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)') { $problems.Add('Stammzertifikat „Wachtl Server (Probe)“') }
     # das des Server-Setups auf demselben Rechner bleibt
     if (-not (Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server')) { $problems.Add('Probe-Deinstallation hat das Stammzertifikat des Servers entfernt') }

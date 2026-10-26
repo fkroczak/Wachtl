@@ -45,9 +45,17 @@ $store.Open('ReadWrite')
 $serverCert = $store.Certificates | Where-Object FriendlyName -eq 'Wachtl Server'
 if (-not $serverCert) { throw 'Stammzertifikat des Server-Setups fehlt' }
 $store.Remove($serverCert)
-& "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" trust
-if ($LASTEXITCODE -ne 0) { throw "wachtl-probe trust fehlgeschlagen ($LASTEXITCODE)" }
-$probeCert = Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)'
+# die tägliche Aufgabe (SYSTEM) holt das nach – genau wie auf einem PC, der beim Setup offline war
+$task = Get-ScheduledTask -TaskName 'Wachtl Zertifikat'
+if ($task.Principal.UserId -notin 'SYSTEM', 'NT AUTHORITY\SYSTEM') { throw "Aufgabe läuft als $($task.Principal.UserId)" }
+Start-ScheduledTask -TaskName 'Wachtl Zertifikat'
+$probeCert = $null
+foreach ($i in 1..30) {
+  Start-Sleep 2
+  $probeCert = Get-ChildItem Cert:\LocalMachine\Root | Where-Object FriendlyName -eq 'Wachtl Server (Probe)'
+  if ($probeCert) { break }
+}
+if (-not $probeCert) { throw "Aufgabe hat die Wachtl-CA nicht abgelegt (Ergebnis $((Get-ScheduledTaskInfo 'Wachtl Zertifikat').LastTaskResult))" }
 if ($probeCert.Thumbprint -ne $serverCert.Thumbprint) { throw "Probe hat das Zertifikat nicht abgelegt ('$($probeCert.Thumbprint)')" }
 Invoke-WebRequest "$base/healthz" -UseBasicParsing | Out-Null   # ohne -SkipCertificateCheck
 & "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" trust --remove 1
@@ -58,4 +66,4 @@ $restore = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new
 $restore.FriendlyName = 'Wachtl Server'
 $store.Add($restore)
 $store.Close()
-Write-Host "Probe legt das Stammzertifikat ab und entfernt es wieder"
+Write-Host "Probe (geplante Aufgabe) legt die Wachtl-CA ab, trust --remove 1 entfernt sie"

@@ -40,38 +40,24 @@ if [[ ! -f .env ]]; then
 fi
 set -a; source .env; set +a
 
-# --- Zertifikat (selbstsigniert, 10 Jahre, Schlüssel bleibt bei Erneuerung) ---
-mkdir -p certs
-if [[ ! -f certs/wachtl.key ]]; then
-  say "Erzeuge Schlüssel und selbstsigniertes Zertifikat für ${WACHTL_HOST}"
-  openssl ecparam -name prime256v1 -genkey -noout -out certs/wachtl.key
-fi
-# Die Namensbeschränkung lässt das Zertifikat – auf PCs als Stammzertifikat abgelegt – nur für diesen Server gelten.
-# Ältere Zertifikate ohne sie werden einmal neu ausgestellt (gleicher Schlüssel, Pin bleibt).
-if [[ ! -f certs/wachtl.crt ]] || ! openssl x509 -checkend $((30*86400)) -noout -in certs/wachtl.crt >/dev/null \
-   || ! openssl x509 -noout -text -in certs/wachtl.crt | grep -q "Name Constraints"; then
-  if [[ "$WACHTL_HOST" =~ ^[0-9.]+$ ]]; then
-    SAN="IP:${WACHTL_HOST}"; NC="IP:${WACHTL_HOST}/255.255.255.255"
-  else
-    SAN="DNS:${WACHTL_HOST}"; NC="DNS:${WACHTL_HOST}"
-  fi
-  openssl req -new -x509 -key certs/wachtl.key -out certs/wachtl.crt -days 3650 \
-    -subj "/CN=${WACHTL_HOST}/O=Wachtl" -addext "subjectAltName=${SAN}" \
-    -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,digitalSignature,keyCertSign" \
-    -addext "extendedKeyUsage=serverAuth" -addext "nameConstraints=critical,permitted;${NC}"
-  say "Zertifikat erstellt"
-fi
-chmod 600 certs/wachtl.key
-# öffentlicher Teil für die Download-Seite /zertifikat (ohne Schlüssel in den App-Container)
-mkdir -p certs/public
-cp certs/wachtl.crt certs/public/wachtl.crt
-chmod 644 certs/public/wachtl.crt
-PIN="$(openssl x509 -in certs/wachtl.crt -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64)"
+# --- Zertifikat: eigene Wachtl-CA + Server-Zertifikat (397 Tage, erneuert sich selbst) ---
+say "Baue die Container (dauert beim ersten Mal einige Minuten)"
+docker compose build
+say "Prüfe Wachtl-CA und Server-Zertifikat"
+PIN="$(./zertifikat.sh | sed -n 's/^pin=//p')"
+[[ -n "$PIN" ]] || fail "Zertifikat konnte nicht erstellt werden."
 setvar WACHTL_SPKI_PIN "$PIN"
+# täglich prüfen und rechtzeitig erneuern
+cat > /etc/cron.d/wachtl-zertifikat <<CRON
+# Wachtl: Server-Zertifikat rechtzeitig erneuern (angelegt von setup.sh, entfernt von uninstall.sh)
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+23 4 * * * root $(pwd)/zertifikat.sh >> /var/log/wachtl-zertifikat.log 2>&1
+CRON
+chmod 644 /etc/cron.d/wachtl-zertifikat
 
 # --- Start ----------------------------------------------------------------
-say "Baue und starte Container (dauert beim ersten Mal einige Minuten)"
-docker compose up -d --build --remove-orphans
+say "Starte Container"
+docker compose up -d --remove-orphans
 
 say "Warte auf den Collector"
 for _ in $(seq 1 60); do

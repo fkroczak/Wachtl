@@ -74,6 +74,11 @@ if crontab -l >/dev/null 2>&1 && crontab -l | grep -q "deploy/backup.sh"; then
   crontab -l | grep -v "deploy/backup.sh" | crontab -
 fi
 
+if [[ -f /etc/cron.d/wachtl-zertifikat ]]; then
+  say "Entferne die tägliche Zertifikatsprüfung"
+  rm -f /etc/cron.d/wachtl-zertifikat /var/log/wachtl-zertifikat.log
+fi
+
 # --- Geheimnisse und Daten im Ordner -------------------------------------------------
 if [[ $ALL -eq 1 ]]; then
   say "Lösche .env, Zertifikat und Sicherungen"

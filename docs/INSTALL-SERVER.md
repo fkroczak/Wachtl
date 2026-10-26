@@ -38,7 +38,8 @@ sudo ./setup.sh wachtl.kunde.local     # DNS-Name oder IP, unter der die Probes 
 `setup.sh` erledigt beim ersten Aufruf:
 
 1. `.env` mit zufälligen Geheimnissen anlegen (Datei nur für root lesbar)
-2. EC-Schlüssel und selbstsigniertes Zertifikat (10 Jahre) in `certs/` erzeugen
+2. Wachtl-CA (10 Jahre) und Server-Zertifikat (397 Tage) in `certs/` erzeugen (`deploy/zertifikat.sh`) und die
+   tägliche Erneuerung einrichten (`/etc/cron.d/wachtl-zertifikat`)
 3. SPKI-Pin berechnen und in `.env` eintragen
 4. Container bauen und starten, Datenbank anlegen, Standard-Checks und -Alarme anlegen, Alertmanager-Konfiguration erzeugen
 
@@ -53,7 +54,7 @@ nur bei der Ersteinrichtung einmalig übernommen.
 ## 5. Erste Schritte im Web-UI
 
 1. `https://wachtl.kunde.local` öffnen. Die Browserwarnung ist beim ersten Aufruf normal. Windows-PCs mit Probe
-   legen das Zertifikat bei der Installation selbst unter „Vertrauenswürdige Stammzertifizierungsstellen“ ab;
+   legen die Wachtl-CA bei der Installation selbst unter „Vertrauenswürdige Stammzertifizierungsstellen“ ab;
    alle anderen Geräte: Seite `https://wachtl.kunde.local/zertifikat` (Link auf der Anmeldeseite), siehe
    [Zertifikat im Browser](BETRIEB.md#zertifikat-im-browser).
 2. Mit `admin` und dem Passwort aus Schritt 3 anmelden, unter **admin › Konto** das Passwort ändern.
