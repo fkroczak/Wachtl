@@ -640,11 +640,11 @@ def site(site_id: int):
             matrix[(st.check["id"], p["id"])] = st
     order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3, "rtp": 4}
     active = [p for p in probes if p["status"] == "active"]
-    health = {"sites": [s], "live_ok": live_ok}
+    health = {"sites": [s], "live_ok": live_ok, "site_stats": {s["id"]: {"probes": len(probes)}}}
     if tab == "probes" and single_site():
         _with_health(health)  # nur ein Standort: der Verlauf der Übersicht steht hier
     return render_template(
-        "site.html", **{k: v for k, v in health.items() if k not in ("sites", "live_ok")}, tab=tab, tabs=SITE_TABS, site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
+        "site.html", **{k: v for k, v in health.items() if k not in ("sites", "live_ok", "site_stats")}, tab=tab, tabs=SITE_TABS, site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
         recent_outages=_recent_outages(site_id, refine=live_ok), outage_causes=outages.CAUSES,
         kpi={"active": len(active), "online": sum(repo.probe_online(p) for p in active), "problems": problems,
              "reports": report_service.count("open", site_id=site_id)},
