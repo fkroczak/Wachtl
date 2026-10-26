@@ -113,6 +113,14 @@ class Api:
     def result(self, kind: str, payload: dict) -> None:
         self.json("POST", f"results/{kind}", payload)
 
+    def notices(self, cursor: dict | None) -> dict:
+        """Neue Störungen und Hinweise aller Standorte für das Tray-Symbol (nur Server-Probe)."""
+        query = f"?a={int(cursor['a'])}&f={int(cursor['f'])}" if cursor else ""
+        status, _, data = self.request("GET", "notices" + query)
+        if status != 200:
+            raise ApiError(status, _message(data))
+        return json.loads(data)
+
     def report(self, payload: dict) -> dict:
         """Störungsmeldung vom Tray-Symbol weiterleiten (201 neu, 200 schon bekannt)."""
         return self.json("POST", "report", payload)

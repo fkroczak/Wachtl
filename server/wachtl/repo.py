@@ -20,6 +20,8 @@ DEFAULT_ALERT_RULES = {
     "probe_offline": ("Probe offline (Sekunden ohne Heartbeat)", 120, 86400, 0, "critical"),
     "target_down": ("Ziel nicht erreichbar ab (Sekunden ohne Antwort)", 5, 0, 0, "critical"),
     "wan_down": ("Alle Internet-Referenzen gestört ab (Sekunden)", 5, 0, 0, "critical"),
+    # jeder verlorene Ping wird als Störung gemeldet; Schwellwert = verlorene Pings, Fenster = Ruhezeit bis Ende
+    "packet_loss_any": ("Jeder Paketverlust (ab verlorenen Pings, Ende nach s ohne Verlust)", 1, 60, 0, "warning"),
     "packet_loss_warning": ("Paketverlust Warnung (%)", 2, 300, 60, "warning"),
     "packet_loss_critical": ("Paketverlust kritisch (%)", 10, 300, 60, "critical"),
     "latency_high": ("Latenz Durchschnitt (ms)", 100, 300, 60, "warning"),
@@ -193,6 +195,8 @@ def probe_config(probe: dict) -> tuple[dict, str]:
         "client_findings": {
             "enabled": bool(settings["client_findings_enabled"]),
             "notify": bool(settings["client_findings_enabled"] and settings["client_findings_notify"]),
+            # Ausfälle, Paketverlust und Netzwerkwechsel, die die Probe selbst an ihren Pings erkennt (nur Tray)
+            "connectivity": bool(settings["client_connectivity_notify"]),
         },
     }
     etag = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
@@ -370,6 +374,7 @@ def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, hi
     ex("DELETE FROM ingest_batches WHERE received_at < ?", (ts - ingest_days * 86400,))
     ex("DELETE FROM audit_log WHERE ts < ?", (ts - audit_days * 86400,))
     ex("DELETE FROM alert_events WHERE status = 'resolved' AND ends_at < ?", (ts - alert_days * 86400,))
+    ex("DELETE FROM disturbances WHERE end_ts IS NOT NULL AND end_ts < ?", (ts - alert_days * 86400,))
     ex("DELETE FROM incident_reports WHERE occurred_at < ?", (ts - alert_days * 86400,))
     from .services import netscan, topology
 

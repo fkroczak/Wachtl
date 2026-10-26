@@ -16,7 +16,7 @@ from . import icmp, net
 from .api import Api, ApiError
 from .runners import (BandwidthRunner, NetscanRunner, PathRunner, PingRunner, RtpRunner, Runner, ScheduledRunner,
                       check_key)
-from .tray import PENDING_FILE, PendingReports, ReportRejected, TrayEndpoint, TrayService
+from .tray import PENDING_FILE, NoticeFeed, PendingReports, ReportRejected, TrayEndpoint, TrayService
 
 log = logging.getLogger("wachtl.serverprobe")
 ENROLL_FILE = "enroll.json"     # legt der Server beim Start an (einmaliger Enrollment-Token)
@@ -71,6 +71,7 @@ class ServerProbe:
         self.tray_port = tray_port
         self.pending_reports = PendingReports(self.state_dir / PENDING_FILE)
         self.tray: TrayEndpoint | None = None
+        self.notices = NoticeFeed()
 
     # -- Registrierung ---------------------------------------------------------
     def ensure_registered(self) -> bool:
@@ -98,7 +99,8 @@ class ServerProbe:
         log.info("Wachtl-Server-Probe %s startet, Server %s, Daten %s", __version__, self.url, self.state_dir)
         if self.tray_port:
             self.tray = TrayEndpoint(TrayService(self.tray_status, self.send_report, self.pending_reports,
-                                                 probe_hostname(), ready=lambda: self.api is not None), self.tray_port)
+                                                 probe_hostname(), ready=lambda: self.api is not None,
+                                                 notices=self.notices), self.tray_port)
             self.tray.start()
         while not self.ensure_registered():
             log.info("Warte auf Registrierung (%s vom Server) …", self.state_dir / ENROLL_FILE)
@@ -106,6 +108,8 @@ class ServerProbe:
                 return
         loops = [threading.Thread(target=fn, daemon=True, name=fn.__name__)
                  for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop, self.topology_loop)]
+        if self.tray:
+            loops.append(threading.Thread(target=self.notice_loop, daemon=True, name="notice_loop"))
         for t in loops:
             t.start()
         self.stop_event.wait()
@@ -249,6 +253,15 @@ class ServerProbe:
             except (ApiError, OSError) as exc:
                 log.debug("Heartbeat fehlgeschlagen: %s", exc)
             self.stop_event.wait(max(10, int((self.config or {}).get("heartbeat_interval_s") or 30)))
+
+    def notice_loop(self) -> None:
+        """Alle 10 s neue Störungen aller Standorte holen – das Tray-Symbol auf dem Server zeigt sie als Hinweis."""
+        while not self.stop_event.is_set():
+            try:
+                self.notices.accept(self.api.notices(self.notices.cursor))
+            except (ApiError, OSError, ValueError) as exc:
+                log.debug("Hinweise für das Tray-Symbol nicht abrufbar: %s", exc)
+            self.stop_event.wait(10)
 
     def handle_commands(self, commands: list[dict]) -> None:
         for cmd in commands:

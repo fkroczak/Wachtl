@@ -23,7 +23,7 @@ from . import findings as finding_service
 from . import reports as report_service
 from .services import alertgen
 from .services import alerts as alert_service
-from .services import checkstatus, notify, outages, pathanalysis, vm
+from .services import checkstatus, notices, notify, outages, pathanalysis, vm
 from .services import settings as settings_service
 
 log = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ def inject():
     return {
         "user": user,
         "open_reports": report_service.count("open") if user else 0,
+        "active_alerts": notices.active_count() if user else 0,
         "nav_sites": _nav_sites() if user else None,
         "single_site": single_site() if user else None,
         "csrf_token": csrf_token,
@@ -175,7 +176,9 @@ def fmt_ms(v):
 
 @bp.app_template_filter("pct")
 def fmt_pct(v):
-    return "–" if _missing(v) else f"{v:.1f} %"
+    if _missing(v):
+        return "–"
+    return f"{v:.3g} %" if 0 < v < 0.1 else f"{v:.1f} %"   # sehr kleiner Verlust nicht als 0.0 % zeigen
 
 
 @bp.app_template_filter("mos")
@@ -231,7 +234,7 @@ def _cell_state(v: dict | None) -> str:
         return "unknown"
     if v["up"] == 0:
         return "down"
-    if (v.get("loss") or 0) > 2:
+    if (v.get("loss") or 0) > checkstatus.LOSS_WARN_PCT:
         return "warn"
     return "ok"
 
@@ -519,7 +522,7 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
     return {"d": " ".join(d), "loss": loss, "label": label}
 
 
-SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Ausfälle", "meldungen": "Hinweise & Meldungen",
+SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Störungen", "meldungen": "Hinweise & Meldungen",
              "messungen": "Alle Messungen", "netzwerk": "Netzwerk", "topologie": "Topologie"}
 PROBE_TABS_DETAIL = {"messungen": "Messungen", "ping": "Ping & Pfade", "bandbreite": "Bandbreite & Sprache",
                      "meldungen": "Hinweise & Meldungen", "alarme": "Alarme", "details": "Details"}

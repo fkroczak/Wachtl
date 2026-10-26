@@ -287,6 +287,7 @@ public sealed class ProbeWorker : BackgroundService
 
             _config = config;
             _live.KeepChecks(wanted.Values.Select(c => c.Id));
+            _diagnostics.Connectivity.KeepChecks(wanted.Values.Where(c => c.Type == "ping").Select(c => c.Id));
         }
 
         _diagnostics.Configure(config.ClientFindings);
@@ -313,7 +314,7 @@ public sealed class ProbeWorker : BackgroundService
             _loggerFactory.CreateLogger<RtpRunner>()),
         "netscan" => new NetScanRunner(check, (result, token) => _api!.PostResultAsync("results/netscan", result, token),
             _loggerFactory.CreateLogger<NetScanRunner>()),
-        _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>(), _live),
+        _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>(), _live, _diagnostics.Connectivity),
     };
 
     private void HandleCommands(IEnumerable<ProbeCommand> commands)

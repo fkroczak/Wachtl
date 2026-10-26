@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, url_for
 
 from . import repo
 from . import findings as finding_service
@@ -11,6 +11,7 @@ from . import reports as report_service
 from .db import q, q1
 from .security import check_csrf, current_user, login_required
 from .services import alerts as alert_service
+from .services import notices
 from .services import vm
 
 bp = Blueprint("api_admin", __name__, url_prefix="/api/v1")
@@ -181,6 +182,46 @@ def client_findings():
         return jsonify(error="days bzw. probe muss eine Zahl sein"), 400
     items = finding_service.search(probe_id=probe_id, since=repo.now() - days * 86400, limit=500)
     return jsonify([finding_service.api_item(r) for r in items])
+
+
+def _notice_url(item: dict) -> str:
+    """Wohin ein Klick auf den Hinweis führt: Graph zum Zeitpunkt, sonst Probe, sonst die Liste."""
+    try:
+        probe_id = int(item.get("probe_id") or 0)
+        check_id = int(item.get("check_id") or 0)
+    except ValueError:
+        probe_id = check_id = 0
+    if probe_id and check_id and item["source"] == "alert":
+        check = q1("SELECT type FROM checks WHERE id = ?", (check_id,))
+        if check and check["type"] == "ping":
+            return url_for("web.target", probe_id=probe_id, check_id=check_id, at=item["ts"])
+    if probe_id and q1("SELECT id FROM probes WHERE id = ?", (probe_id,)):
+        return url_for("web.probe", probe_id=probe_id, tab="meldungen" if item["source"] == "finding" else "alarme")
+    return url_for("web.outages_view") if item["source"] == "alert" else url_for("web.findings_view")
+
+
+@bp.get("/notifications")
+@login_required(api=True)
+def notifications():
+    """Live-Benachrichtigungen im Web-UI: Ereignisse nach dem Stand ``a`` (Alarme) und ``f`` (Client-Hinweise).
+
+    Ohne Stand nur der aktuelle Stand – beim ersten Aufruf werden keine alten Ereignisse nachgeholt.
+    """
+    current = notices.cursor()
+    try:
+        a = int(request.args["a"])
+        f = int(request.args["f"])
+    except (KeyError, ValueError):
+        return jsonify(cursor=current, items=[], active=notices.active_count())
+    # Stand höher als die Datenbank (Server neu eingerichtet): neu anfangen
+    if a > current["a"] or f > current["f"]:
+        return jsonify(cursor=current, items=[], active=notices.active_count())
+    items = notices.since(a, f)
+    for item in items:
+        item["url"] = _notice_url(item)
+    cursor = {"a": max([a] + [i["id"] for i in items if i["source"] == "alert"]),
+              "f": max([f] + [i["id"] for i in items if i["source"] == "finding"])}
+    return jsonify(cursor=cursor, items=items, active=notices.active_count())
 
 
 @bp.get("/alerts")

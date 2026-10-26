@@ -327,12 +327,22 @@ public sealed class TrayEndpointTests : IDisposable
         diagnostics.Publish(new[] { Finding("a") });
         Assert.Equal(1, diagnostics.Pending.Count);
 
-        diagnostics.Configure(new ClientFindingsConfig { Enabled = true, Notify = false });
+        diagnostics.Configure(new ClientFindingsConfig { Enabled = true, Notify = false, Connectivity = false });
         var response = await Api().HandleAsync(Request("GET", TrayApi.FindingsPath), default);
         Assert.False(JsonDocument.Parse(response.Json).RootElement.GetProperty("notify").GetBoolean());
         Assert.True(diagnostics.Enabled);
 
-        diagnostics.Configure(new ClientFindingsConfig { Enabled = false, Notify = true });
+        // Ausfälle/Paketverlust weiter melden, Netzwerkkarten-Hinweise aber ohne Sprechblase („quiet“)
+        diagnostics.Configure(new ClientFindingsConfig { Enabled = true, Notify = false, Connectivity = true });
+        diagnostics.Publish(new[] { Finding("b") });
+        response = await Api().HandleAsync(Request("GET", TrayApi.FindingsPath), default);
+        var root = JsonDocument.Parse(response.Json).RootElement;
+        Assert.True(root.GetProperty("notify").GetBoolean());
+        var b = root.GetProperty("findings").EnumerateArray().Single(f => f.GetProperty("finding_id").GetString() == "b");
+        Assert.True(b.GetProperty("quiet").GetBoolean());
+        Assert.False(b.GetProperty("event").GetBoolean());
+
+        diagnostics.Configure(new ClientFindingsConfig { Enabled = false, Notify = true, Connectivity = false });
         Assert.False(diagnostics.Enabled);
         Assert.False(_feed.Notify);
         Assert.Empty(_feed.Since(0).Findings);

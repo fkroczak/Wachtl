@@ -38,6 +38,10 @@ FIELDS: tuple[Field, ...] = (
     Field("client_findings_notify", "Hinweis als Sprechblase auf dem PC anzeigen", "bool", True,
           group="Client-Hinweise",
           help="Der Benutzer sieht neben der Uhr, was erkannt wurde, mit Lösungsvorschlag. Braucht das Wachtl-Symbol."),
+    Field("client_connectivity_notify", "Ausfälle, Paketverlust und Netzwerkwechsel auf dem PC melden", "bool", True,
+          group="Client-Hinweise",
+          help="Sprechblase auf dem PC, sobald Gateway, Internet oder ein Ziel nicht antwortet, bei jedem verlorenen "
+               "Ping und wenn sich das Netzwerk ändert (IP-Adresse, Gateway, LAN/WLAN). Braucht das Wachtl-Symbol."),
     Field("topo_quick_s", "Port-Status der Switches prüfen alle", "int", 60, 0, 900, unit="s", group="Switch-Topologie",
           help="Schnelle Abfrage: Link, Geschwindigkeit und Fehler je Port. 0 = aus (dann nur bei der vollständigen Abfrage)."),
     Field("topo_full_min", "Switches vollständig abfragen alle", "int", 5, 1, 60, unit="min", group="Switch-Topologie",

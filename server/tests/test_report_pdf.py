@@ -261,6 +261,7 @@ class ReportPdfTest(ReportBase):
         self.wan(t, 5)
         self.event("WachtlTargetDown", self.p1, t + 600, 300, "target", "fileserver", "9")
         self.event("WachtlPacketLossCritical", self.p1, t + 900, 400, "reference", "1.1.1.1", "3")
+        self.event("WachtlPacketLossAny", self.p2, t + 5000, 2, "reference", "8.8.8.8", "2")  # einzelner verlorener Ping
         self.finding(self.p2, "link_flapping", t)
         self.user_report(self.p1, t + 10, "Teams <b>bricht</b> ab")
         hops = [{"hop": 1, "ip": "192.168.1.1"}, {"hop": 2, "ip": "62.155.1.1"}, {"hop": 3, "ip": "1.1.1.1"}]

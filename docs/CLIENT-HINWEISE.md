@@ -1,5 +1,9 @@
 # Client-Hinweise: Wachtl erkennt Probleme am PC selbst
 
+Ausfälle von Gateway, Internet und Zielen, jeder verlorene Ping und Netzwerkwechsel erscheinen ebenfalls als
+Sprechblase – siehe [BENACHRICHTIGUNGEN.md](BENACHRICHTIGUNGEN.md). Diese Seite beschreibt die Hinweise zu
+Netzwerkkarte, Kabel, Treiber und IP-Einstellungen.
+
 Die Probe prüft auf jedem PC laufend Netzwerkkarte, Kabel, Treiber und IP-Einstellungen. Findet sie etwas,
 das Störungen verursacht, erscheint neben der Uhr eine **Sprechblase** mit klarer Meldung und Lösungsvorschlag.
 Derselbe Hinweis geht an den Wachtl-Server und steht dort auf der Übersicht, beim Standort und bei der Probe.
@@ -46,11 +50,16 @@ Probe den Geräte-Manager sofort neu.
   App-Benachrichtigungen und in der ersten Stunde nach der Anmeldung. Das Fenster nimmt keinen Fokus, bleibt
   stehen, solange die Maus darauf liegt, und schließt sich sonst nach 15 s. Bei Spielen im Vollbild und
   Präsentationen wartet der Hinweis, bis sie beendet sind.
-- Rot für kritisch, Gelb für Warnung, Blau für die Entwarnung.
+- Rot für kritisch, Gelb für Warnung, Blau für Info und Entwarnung. Jeder neue Hinweis erscheint, auch „Info“
+  (z. B. Kabel getrennt, während das WLAN übernimmt).
+- Solange ein Hinweis aktiv ist, trägt das Wachtl-Symbol einen roten bzw. gelben Punkt.
+- **Test-Hinweis anzeigen** im Menü prüft, ob Hinweise auf diesem PC sichtbar sind.
 - Text: eine Kurzfassung mit Problem und Lösungsvorschlag (passt in die 255 Zeichen, die Windows erlaubt). Ein Klick zeigt die ausführliche Fassung.
 - Im Menü des Symbols zeigt **Netzwerk-Hinweise …** alle aktiven Hinweise.
 - Höchstens eine Sprechblase alle 15 s; mehrere gleichzeitig werden zusammengefasst.
-- Auch ohne Verbindung zum Server: Die Sprechblase kommt vom Dienst auf dem PC selbst. Die Meldung an den Server
+- Auch ohne Verbindung zum Server: Die Sprechblase kommt vom Dienst auf dem PC selbst.
+- Antwort des Dienstes je Eintrag zusätzlich `event` (einmaliges Ereignis, nicht in der Liste) und `quiet`
+  (nur Liste, keine Sprechblase). Die Meldung an den Server
   wird gespeichert (`findings-pending.json`, bis 200 Einträge) und nachgeliefert, sobald das Netz wieder da ist.
 
 ## Einstellungen

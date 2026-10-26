@@ -28,6 +28,9 @@ namespace Wachtl.Tray
         private readonly System.Windows.Forms.Timer _clickTimer;
         private readonly SynchronizationContext _ui;
         private readonly Icon _trayIcon;
+        private readonly Icon _warnIcon;
+        private readonly Icon _badIcon;
+        private int _iconRank = -1;
         private TrayStatus? _status;
         private bool _polling;
         private bool _findingsPolling;
@@ -50,6 +53,7 @@ namespace Wachtl.Tray
             reportItem.Font = new Font(_menu.Font, FontStyle.Bold);
             _findingsItem = new ToolStripMenuItem("Netzwerk-Hinweise …", null, (s, e) => ShowFindings());
             var aboutItem = new ToolStripMenuItem("Über Wachtl", null, (s, e) => OpenAbout());
+            var testItem = new ToolStripMenuItem("Test-Hinweis anzeigen", null, (s, e) => ShowNotice(FindingNotifier.TestBalloon()));
             _dashboardItem = new ToolStripMenuItem("Dashboard öffnen", null, (s, e) => OpenDashboard()) { Visible = false };
             var exitItem = new ToolStripMenuItem("Beenden", null, (s, e) => ExitThread());
             // Oben im Menü: Ping ins Internet, aktuelle Datenrate, letzter Speedtest – aktualisiert alle 2 s, solange es offen ist
@@ -60,7 +64,7 @@ namespace Wachtl.Tray
             }
 
             _menu.Items.Add(_liveSeparator);
-            _menu.Items.AddRange(new ToolStripItem[] { reportItem, _findingsItem, aboutItem, _dashboardItem, new ToolStripSeparator(), exitItem });
+            _menu.Items.AddRange(new ToolStripItem[] { reportItem, _findingsItem, testItem, aboutItem, _dashboardItem, new ToolStripSeparator(), exitItem });
             _liveTimer = new System.Windows.Forms.Timer { Interval = 2_000 };
             _liveTimer.Tick += (s, e) => RefreshStatus();
             _menu.Opening += (s, e) =>
@@ -72,6 +76,8 @@ namespace Wachtl.Tray
             _menu.Closed += (s, e) => _liveTimer.Stop();
 
             _trayIcon = AppIcons.Load(SystemInformation.SmallIconSize);
+            _warnIcon = AppIcons.WithBadge(SystemInformation.SmallIconSize, Color.FromArgb(0xE0, 0x9B, 0x00));
+            _badIcon = AppIcons.WithBadge(SystemInformation.SmallIconSize, Color.FromArgb(0xD9, 0x3A, 0x3A));
             _icon = new NotifyIcon
             {
                 Icon = _trayIcon,
@@ -150,7 +156,7 @@ namespace Wachtl.Tray
                 var status = await Task.Run(() => _client.GetStatus());
                 _status = status;
                 var state = status?.Connection ?? TrayConnection.ServiceDown;
-                _icon.Text = TrayTexts.Tooltip(state);
+                _icon.Text = Tooltip(state);
                 _dashboardItem.Visible = status != null && status.IsServer && !string.IsNullOrEmpty(status.DashboardUrl);
                 UpdateLive();
             }
@@ -195,6 +201,7 @@ namespace Wachtl.Tray
                         _findingsTimer.Interval = FindingsInterval;
                         _findingsItem.Visible = true;
                         _notifier.Accept(poll.Response!, DateTime.UtcNow);
+                        UpdateIcon();
                         ShowNextBalloon();
                         break;
                     case FindingsPollStatus.NotSupported:
@@ -227,12 +234,17 @@ namespace Wachtl.Tray
                 return;
             }
 
+            ShowNotice(balloon);
+        }
+
+        private void ShowNotice(Balloon balloon)
+        {
             _lastBalloon = balloon;
 
             // Eigenes Fenster statt _icon.ShowBalloonTip: Windows 11 verschluckt Sprechblasen bei „Nicht stören“ und
-            // ausgeschalteten Benachrichtigungen, ohne dass das Programm davon erfährt.
+            // ausgeschalteten Benachrichtigungen, ohne dass das Programm davon erfährt. Störungen bleiben länger stehen.
             _notice?.Close();
-            var notice = new NoticeForm(balloon, TimeSpan.FromSeconds(15));
+            var notice = new NoticeForm(balloon, TimeSpan.FromSeconds(balloon.Icon == BalloonIcon.Error ? 60 : 20));
             notice.Opened += (s, e) => ShowBalloonDetails();
             notice.FormClosed += (s, e) =>
             {
@@ -243,6 +255,31 @@ namespace Wachtl.Tray
             };
             _notice = notice;
             notice.Show();
+        }
+
+        /// <summary>Symbol und Tooltip nach dem schwersten aktiven Hinweis: Punkt rot (Störung) oder gelb (Warnung).</summary>
+        private void UpdateIcon()
+        {
+            var rank = _notifier.WorstActiveRank;
+            if (rank == _iconRank)
+            {
+                return;
+            }
+
+            _iconRank = rank;
+            _icon.Icon = rank >= 2 ? _badIcon : rank == 1 ? _warnIcon : _trayIcon;
+            _icon.Text = Tooltip(_status?.Connection ?? TrayConnection.Unknown);
+        }
+
+        private string Tooltip(TrayConnection state)
+        {
+            var text = TrayTexts.Tooltip(state);
+            if (_iconRank >= 1)
+            {
+                text = TrayTexts.Title + "\n" + (_iconRank >= 2 ? "Störung – Menü: Netzwerk-Hinweise" : "Warnung – Menü: Netzwerk-Hinweise");
+            }
+
+            return text.Length > 63 ? text.Substring(0, 63) : text;
         }
 
         [DllImport("shell32.dll")]
@@ -371,6 +408,8 @@ namespace Wachtl.Tray
                 _icon.Dispose();
                 _menu.Dispose();
                 _trayIcon.Dispose();
+                _warnIcon.Dispose();
+                _badIcon.Dispose();
             }
 
             base.Dispose(disposing);

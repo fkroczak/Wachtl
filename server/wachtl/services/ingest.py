@@ -14,7 +14,7 @@ import ipaddress
 import math
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 ALLOWED_METRICS = {
     "wachtl_ping_rtt_ms",
@@ -41,6 +41,8 @@ class IngestResult:
     accepted: int
     rejected: int
     reasons: dict[str, int]
+    # wachtl_ping_up je check_id: [(ts_ms, Wert)] – für die Störungserkennung (services/disturbances.py)
+    up: dict[str, list[tuple[int, float]]] = field(default_factory=dict)
 
 
 def _escape(value: str) -> str:
@@ -60,6 +62,7 @@ def process(body: str, probe: dict, checks: dict[str, dict], now_ms: int | None 
     now_ms = now_ms or int(time.time() * 1000)
     out: list[str] = []
     reasons: dict[str, int] = {}
+    up: dict[str, list[tuple[int, float]]] = {}
 
     def reject(reason: str) -> None:
         reasons[reason] = reasons.get(reason, 0) + 1
@@ -116,9 +119,11 @@ def process(body: str, probe: dict, checks: dict[str, dict], now_ms: int | None 
         }
         labels.update(hop_labels)
         out.append(f"{name}{{{_labels(labels)}}} {value_str} {ts}")
+        if name == "wachtl_ping_up":
+            up.setdefault(str(check["id"]), []).append((ts, value))
 
     rejected = sum(reasons.values())
-    return IngestResult(lines=out, accepted=len(out), rejected=rejected, reasons=reasons)
+    return IngestResult(lines=out, accepted=len(out), rejected=rejected, reasons=reasons, up=up)
 
 
 def _valid_hop(sent: dict[str, str], check: dict) -> dict[str, str] | None:

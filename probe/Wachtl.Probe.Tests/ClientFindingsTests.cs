@@ -767,6 +767,7 @@ public sealed class ClientFindingsTransportTests : IDisposable
         var old = JsonSerializer.Deserialize<ProbeConfig>("{\"probe_id\":1,\"checks\":[]}", ApiClient.JsonOptions)!;
         Assert.True(old.ClientFindings.Enabled);
         Assert.True(old.ClientFindings.Notify);
+        Assert.True(old.ClientFindings.Connectivity);
 
         var off = JsonSerializer.Deserialize<ProbeConfig>("{\"client_findings\":{\"enabled\":true,\"notify\":false}}", ApiClient.JsonOptions)!;
         Assert.True(off.ClientFindings.Enabled);

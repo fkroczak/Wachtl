@@ -29,6 +29,8 @@ def store_webhook(payload: dict) -> int:
     count = 0
     for a in payload.get("alerts", []):
         labels = a.get("labels", {})
+        if labels.get("disturbance"):
+            continue  # vom Server selbst erkannte Störung, steht schon sekundengenau in alert_events
         fingerprint = a.get("fingerprint") or json.dumps(labels, sort_keys=True)
         starts_at = _ts(a.get("startsAt")) or now()
         status = "resolved" if a.get("status") == "resolved" else "firing"

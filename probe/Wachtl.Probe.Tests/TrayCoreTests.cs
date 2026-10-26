@@ -159,15 +159,88 @@ public class TrayCoreTests
         Assert.Equal(BalloonIcon.Error, b.Icon);
         Assert.Equal("Netzwerkkabel getrennt", b.Title);
         Assert.Equal("Die Netzwerkkarte „Ethernet“ hat keine Verbindung mehr.\nLösung: Kabel prüfen.", b.Text);
-        Assert.Null(n.Next(UtcNow.AddSeconds(30))); // info: keine Sprechblase
+        var info = n.Next(UtcNow.AddSeconds(30))!; // auch Info erscheint – nichts wird verschwiegen
+        Assert.Equal(BalloonIcon.Info, info.Icon);
+        Assert.Equal("b", Assert.Single(info.Items).FindingId);
 
         n.Accept(R(9, F(8, "a", state: "resolved", title: "Netzwerkkabel wieder verbunden"), F(9, "b", state: "resolved")), UtcNow);
-        var resolved = n.Next(UtcNow.AddSeconds(30))!;
+        var resolved = n.Next(UtcNow.AddSeconds(60))!;
         Assert.Equal(BalloonIcon.Info, resolved.Icon);
         Assert.Equal("Netzwerkkabel wieder verbunden", resolved.Title);
         Assert.DoesNotContain("Lösung", resolved.Text);
-        Assert.False(n.HasQueued); // b war nie gezeigt
+        Assert.Equal(1, n.QueuedCount); // b wurde gezeigt, also auch seine Erledigung
         Assert.Empty(n.Active);
+    }
+
+    [Fact]
+    public void ResolvedBeforeShownIsNotShownEvenForInfo()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        n.Accept(R(3, F(2, "a", severity: "info"), F(3, "a", severity: "info", state: "resolved")), UtcNow);
+        Assert.False(n.HasQueued);
+    }
+
+    [Fact]
+    public void EventsAreShownOnceAndNeverListedAsActive()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        var loss = F(2, "loss", severity: "warning", title: "Paketverlust zu 8.8.8.8");
+        loss.Event = true;
+        loss.Balloon = "1 Ping zu 8.8.8.8 ohne Antwort (10:00:01).";
+        var change = F(3, "net", severity: "info", title: "Netzwerkverbindung gewechselt");
+        change.Event = true;
+        n.Accept(R(3, loss, change), UtcNow);
+        Assert.Empty(n.Active);
+        Assert.Equal(-1, n.WorstActiveRank);
+        var b = n.Next(UtcNow)!;
+        Assert.Equal(BalloonIcon.Warning, b.Icon);
+        Assert.Equal("1 Ping zu 8.8.8.8 ohne Antwort (10:00:01).", b.Text);
+        Assert.Contains("(um ", FindingNotifier.DetailText(b.Items));
+        Assert.Equal(BalloonIcon.Info, n.Next(UtcNow.AddSeconds(15))!.Icon);
+        Assert.False(n.HasQueued);
+    }
+
+    [Fact]
+    public void EventsBeforeTrayStartAreNotReplayed()
+    {
+        var n = new FindingNotifier();
+        var loss = F(2, "loss", severity: "warning", detected: NowS - 5);
+        loss.Event = true;
+        n.Accept(R(2, loss), UtcNow);
+        Assert.False(n.HasQueued);
+    }
+
+    [Fact]
+    public void QuietFindingsAreListedButNotShown()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        var quiet = F(2, "a");
+        quiet.Quiet = true;
+        n.Accept(R(2, quiet), UtcNow);
+        Assert.False(n.HasQueued);
+        Assert.Single(n.Active);
+        Assert.Equal(2, n.WorstActiveRank);
+    }
+
+    [Fact]
+    public void ParsesEventAndQuietFlags()
+    {
+        var json = "{\"notify\":true,\"latest_seq\":3,\"findings\":[{\"seq\":3,\"finding_id\":\"x\",\"severity\":\"warning\"," +
+                   "\"state\":\"active\",\"title\":\"t\",\"detected_at\":1792230000,\"event\":true,\"quiet\":true}]}";
+        var f = Assert.Single(FindingsPoll.Interpret(200, json).Response!.Findings!);
+        Assert.True(f.Event);
+        Assert.True(f.Quiet);
+    }
+
+    [Fact]
+    public void TestBalloonIsAWarning()
+    {
+        var b = FindingNotifier.TestBalloon();
+        Assert.Equal(BalloonIcon.Warning, b.Icon);
+        Assert.True(b.Text.Length <= FindingNotifier.MaxBalloonText);
     }
 
     [Fact]

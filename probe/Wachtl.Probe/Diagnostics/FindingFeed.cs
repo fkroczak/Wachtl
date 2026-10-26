@@ -15,6 +15,12 @@ public sealed class TrayFindingItem
     public string Adapter { get; init; } = string.Empty;
     public long DetectedAt { get; init; }
     public long? ResolvedAt { get; init; }
+
+    /// <summary>Einmaliges Ereignis: nur als Sprechblase, nicht in der Liste aktiver Hinweise (Tray ab 1.0).</summary>
+    public bool Event { get; init; }
+
+    /// <summary>Ohne Sprechblase, nur in der Liste (Sprechblasen für Netzwerkkarten-Hinweise abgeschaltet).</summary>
+    public bool Quiet { get; init; }
 }
 
 /// <summary>Antwort von GET /tray/v1/findings?since=&lt;seq&gt;.</summary>
@@ -41,7 +47,7 @@ public sealed class FindingFeed
     public const int MaxEntries = 50;
 
     private readonly object _lock = new();
-    private readonly Dictionary<string, (long Seq, ClientFinding Finding)> _entries = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (long Seq, ClientFinding Finding, bool Quiet)> _entries = new(StringComparer.Ordinal);
     private readonly long _start;
     private long _seq;
 
@@ -64,12 +70,12 @@ public sealed class FindingFeed
         }
     }
 
-    public long Publish(ClientFinding finding)
+    public long Publish(ClientFinding finding, bool quiet = false)
     {
         lock (_lock)
         {
             var seq = ++_seq;
-            _entries[finding.FindingId] = (seq, finding);
+            _entries[finding.FindingId] = (seq, finding, quiet || finding.Quiet);
             if (_entries.Count > MaxEntries)
             {
                 foreach (var old in _entries.OrderBy(e => e.Value.Seq).Take(_entries.Count - MaxEntries).Select(e => e.Key).ToList())
@@ -117,6 +123,8 @@ public sealed class FindingFeed
                         Adapter = e.Finding.Adapter,
                         DetectedAt = e.Finding.DetectedAt,
                         ResolvedAt = e.Finding.ResolvedAt,
+                        Event = e.Finding.Event,
+                        Quiet = e.Quiet,
                     })
                     .ToList(),
             };

@@ -38,7 +38,7 @@ const PAGES = [
   ["Bandbreite", `/probes/${ids.probe}/bandwidth/${ids.wan_check}`],
   ["Sprache (RTP)", `/probes/${ids.probe}/rtp/${ids.rtp_check}`],
   ["Alarme", "/alerts"],
-  ["Ausfälle", "/outages"],
+  ["Störungen", "/outages"],
   ["Meldungen", "/meldungen?status=all"],
   ["PDF-Bericht", "/bericht"],
   ["Verwaltung", "/admin"],

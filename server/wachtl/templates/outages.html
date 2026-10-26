@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Ausfälle{% endblock %}
+{% block title %}Störungen{% endblock %}
 {% block content %}
-<h1>Ausfälle</h1>
+<h1>Störungen</h1>
 <p><a class="button" href="{{ url_for('web.report_view', site=request.args.get('site') or None) }}">PDF-Bericht für den Provider erstellen</a></p>
-<p class="muted">Hier stehen alle Störungen aus den Alarmen, nach Ursache sortiert. Folgestörungen sind {{ 'eingeblendet' if show_all else 'ausgeblendet' }}.
+<p class="muted">Hier stehen alle Störungen nach Ursache: Ausfälle und jeder verlorene Ping. Auch Störungen, deren Messwerte erst später ankamen (PC war selbst ohne Netz), werden nachträglich erkannt. Folgestörungen sind {{ 'eingeblendet' if show_all else 'ausgeblendet' }}.
   Beispiel: Fällt das Gateway aus, ist auch das Internet weg. Das zählt nur einmal.
   {% if min_s %}Störungen unter {{ min_s|duration }} werden nicht gezeigt.{% endif %}</p>
 
@@ -44,8 +44,8 @@
       <td>{% if o.cause not in ('probe', 'wan') %}{% if o.probe|int and o.check_id|int %}<a href="{{ url_for('web.target', probe_id=o.probe|int, check_id=o.check_id|int) }}" aria-label="{{ o.target }} von {{ o.probe_name }}">{{ o.target }}</a>{% else %}{{ o.target }}{% endif %}{% endif %}</td>
       <td class="small">{{ o.summary }}</td>
     </tr>
-  {% else %}<tr><td colspan="{{ 6 if single_site else 7 }}" class="muted">Keine Ausfälle im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
+  {% else %}<tr><td colspan="{{ 6 if single_site else 7 }}" class="muted">Keine Störungen im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
 </table>
 </div>
-<p class="muted small">Der Beginn ist der Zeitpunkt der Alarmauslösung – je nach Regel einige Sekunden nach dem ersten fehlgeschlagenen Ping.</p>
+<p class="muted small">Beginn und Dauer sind sekundengenau aus den Rohdaten (erster bis letzter Ping ohne Antwort).</p>
 {% endblock %}
