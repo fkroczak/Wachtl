@@ -33,7 +33,7 @@ module.exports = {
         "total-blocking-time": ["error", { maxNumericValue: 200, aggregationMethod: "median" }],
         "total-byte-weight": ["error", { maxNumericValue: 170 * 1024, aggregationMethod: "median" }],  // 0.10: Graph-Seite ~161 KB (+8 KB CSS)
         "resource-summary:script:size": ["error", { maxNumericValue: 30 * 1024 }],
-        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 38 * 1024 }],  // 0.9.4: + Hamburger-Menü am Handy (~36,6 KB)
+        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 38 * 1024 }],  // 0.10: UniFi-Design, Seitenleiste, Reiter, Hamburger-Menü (~36 KB)
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
         // nur Warnung
         "first-contentful-paint": ["warn", { maxNumericValue: 1500, aggregationMethod: "median" }],
