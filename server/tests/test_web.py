@@ -231,8 +231,8 @@ class WebTest(AppTestCase):
         self.assertIn("nicht hinterlegt", r.get_data(as_text=True))
         self.assertEqual(self.client.get("/zertifikat/wachtl.crt").status_code, 404)
         with tempfile.TemporaryDirectory() as tmp:
-            crt = Path(tmp) / "c.pem"
-            certs.create_certificate(["wachtl.kunde.local"], Path(tmp) / "k.pem", crt)
+            crt = Path(tmp) / "wachtl.crt"
+            certs.create_certificate(["wachtl.kunde.local"], Path(tmp) / "wachtl.key", crt)
             self.app.config["CERT_FILE"] = str(crt)
             html = self.client.get("/zertifikat").get_data(as_text=True)
             self.assertIn("Fingerabdruck", html)
@@ -240,7 +240,11 @@ class WebTest(AppTestCase):
             r = self.client.get("/zertifikat/wachtl.crt")
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r.mimetype, "application/x-x509-ca-cert")
-            self.assertEqual(x509.load_der_x509_certificate(r.data), certs.load_certificate(crt))
+            # zum Herunterladen die Wachtl-CA, nicht das kurzlebige Server-Zertifikat
+            self.assertEqual(x509.load_der_x509_certificate(r.data), certs.root_certificate(crt))
+            self.assertTrue(x509.load_der_x509_certificate(r.data).extensions
+                            .get_extension_for_class(x509.BasicConstraints).value.ca)
+            self.assertIn("Wachtl CA wachtl.kunde.local", html)
 
     def test_admin_resets_password_and_unlocks(self):
         self.make_user()

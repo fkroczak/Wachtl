@@ -64,15 +64,28 @@ Automatische, signierte Updates sind für Phase 4 geplant (Ed25519-signiertes Ma
 
 ## Zertifikat im Browser
 
-Wachtl stellt sich ein eigenes Zertifikat aus (10 Jahre). Damit Browser nicht warnen, muss es auf dem Gerät als
-vertrauenswürdige Stammzertifizierungsstelle hinterlegt sein. Es enthält eine **Namensbeschränkung** und gilt
-damit nur für die Namen und IP-Adressen des Wachtl-Servers – selbst wer den Schlüssel des Servers stiehlt, kann
-damit keine fremden Seiten fälschen. Ältere Zertifikate ohne Beschränkung stellt das Update einmal neu aus
-(gleicher Schlüssel, der Pin der Probes bleibt).
+Wachtl hat eine eigene Zertifizierungsstelle, die **Wachtl-CA**:
+
+| Datei (`certs/`) | Inhalt | Laufzeit |
+| --- | --- | --- |
+| `wachtl-ca.key`, `wachtl-ca.crt` | Wachtl-CA – kommt auf die Geräte als vertrauenswürdige Stammzertifizierungsstelle | 10 Jahre |
+| `wachtl.key`, `wachtl.crt` | Server-Zertifikat, von der CA ausgestellt; `wachtl.crt` enthält die Kette (Server, CA) | 397 Tage |
+
+- Das Server-Zertifikat erneuert sich **30 Tage vor Ablauf selbst** – Windows im laufenden Dienst (Prüfung alle
+  6 Stunden, ohne Neustart), Linux täglich per `/etc/cron.d/wachtl-zertifikat` (`deploy/zertifikat.sh`, Log in
+  `/var/log/wachtl-zertifikat.log`). Die Geräte merken davon nichts, sie vertrauen der CA. Mit 397 Tagen erfüllt
+  es auch die Regeln von Apple (macOS, iOS) und den Browsern.
+- Der Schlüssel des Server-Zertifikats bleibt immer gleich – der **Pin der Probes ändert sich nie**.
+- Die CA hat eine **Namensbeschränkung**: Sie stellt nur für die Namen und IP-Adressen des Wachtl-Servers gültige
+  Zertifikate aus. Selbst wer ihren Schlüssel stiehlt, kann damit keine fremden Seiten fälschen.
+- Neue Servernamen (Windows: Setup erneut ausführen; Linux: `WACHTL_HOST` und `./setup.sh`) stellen die CA mit
+  demselben Schlüssel neu aus. PCs mit Probe übernehmen sie innerhalb eines Tages (geplante Aufgabe), andere Geräte
+  brauchen sie neu von `/zertifikat`.
+- Bis 0.9.2 war das Zertifikat selbstsigniert (10 Jahre). Das Update stellt einmal auf die CA um, gleicher Pin.
 
 | Gerät | Wie |
 | --- | --- |
-| Windows-PC mit Probe | automatisch beim Probe-Setup, Entfernen bei der Deinstallation (beide Server-Varianten) |
+| Windows-PC mit Probe | automatisch beim Probe-Setup und täglich per geplanter Aufgabe „Wachtl Zertifikat“, Entfernen bei der Deinstallation (beide Server-Varianten) |
 | Windows-Server (Wachtl-Server) | automatisch beim Setup und jedem Update |
 | Windows ohne Probe | GPO (Computerkonfiguration › Richtlinien › Windows-Einstellungen › Sicherheitseinstellungen › Richtlinien für öffentliche Schlüssel › Vertrauenswürdige Stammzertifizierungsstellen) oder Datei von `/zertifikat` öffnen › Lokaler Computer |
 | macOS | Datei von `/zertifikat` › Schlüsselbund „System“ › „Immer vertrauen“, oder per MDM-Profil |
@@ -80,11 +93,8 @@ damit keine fremden Seiten fälschen. Ältere Zertifikate ohne Beschränkung ste
 | Android | Datei von `/zertifikat` › Einstellungen › Sicherheit › Zertifikat installieren › CA-Zertifikat |
 | Linux | `/usr/local/share/ca-certificates/wachtl.crt` + `update-ca-certificates`; Firefox/Chrome ggf. zusätzlich im eigenen Zertifikatspeicher |
 
-Die Seite `https://<Server>/zertifikat` (ohne Anmeldung, verlinkt auf der Anmeldeseite) bietet das Zertifikat zum
+Die Seite `https://<Server>/zertifikat` (ohne Anmeldung, verlinkt auf der Anmeldeseite) bietet die Wachtl-CA zum
 Herunterladen an, zeigt den SHA-256-Fingerabdruck zum Vergleichen und die Schritte je Gerät.
-
-Hinweis Apple: macOS und iOS lehnen TLS-Serverzertifikate mit mehr als 825 Tagen Laufzeit ab. Je nach Version
-kann Safari das Wachtl-Zertifikat (10 Jahre) deshalb trotz Vertrauensstellung ablehnen.
 
 ## Sicherheitskonzept
 
@@ -99,7 +109,7 @@ kann Safari das Wachtl-Zertifikat (10 Jahre) deshalb trotz Vertrauensstellung ab
 | Probe auf dem PC | Virtuelles Dienstkonto statt SYSTEM, ICMP ohne Adminrechte, Datenordner nur für SYSTEM/Administratoren/Dienst, keine eingehenden Ports |
 | Web-UI | Rollen Admin/Operator/Nur lesen, Passwörter mit scrypt (Länge frei wählbar), Sperre nach 5 Fehlversuchen für 15 min je Gerät (Browser-Sitzung, nie je IP); zusätzlich Konto-Sperre nach 20 Fehlversuchen, die Geräte mit früherer erfolgreicher Anmeldung nicht betrifft, CSRF-Schutz, Secure/HttpOnly-Cookies, Content-Security-Policy ohne externe Skripte |
 | Nachvollziehbarkeit | Audit-Log für Anmeldungen, Enrollment und jede Änderung (24 Monate) |
-| Geheimnisse | `.env` und `certs/wachtl.key` nur root-lesbar; Backups enthalten sie und müssen geschützt abgelegt werden |
+| Geheimnisse | `.env`, `certs/wachtl.key` und `certs/wachtl-ca.key` nur root-lesbar; Backups enthalten sie und müssen geschützt abgelegt werden |
 
 Firewall-, Proxy- und NAT-Szenarien: Probes bauen jede Verbindung selbst auf, NAT ist daher unkritisch. Proxys werden über `-Proxy` oder die Umgebungsvariable `HTTPS_PROXY` des Dienstes genutzt; eine TLS-Inspection muss den Wachtl-Server ausnehmen, sonst greift der Pin (gewollt).
 

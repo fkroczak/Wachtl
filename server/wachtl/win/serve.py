@@ -57,6 +57,13 @@ def internal_only(app):
     return wrapped
 
 
+def _mtime(path: str) -> float:
+    try:
+        return os.stat(path).st_mtime
+    except OSError:
+        return 0.0
+
+
 def tls_context(cert_file: str, key_file: str) -> ssl.SSLContext:
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2
@@ -70,6 +77,30 @@ class _Servers:
     def __init__(self):
         self.servers: list = []
         self.threads: list[threading.Thread] = []
+        self.tls: list[ssl.SSLContext] = []
+        self.cert_files: tuple[str, str] | None = None
+        self._cert_mtime = 0.0
+
+    def watch_certificate(self, cert_file: str, key_file: str) -> None:
+        self.cert_files = (cert_file, key_file)
+        self._cert_mtime = _mtime(cert_file)
+
+    def reload_certificate_if_changed(self) -> bool:
+        """Erneuertes Zertifikat für neue Verbindungen übernehmen – ohne Neustart, ohne Verbindungsabbruch."""
+        if not self.cert_files:
+            return False
+        mtime = _mtime(self.cert_files[0])
+        if mtime == self._cert_mtime:
+            return False
+        try:
+            for ctx in self.tls:
+                ctx.load_cert_chain(*self.cert_files)
+        except (OSError, ssl.SSLError):
+            log.exception("Neues Zertifikat konnte nicht geladen werden – das bisherige bleibt aktiv")
+            return False
+        self._cert_mtime = mtime
+        log.info("Zertifikat neu geladen: %s", self.cert_files[0])
+        return True
 
     def add(self, server, name: str) -> None:
         self.servers.append(server)
@@ -100,8 +131,11 @@ def build_servers(app, bind: str, https_port: int, http_port: int, internal_port
                   cert_file: str, key_file: str, dev: bool = False) -> _Servers:
     servers = _Servers()
     public = with_security_headers(app)
+    servers.watch_certificate(cert_file, key_file)
     if dev:
-        servers.add(_dev_server(bind, https_port, public, tls_context(cert_file, key_file)), "https")
+        ctx = tls_context(cert_file, key_file)
+        servers.tls.append(ctx)
+        servers.add(_dev_server(bind, https_port, public, ctx), "https")
         servers.add(_dev_server("127.0.0.1", internal_port, internal_only(app)), "internal")
         if http_port:
             servers.add(_dev_server(bind, http_port, redirect_app(https_port)), "http")
@@ -114,6 +148,7 @@ def build_servers(app, bind: str, https_port: int, http_port: int, internal_port
                         server_name="wachtl")
     adapter = BuiltinSSLAdapter(cert_file, key_file)
     adapter.context.minimum_version = ssl.TLSVersion.TLSv1_2
+    servers.tls.append(adapter.context)
     https.ssl_adapter = adapter
     servers.add(https, "https")
     servers.add(wsgi.Server(("127.0.0.1", internal_port), internal_only(app), numthreads=4,
@@ -172,8 +207,11 @@ def main() -> None:
     servers.start()
     log.info("Wachtl hört auf HTTPS :%s, HTTP :%s, intern 127.0.0.1:%s",
              env.get("WACHTL_HTTPS_PORT"), env.get("WACHTL_HTTP_PORT") or "aus", env.get("WACHTL_INTERNAL_PORT"))
+    ticks = 0
     while not stop.wait(1):
-        pass
+        ticks += 1
+        if ticks % 60 == 0:
+            servers.reload_certificate_if_changed()
     servers.stop()
     log.info("Webserver gestoppt")
 

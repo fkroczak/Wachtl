@@ -127,6 +127,7 @@ Filename: "notepad.exe"; Parameters: """{code:GetDataDir}\setup-info.txt"""; Des
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM wachtl-tray.exe"; Flags: runhidden waituntilterminated; RunOnceId: "StopTray"
 ; ---- Probe: zuerst am Server abmelden (Token wird dort ungültig), dann Dienst, Prozesse und Firewall-Regeln ----
 Filename: "{app}\wachtl-probe.exe"; Parameters: "deregister --out ""{commonappdata}\Wachtl\deregister.ini"""; Flags: runhidden waituntilterminated; RunOnceId: "Deregister"; Check: IsClient
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /F /TN ""Wachtl Zertifikat"""; Flags: runhidden waituntilterminated; RunOnceId: "DeleteTrustTask"; Check: IsClient
 Filename: "{app}\wachtl-probe.exe"; Parameters: "trust --remove 1"; Flags: runhidden waituntilterminated; RunOnceId: "Untrust"; Check: IsClient
 Filename: "{sys}\net.exe"; Parameters: "stop Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "StopWachtl"; Check: IsClient
 Filename: "{sys}\sc.exe"; Parameters: "delete Wachtl"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteWachtl"; Check: IsClient
@@ -1196,6 +1197,24 @@ begin
     Log('Wachtl Probe: Zertifikat nicht abgelegt (Code ' + IntToStr(Code) + '): ' + ResultValue(ResultFile, 'error'));
 end;
 
+// Täglich und nach dem Start als SYSTEM prüfen: holt nach, was beim Setup nicht ging (Server offline), und
+// übernimmt eine neu ausgestellte Wachtl-CA (z. B. nach neuen Servernamen). Der Dienst selbst darf das nicht.
+procedure ScheduleTrustTask();
+var
+  Script: String;
+begin
+  Script := '$a = New-ScheduledTaskAction -Execute ''' + ExpandConstant('{app}\wachtl-probe.exe') + ''' -Argument ''trust''; ' +
+    '$t = @((New-ScheduledTaskTrigger -Daily -At 12:00), (New-ScheduledTaskTrigger -AtStartup)); ' +
+    '$t[1].Delay = ''PT5M''; ' +
+    '$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries ' +
+    '-ExecutionTimeLimit (New-TimeSpan -Minutes 10); ' +
+    'Register-ScheduledTask -TaskName ''Wachtl Zertifikat'' -Action $a -Trigger $t -Settings $s -User ''SYSTEM'' ' +
+    '-RunLevel Highest -Force | Out-Null';
+  if RunHidden(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+               '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "' + Script + '"') <> 0 then
+    Log('Wachtl Probe: geplante Aufgabe „Wachtl Zertifikat“ konnte nicht angelegt werden.');
+end;
+
 procedure SetupClient();
 begin
   EnrollClient();
@@ -1213,7 +1232,10 @@ begin
   if not ClientOk then
     Log('Wachtl Probe: ' + ClientError)
   else
+  begin
     TrustServerCertificate();
+    ScheduleTrustTask();
+  end;
 end;
 
 // ============================================================ Server einrichten
@@ -1361,6 +1383,9 @@ begin
   if Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall show rule "name=Wachtl Probe RTP"', '', SW_HIDE,
           ewWaitUntilTerminated, Code) and (Code = 0) then
     Result := Result + '- Firewall-Regel „Wachtl Probe RTP“ ist noch vorhanden' + #13#10;
+  if Exec(ExpandConstant('{sys}\schtasks.exe'), '/Query /TN "Wachtl Zertifikat"', '', SW_HIDE, ewWaitUntilTerminated, Code)
+     and (Code = 0) then
+    Result := Result + '- Geplante Aufgabe „Wachtl Zertifikat“ ist noch vorhanden' + #13#10;
 end;
 
 procedure UninstallClientDone();
