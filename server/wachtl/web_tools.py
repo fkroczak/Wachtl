@@ -32,7 +32,8 @@ def tools():
         tool = "ping"
     history = [{**j, "label": tool_service.TOOLS[j["tool"]][0]} for j in tool_service.recent(15)]
     return render_template("tools.html", probes=probes, current=current, tool=tool, TOOLS=tool_service.TOOLS,
-                           DNS_TYPES=tool_service.DNS_TYPES, history=history,
+                           DNS_TYPES=tool_service.DNS_TYPES, SERVER_ONLY=sorted(tool_service.SERVER_ONLY),
+                           history=history,
                            prefill=request.args.get("ziel", "")[:200])
 
 
@@ -40,10 +41,15 @@ def tools():
 @login_required("operator", api=True)
 def tool_start():
     data = request.get_json(silent=True) or request.form.to_dict()
-    probe = q1("SELECT * FROM probes WHERE id = ? AND status = 'active'", (int(data.get("probe") or 0),))
+    tool = str(data.get("tool") or "")
+    if tool in tool_service.SERVER_ONLY:
+        probe = q1("SELECT * FROM probes WHERE kind = 'server' AND status = 'active' ORDER BY id LIMIT 1")
+        if probe is None:
+            return jsonify(error="Dieses Werkzeug läuft auf dem Wachtl-Server – die Server-Probe ist nicht aktiv."), 400
+    else:
+        probe = q1("SELECT * FROM probes WHERE id = ? AND status = 'active'", (int(data.get("probe") or 0),))
     if probe is None:
         return jsonify(error="Bitte eine aktive Probe wählen."), 400
-    tool = str(data.get("tool") or "")
     try:
         target, args = tool_service.clean(tool, data)
     except tool_service.ToolError as exc:

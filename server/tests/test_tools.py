@@ -181,3 +181,53 @@ class ServerProbeToolsTest(unittest.TestCase):
         probe_tools.run({"id": 1, "tool": "unbekannt", "args": {}}, sent.append)
         self.assertEqual((sent[-1]["done"], sent[-1]["ok"]), (True, False))
         self.assertIn("nicht unterstützt", sent[-1]["error"])
+
+
+class IpInfoTest(AppTestCase):
+    REGISTRY = {"netz": "203.0.113.0/24", "von": "203.0.113.0", "bis": "203.0.113.255", "netzname": "BEISPIEL-NET",
+                "anbieter": "Beispiel Carrier GmbH", "inhaber": "Kunde AG", "art": "ASSIGNED PA", "status": [],
+                "land": "DE", "asn": "AS64500", "ereignisse": {"registration": "2020-01-02"},
+                "kontakte": {"abuse": {"fn": "Abuse Team", "email": "abuse@carrier.example"}}, "hinweise": [],
+                "quelle": "RDAP rdap.db.ripe.net"}
+
+    def test_lookup_and_private(self):
+        ok, res, err, steps = run(probe_tools.tool_ipinfo, {"host": "194.25.0.60"},
+                                  lookup=lambda ip: (dict(self.REGISTRY), ""), ptr=lambda ip: "kunde.example")
+        self.assertTrue(ok, err)
+        self.assertEqual(res["headline"], "Beispiel Carrier GmbH · AS64500 · DE")
+        rows = {r[0]: r[1] for r in res["summary"]}
+        self.assertEqual(rows["Anbieter"], "Beispiel Carrier GmbH (laut AS-Objekt)")
+        self.assertEqual(rows["Netz-Inhaber"], "Kunde AG (Eintrag des Netzes bei der Registry)")
+        self.assertEqual(rows["Missbrauch"], "Abuse Team · abuse@carrier.example")
+        self.assertEqual(rows["Rückwärtsname"], "kunde.example")
+        ok, res, _err, _ = run(probe_tools.tool_ipinfo, {"host": "192.168.1.10"},
+                               lookup=lambda ip: self.fail("private Adressen nicht abfragen"), ptr=lambda ip: None)
+        self.assertTrue(ok)
+        self.assertEqual(res["verdict"], "warn")
+        ok, _res, err, _ = run(probe_tools.tool_ipinfo, {"host": "194.25.0.60"},
+                               lookup=lambda ip: (None, "HTTP 503"), ptr=lambda ip: None)
+        self.assertFalse(ok)
+
+    def test_runs_on_server_probe(self):
+        from wachtl.db import ins
+        from wachtl import repo
+
+        probe = self.enroll()
+        site = q1("SELECT site_id FROM probes WHERE id = ?", (probe["probe_id"],))["site_id"]
+        self.make_user()
+        self.login()
+        import re
+
+        csrf = re.search(r'name="csrf-token" content="([^"]+)"',
+                         self.client.get("/werkzeuge").get_data(as_text=True)).group(1)
+        start = lambda: self.client.post("/werkzeuge/start", headers={"X-CSRF-Token": csrf},  # noqa: E731
+                                         json={"probe": probe["probe_id"], "tool": "ipinfo", "host": "203.0.113.10"})
+        r = start()
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Server-Probe", r.get_json()["error"])
+        server = ins("INSERT INTO probes (site_id, hostname, token_hash, status, kind, created_at, last_seen) "
+                     "VALUES (?, 'wachtl-server', 'x', 'active', 'server', ?, ?)", (site, repo.now(), repo.now()))
+        r = start()
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.get_json()["job"]["probe_id"], server)   # PC gewählt, läuft trotzdem auf dem Server
+        self.assertIn("IP-Info", self.client.get("/werkzeuge").get_data(as_text=True))

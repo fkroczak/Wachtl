@@ -1,6 +1,6 @@
 # Werkzeuge
 
-Menüpunkt **Werkzeuge**: Einzeltests wie in Hop7 – **Ping, MTU, Traceroute, DNS, Port, HTTP(S) und Zertifikat** –
+Menüpunkt **Werkzeuge**: Einzeltests wie in Hop7 – **Ping, MTU, Traceroute, DNS, Port, HTTP(S), Zertifikat und IP-Info** –
 direkt von einer Probe aus. So prüft man genau den Weg, den die Probe im Alltag nimmt: vom Wachtl-Server oder von
 einem PC beim Kunden.
 
@@ -33,6 +33,20 @@ Ergebnisse.
 | **Port** | bis zu 10 TCP-Ports, Wartezeit | offen, geschlossen (abgewiesen) oder gefiltert (keine Antwort) mit Antwortzeit |
 | **HTTP(S)** | Methode HEAD oder GET, Zertifikatsfehler ignorieren | Statuscode, Zeiten (DNS, Verbindung, TLS, erstes Byte, gesamt), Weiterleitung, Server, Zertifikat |
 | **Zertifikat** | Port, Servername (SNI) | Namen, Aussteller, Ablauf (gelb unter 21 Tagen), Vertrauen, Protokoll |
+| **IP-Info** | IP oder Host | je Adresse Rückwärtsname, Netz, Netzname, Anbieter (laut AS-Objekt), Netz-Inhaber, Land, Herkunfts-AS, Kontakte (Inhaber, Verwaltung, Technik, Missbrauch), Quelle |
+
+### IP-Info
+
+Übernommen aus Hop7: Wachtl fragt **direkt die zuständige Registry** (RIPE NCC, ARIN, APNIC, LACNIC, AFRINIC) per
+RDAP, ersatzweise per WHOIS über TCP 43 – ohne Dienst eines Dritten, kein Anbieter sieht, welche Adressen geprüft
+werden. Welche Registry zuständig ist, steht in der Liste der IANA (14 Tage zwischengespeichert). Umleitungen folgt
+Wachtl nur zu Registries und nur über HTTPS. Den Anbieter nimmt Wachtl aus dem AS-Objekt (wer das Netz ankündigt);
+der Kontakt im Netz-Objekt erscheint als „Netz-Inhaber“. Antworten werden je Netz 30 Tage im Datenverzeichnis der
+Server-Probe gespeichert (`registry/`), zwischen zwei Abfragen liegt mindestens eine Sekunde.
+
+IP-Info läuft immer auf dem **Wachtl-Server** (die Auswahl „Ausführen auf“ ist dann gesperrt). Er braucht dafür
+ausgehend HTTPS zu `data.iana.org` und den RDAP-Servern der Registries sowie TCP 43 zu deren WHOIS-Servern.
+Private Adressen haben keinen Eintrag bei einer Registry.
 
 Die ICMP-Werkzeuge (Ping, MTU, Traceroute) arbeiten mit IPv4. Wachtl nimmt nur diese Werkzeuge mit geprüften Werten an,
 nie Befehle oder freie Parameter.

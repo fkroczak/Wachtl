@@ -634,9 +634,88 @@ def tool_http(a: dict, report: Report) -> Result:
                   "verdict": "ok" if code < 400 else "warn" if code < 500 else "bad", "summary": rows}, None
 
 
+# -- IP-Info (aus Hop7) ---------------------------------------------------------------------
+def tool_ipinfo(a: dict, report: Report, lookup=None, resolve=None, ptr=_ptr) -> Result:
+    """Netz, Anbieter, Herkunfts-AS, Land und Kontakte – direkt bei der Registry (serverprobe/ipinfo.py)."""
+    from . import ipinfo
+
+    lookup = lookup or ipinfo.netz_info
+    host = a["host"]
+    try:
+        addrs = [str(ipaddress.ip_address(host))]
+    except ValueError:
+        try:
+            infos = (resolve or socket.getaddrinfo)(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            addrs = sorted({i[4][0] for i in infos}, key=lambda x: (":" in x, x))
+        except OSError:
+            return False, {}, f"{host} lässt sich nicht auflösen."
+    rows: list[list[str]] = []
+    first: dict | None = None
+    addrs = addrs[:4]
+    for n, addr in enumerate(addrs):
+        ia = ipaddress.ip_address(addr)
+        rows.append(["Adresse", f"{addr} (IPv{ia.version})", ""])
+        name = ptr(addr)
+        rows.append(["Rückwärtsname", name or "–", ""])
+        report(line=f"Adresse: {addr} – Rückwärtsname {name or '–'}")
+        if not ia.is_global:
+            rows.append(["Art", "private oder besondere Adresse – kein Eintrag bei einer Registry", "warn"])
+            continue
+        report(progress=(n + 0.2) / len(addrs), step=f"Registry-Abfrage für {addr} …")
+        d, fehler = lookup(addr)
+        if not d:
+            rows.append(["Registry", f"keine Auskunft ({fehler})", "bad"])
+            report(line=f"  Registry: keine Auskunft ({fehler})")
+            continue
+        first = first or d
+        bereich = f" ({d['von']} – {d['bis']})" if d.get("von") and d.get("bis") and d.get("netz") else ""
+        rows.append(["Netz", f"{d.get('netz') or d.get('von') or '–'}{bereich}", ""])
+        if d.get("netzname"):
+            rows.append(["Netzname", d["netzname"], ""])
+        if d.get("anbieter"):
+            via_as = d.get("asn") and d.get("inhaber") and d.get("inhaber") != d["anbieter"]
+            rows.append(["Anbieter", d["anbieter"] + (" (laut AS-Objekt)" if via_as else ""), "good"])
+        if d.get("inhaber") and d["inhaber"] != d.get("anbieter"):
+            rows.append(["Netz-Inhaber", f"{d['inhaber']} (Eintrag des Netzes bei der Registry)", ""])
+        art = " · ".join(t for t in [d.get("art", ""), ", ".join(d.get("status", []))] if t)
+        if art:
+            rows.append(["Art", art, ""])
+        if d.get("land"):
+            rows.append(["Land", d["land"], ""])
+        if d.get("asn"):
+            rows.append(["Herkunfts-AS", f"{d['asn']} (aus den Routing-Objekten der Registry)", ""])
+        elif d.get("asn_grund"):
+            rows.append(["Herkunfts-AS", f"nicht ermittelt – {d['asn_grund']}", "warn"])
+        ev = d.get("ereignisse", {})
+        wann = " · ".join(t for t in [f"eingetragen {ev['registration']}" if ev.get("registration") else "",
+                                      f"zuletzt geändert {ev['last changed']}" if ev.get("last changed") else ""] if t)
+        if wann:
+            rows.append(["Eintrag", wann, ""])
+        shown = {d.get("inhaber", ""), d.get("anbieter", "")}
+        for role, title in (("registrant", "Inhaber"), ("administrative", "Verwaltung"), ("technical", "Technik"),
+                            ("abuse", "Missbrauch")):
+            line = ipinfo._kontakt_zeile(d.get("kontakte", {}).get(role) or {})
+            if line and line not in shown:
+                shown.add(line)
+                rows.append([title, line, ""])
+        for h in d.get("hinweise", [])[:2]:
+            rows.append(["Hinweis", h[:160], ""])
+        rows.append(["Quelle", d.get("quelle", "–"), ""])
+        report(progress=(n + 1) / len(addrs), line="  " + " · ".join(
+            t for t in [d.get("netz", ""), d.get("anbieter", ""), d.get("asn", ""), d.get("land", "")] if t))
+    if first:
+        headline = " · ".join(t for t in [first.get("anbieter", ""), first.get("asn", ""), first.get("land", "")] if t)
+        verdict = "ok"
+    elif all(not ipaddress.ip_address(x).is_global for x in addrs):
+        headline, verdict = "Private Adresse – kein Eintrag bei einer Registry", "warn"
+    else:
+        return False, {"summary": rows}, "Keine Registry hat geantwortet."
+    return True, {"headline": headline or "Eintrag gefunden", "verdict": verdict, "summary": rows}, None
+
+
 TOOLS: dict[str, Callable[[dict, Report], Result]] = {
     "ping": tool_ping, "mtu": tool_mtu, "trace": tool_trace, "dns": tool_dns, "port": tool_port,
-    "http": tool_http, "tls": tool_tls,
+    "http": tool_http, "tls": tool_tls, "ipinfo": tool_ipinfo,
 }
 
 

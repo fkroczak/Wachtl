@@ -14,7 +14,7 @@
 </section>
 {% else %}
 <form class="settings-form tool-form" data-tool-form data-start="{{ url_for('web.tool_start') }}"
-      data-job="{{ url_for('web.tool_job', job_id=0) }}" novalidate>
+      data-job="{{ url_for('web.tool_job', job_id=0) }}" data-server-only="{{ SERVER_ONLY|join(' ') }}" novalidate>
   <fieldset>
     <legend>Werkzeug</legend>
     <div class="tool-pick">
@@ -32,7 +32,7 @@
       {% call(attrs) field("host", TOOLS[tool][1], help="Hostname, IP-Adresse oder – bei HTTP(S) – die vollständige Adresse.") %}
         <input name="host" maxlength="500" autocomplete="off" required value="{{ prefill }}" placeholder="{{ TOOLS[tool][2] }}" {{ attrs }}>
       {% endcall %}
-      {% call(attrs) field("probe", "Ausführen auf", help="Die Probe holt den Test ab; ein PC meldet sich spätestens alle 30 s.") %}
+      {% call(attrs) field("probe", "Ausführen auf", help="Die Probe holt den Test ab; ein PC meldet sich spätestens alle 30 s. IP-Info läuft immer auf dem Wachtl-Server.") %}
         <select name="probe" {{ attrs }}>
           {% for p in probes %}<option value="{{ p.id }}"{% if current and p.id == current.id %} selected{% endif %}>
             {{ 'Wachtl-Server' if p.kind == 'server' else p.hostname }}{% if not single_site %} · {{ p.site_name }}{% endif %}{% if not p.online %} (offline){% endif %}</option>{% endfor %}
