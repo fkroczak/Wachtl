@@ -182,9 +182,9 @@ var
   { Server }
   AddressPage, AdminPage, NotifyPage: TInputQueryWizardPage;
   StoragePage: TInputDirWizardPage;
-  RawDaysEdit, AggMonthsEdit, PinEdit: TNewEdit;
+  RawDaysEdit, AggMonthsEdit: TNewEdit;
   ServerUpgrade, ServerOk: Boolean;
-  ExistingDataDir, ResultUrl, ResultPin, ResultError: String;
+  ExistingDataDir, ResultUrl, ResultError: String;
   { Deinstallation }
   UninstallServer: Boolean;
   UninstallDataDir: String;
@@ -717,11 +717,6 @@ begin
   AggMonthsEdit.Top := L2.Top + L2.Height + ScaleY(4);
   AggMonthsEdit.Width := ScaleX(80);
   AggMonthsEdit.Text := GetParam('AggMonths', '13');
-
-  PinEdit := TNewEdit.Create(WizardForm);
-  PinEdit.Parent := WizardForm.FinishedPage;
-  PinEdit.ReadOnly := True;
-  PinEdit.Visible := False;
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -1031,15 +1026,10 @@ begin
       WizardForm.FinishedLabel.Caption :=
         'Adresse: ' + ResultUrl + #13#10#13#10 +
         'Anmeldung als „admin“ mit dem gewählten Passwort.' + #13#10#13#10 +
-        'Probes installieren: im Web-UI unter Verwaltung › Probes registrieren „Setup herunterladen“. ' +
-        'SPKI-Pin (auch in setup-info.txt):';
+        'Probes installieren: im Web-UI unter Verwaltung › Probes registrieren „Setup herunterladen“ ' +
+        '(Server, Pin und Token sind darin eingebaut).';
       WizardForm.FinishedLabel.AdjustHeight();
-      PinEdit.Left := WizardForm.FinishedLabel.Left;
-      PinEdit.Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + ScaleY(8);
-      PinEdit.Width := WizardForm.FinishedLabel.Width;
-      PinEdit.Text := ResultPin;
-      PinEdit.Visible := True;
-      WizardForm.RunList.Top := PinEdit.Top + PinEdit.Height + ScaleY(16);
+      WizardForm.RunList.Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + ScaleY(16);
     end
     else
     begin
@@ -1305,7 +1295,6 @@ begin
 
   ServerOk := (Code = 0) and (GetIniString('result', 'ok', '0', ResultFile) = '1');
   ResultUrl := GetIniString('result', 'url', '', ResultFile);
-  ResultPin := GetIniString('result', 'pin', '', ResultFile);
   ResultError := GetIniString('result', 'error', '', ResultFile);
   StringChangeEx(ResultError, '\n', #13#10, True);
   if ServerOk then

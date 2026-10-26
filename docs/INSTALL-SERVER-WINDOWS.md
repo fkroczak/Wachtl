@@ -40,7 +40,7 @@ Das Setup erledigt anschließend:
 - Geplante Aufgabe „Wachtl Server Backup“ täglich 02:15 Uhr
 - Dienst starten und warten, bis er antwortet
 
-Die letzte Seite zeigt Adresse und **SPKI-Pin** (zum Kopieren). Beides steht auch in `setup-info.txt` im Datenordner.
+Die letzte Seite zeigt die Adresse. Zugangsdaten und **SPKI-Pin** stehen in `setup-info.txt` im Datenordner (Haken „Zugangsdaten und SPKI-Pin anzeigen“ öffnet die Datei); für vorbelegte Setups aus dem Web-UI braucht man den Pin nicht.
 Im Startmenü liegen „Wachtl Dashboard“, „Wachtl Status“, „Zugangsdaten“, „Logdateien“ und „Setups für die Probes“.
 Das Setup legt eine Kopie von sich selbst auf dem Server ab: Im Web-UI erzeugt **Verwaltung › Probes registrieren**
 daraus mit einem Klick ein vorbelegtes Setup für die PCs (alle Adressen, Pin und Token eingetragen).
