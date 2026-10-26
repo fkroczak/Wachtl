@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Probes{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='probes.css') }}">{% endblock %}
 {% from "_probe_cards.html" import probe_cards with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
