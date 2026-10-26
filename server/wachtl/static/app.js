@@ -16,6 +16,29 @@
     if (bar) window.location.href = bar.dataset.href;
   });
 
+  // Hamburger-Menü (schmal): öffnet von rechts, schließt mit Escape oder Klick daneben
+  const menuBtn = document.querySelector("[data-menu-toggle]");
+  const menu = document.querySelector("[data-menu]");
+  const backdrop = document.querySelector("[data-menu-backdrop]");
+  if (menuBtn && menu) {
+    const setMenu = (open) => {
+      menu.classList.toggle("open", open);
+      menuBtn.setAttribute("aria-expanded", String(open));
+      document.documentElement.classList.toggle("menu-open", open);
+      if (backdrop) backdrop.hidden = !open;
+      if (open) menu.querySelector("a, summary")?.focus();
+    };
+    menuBtn.addEventListener("click", () => setMenu(!menu.classList.contains("open")));
+    backdrop?.addEventListener("click", () => setMenu(false));
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && menu.classList.contains("open")) {
+        setMenu(false);
+        menuBtn.focus();
+      }
+    });
+    window.matchMedia("(min-width: 901px)").addEventListener("change", (ev) => ev.matches && setMenu(false));
+  }
+
   // Benutzermenü: schließt bei Klick daneben und mit Escape (Fokus zurück auf den Namen)
   const userMenu = document.querySelector("[data-usermenu]");
   if (userMenu) {
@@ -26,6 +49,7 @@
       if (ev.key === "Escape" && userMenu.open) {
         userMenu.open = false;
         userMenu.querySelector("summary").focus();
+        ev.stopPropagation();   // Hamburger-Menü bleibt offen
       }
     });
   }
