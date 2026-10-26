@@ -78,6 +78,7 @@ class ServerProbe:
         state = read_json(self.state_dir / STATE_FILE)
         if state and state.get("token"):
             self.api = Api(self.url, self.pin, state["token"])
+            self.notices.own_probe = str(state.get("probe_id") or "") or None
             return True
         enroll = read_json(self.state_dir / ENROLL_FILE)
         if not enroll or not enroll.get("token"):
@@ -91,6 +92,7 @@ class ServerProbe:
                                                     "site_name": result.get("site_name")})
         (self.state_dir / ENROLL_FILE).unlink(missing_ok=True)
         log.info("Server-Probe als Probe %s am Standort %s registriert", result["probe_id"], result.get("site_name"))
+        self.notices.own_probe = str(result["probe_id"])
         self.api = Api(self.url, self.pin, result["token"])
         return True
 
@@ -111,6 +113,7 @@ class ServerProbe:
                            self.discovery_loop, self.tool_loop, self.gateway_loop)]
         if self.tray:
             loops.append(threading.Thread(target=self.notice_loop, daemon=True, name="notice_loop"))
+            loops.append(threading.Thread(target=self.link_loop, daemon=True, name="link_loop"))
         for t in loops:
             t.start()
         self.stop_event.wait()
@@ -300,6 +303,20 @@ class ServerProbe:
             except (ApiError, OSError, ValueError) as exc:
                 log.debug("Hinweise für das Tray-Symbol nicht abrufbar: %s", exc)
             self.stop_event.wait(10)
+
+    def link_loop(self, has_route=None) -> None:
+        """Alle 5 s: hat dieser PC noch eine Default-Route? Zwei Fehlschläge in Folge = keine Netzwerkverbindung."""
+        has_route = has_route or net.has_default_route
+        misses = 0
+        while not self.stop_event.is_set():
+            try:
+                up = has_route()
+            except Exception:  # noqa: BLE001 – im Zweifel als verbunden werten, nie falsch alarmieren
+                up = True
+            misses = 0 if up else misses + 1
+            if up or misses >= 2:
+                self.notices.set_link(up)
+            self.stop_event.wait(5)
 
     def handle_commands(self, commands: list[dict]) -> None:
         for cmd in commands:

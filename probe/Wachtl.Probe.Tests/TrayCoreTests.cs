@@ -263,13 +263,32 @@ public class TrayCoreTests
         Assert.Null(n.Next(UtcNow.AddSeconds(10)));
         Assert.NotNull(n.Next(UtcNow.AddSeconds(15)));
 
-        n.Accept(R(7, F(4, "c", severity: "warning"), F(5, "d"), F(6, "e", severity: "warning"), F(7, "f", severity: "warning")), UtcNow);
+        n.Accept(R(7, F(4, "c", severity: "warning", title: "C"), F(5, "d", title: "D"), F(6, "e", severity: "warning", title: "E"),
+            F(7, "f", severity: "warning", title: "F")), UtcNow);
         var combined = n.Next(UtcNow.AddSeconds(30))!;
         Assert.Equal(4, combined.Items.Count);
         Assert.Equal("4 Netzwerk-Hinweise – Klicken für Details", combined.Title);
         Assert.Equal(BalloonIcon.Error, combined.Icon);
         Assert.False(n.HasQueued);
         Assert.Contains("seit", FindingNotifier.DetailText(combined.Items));
+    }
+
+    [Fact]
+    public void CombinedBalloonCountsEqualTitlesOnce()
+    {
+        var n = new FindingNotifier();
+        n.Accept(R(1), UtcNow);
+        n.Accept(R(6, F(2, "a", title: "Ausfall: PC-01"), F(3, "b", title: "Ausfall: PC-01"), F(4, "c", title: "Ausfall: PC-01"),
+            F(5, "d", title: "Gateway ausgefallen: PC-01"), F(6, "e", title: "Internet ausgefallen: PC-01")), UtcNow);
+        var combined = n.Next(UtcNow)!;
+        Assert.Equal(5, combined.Items.Count);
+        Assert.Equal("3 Netzwerk-Hinweise – Klicken für Details", combined.Title);
+        Assert.StartsWith("• Ausfall: PC-01 (3×)\n", combined.Text);
+
+        n.Accept(R(10, F(7, "f"), F(8, "g"), F(9, "h"), F(10, "i")), UtcNow);
+        var same = n.Next(UtcNow.AddMinutes(1))!;
+        Assert.Equal("Netzwerkkabel getrennt (4×)", same.Title);
+        Assert.DoesNotContain("•", same.Text);
     }
 
     [Fact]

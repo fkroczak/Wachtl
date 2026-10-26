@@ -157,20 +157,109 @@ def test_hinweise_aller_standorte_fuer_das_tray_symbol():
                 "ts": NOW - 30, "end": None, **extra}
 
     feed.accept({"cursor": {"a": 7, "f": 3}, "active": [6], "items": [
-        alert(6, "firing"),
-        alert(7, "resolved", end=NOW - 10),     # nachträglich erkannt: schon vorbei
+        alert(6, "firing", probe_id="1", target="8.8.8.8"),
+        alert(7, "resolved", end=NOW - 10, probe_id="2"),     # nachträglich erkannt: schon vorbei
         {"key": "finding:3", "source": "finding", "id": 3, "alertname": "cable_unplugged", "severity": "critical",
          "state": "firing", "title": "Netzwerkkabel getrennt – PC-02 (Filiale)", "text": "Kabel stecken", "ts": NOW},
     ]})
     out = feed.since(0)
     assert out["start_seq"] == NOW * 1000 and out["notify"] is True
     items = {f["finding_id"]: f for f in out["findings"]}
-    assert items["alert:6"]["state"] == "active" and items["alert:6"]["event"] is False
-    assert items["alert:7"]["event"] is True and items["finding:3"]["event"] is True
-    assert items["alert:6"]["balloon"] == "Ausfall: 8.8.8.8 nicht erreichbar"
+    assert items["outage:1:6"]["state"] == "active" and items["outage:1:6"]["event"] is False
+    assert items["outage-late:2:7"]["event"] is True and items["finding:3"]["event"] is True
+    assert items["outage:1:6"]["balloon"] == "Ausfall: 8.8.8.8 nicht erreichbar"
     latest = out["latest_seq"]
     # Alarm vom Server beendet: einmal „Beendet“, dann nicht mehr aktiv
     feed.accept({"cursor": {"a": 7, "f": 3}, "active": [], "items": []})
     later = feed.since(latest)["findings"]
-    assert [(f["finding_id"], f["state"]) for f in later] == [("alert:6", "resolved")]
+    assert [(f["finding_id"], f["state"]) for f in later] == [("outage:1:6", "resolved")]
     assert later[0]["title"].startswith("Beendet: ")
+
+
+def _down(i, probe="1", role="reference", target="1.1.1.1", alertname="WachtlTargetDown", state="firing", **extra):
+    return {"key": f"alert:{i}", "source": "alert", "id": i, "alertname": alertname, "severity": "critical",
+            "state": state, "title": "Ausfall: PC-01 (Zentrale)", "text": "Ausfall …", "ts": NOW - 20, "end": None,
+            "probe_id": probe, "where": "PC-01 (Zentrale)", "role": role, "target": target, **extra}
+
+
+def test_gleichzeitige_ausfaelle_einer_probe_werden_ein_hinweis():
+    from wachtl.serverprobe.tray import NoticeFeed
+
+    feed = NoticeFeed(lambda: NOW)
+    feed.accept({"cursor": {"a": 0, "f": 0}, "items": [], "active": []})
+    feed.accept({"cursor": {"a": 4, "f": 0}, "active": [1, 2, 3, 4], "items": [
+        _down(1, target="1.1.1.1"), _down(2, target="8.8.8.8"), _down(3, role="gateway", target="192.168.1.1"),
+        _down(4, alertname="WachtlWanDown", target=""),
+    ]})
+    active = {f["finding_id"]: f for f in feed.since(0)["findings"]}
+    assert list(active) == ["outage:1:1"]
+    entry = active["outage:1:1"]
+    assert entry["title"] == "Lokales Netz gestört: PC-01 (Zentrale)" and entry["severity"] == "critical"
+    assert "das Internet und 2 Ziele" in entry["message"]
+    # ein weiteres Ziel fällt aus: derselbe Hinweis wird aktualisiert, kein neuer
+    seq = feed.seq
+    feed.accept({"cursor": {"a": 5, "f": 0}, "active": [1, 2, 3, 4, 5], "items": [_down(5, target="9.9.9.9")]})
+    later = feed.since(seq)["findings"]
+    assert [f["finding_id"] for f in later] == ["outage:1:1"] and "3 Ziele" in later[0]["message"]
+    # erst wenn alle beendet sind: einmal „Beendet“
+    seq = feed.seq
+    feed.accept({"cursor": {"a": 5, "f": 0}, "active": [5], "items": []})
+    assert feed.since(seq)["findings"] == []
+    feed.accept({"cursor": {"a": 5, "f": 0}, "active": [], "items": []})
+    done = feed.since(seq)["findings"]
+    assert [(f["finding_id"], f["state"]) for f in done] == [("outage:1:1", "resolved")]
+
+
+def test_eigene_netzwerkkarte_aus_ergibt_einen_klaren_hinweis():
+    from wachtl.serverprobe.tray import NoticeFeed
+
+    clock = [NOW]
+    feed = NoticeFeed(lambda: clock[0])
+    feed.own_probe = "1"
+    feed.accept({"cursor": {"a": 0, "f": 0}, "items": [], "active": []})
+    # ein Ausfall kommt noch vor der Erkennung an …
+    feed.accept({"cursor": {"a": 1, "f": 0}, "active": [1], "items": [_down(1)]})
+    seq = feed.seq
+    # … dann fehlt die Default-Route: der Ausfall endet still, es bleibt „Keine Netzwerkverbindung“
+    feed.set_link(False)
+    out = feed.since(seq)["findings"]
+    assert [(f["finding_id"], f["state"], f.get("quiet", False)) for f in out] == [
+        ("outage:1:1", "resolved", True), ("link", "active", False)]
+    assert out[1]["title"] == "Keine Netzwerkverbindung" and out[1]["severity"] == "critical"
+    # weitere Ausfälle der eigenen Probe sind Folge davon; andere Probes zählen normal
+    seq = feed.seq
+    feed.accept({"cursor": {"a": 4, "f": 0}, "active": [1, 2, 3, 4], "items": [
+        _down(2, role="gateway"), _down(3, alertname="WachtlWanDown"), _down(4, probe="7")]})
+    assert [f["finding_id"] for f in feed.since(seq)["findings"]] == ["outage:7:4"]
+    # wieder verbunden: einmal „wieder da“; nachträglich gemeldete Ausfälle aus der Zeit bleiben still
+    clock[0] = NOW + 130
+    seq = feed.seq
+    feed.set_link(True)
+    feed.set_link(True)
+    feed.accept({"cursor": {"a": 5, "f": 0}, "active": [4], "items": [
+        _down(5, state="resolved", end=NOW + 120)]})
+    out = feed.since(seq)["findings"]
+    assert [(f["finding_id"], f["state"]) for f in out] == [("link", "resolved")]
+    assert "2 min 10 s" in out[0]["message"]
+
+
+def test_link_loop_erst_nach_zwei_fehlschlaegen(tmp_path):
+    import threading
+
+    from wachtl.serverprobe.probe import ServerProbe
+
+    stop = threading.Event()
+    probe = ServerProbe("https://127.0.0.1", "", tmp_path, stop_event=stop)
+    answers = iter([True, False])
+    calls = []
+
+    def has_route():
+        calls.append(1)
+        value = next(answers, False)
+        if len(calls) >= 4:
+            stop.set()
+        return value
+
+    probe.stop_event.wait = lambda timeout: stop.is_set()
+    probe.link_loop(has_route)
+    assert probe.notices.link_down_since is not None
