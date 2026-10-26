@@ -144,6 +144,11 @@ class WebTest(AppTestCase):
         # Abmelden steht abgesetzt ganz unten
         self.assertGreater(menu.index("Abmelden"), menu.index(">Design<"))
         self.assertIn('data-theme="system" data-contrast="normal"', html)
+        # schmal: Hamburger-Knopf steuert das Menü (Navigation, Standorte, Benutzermenü)
+        self.assertIn('aria-controls="side-drawer" data-menu-toggle', html)
+        drawer = html[html.index('id="side-drawer"'):html.index("</aside>")]
+        self.assertIn("Hauptnavigation", drawer)
+        self.assertIn("data-usermenu", drawer)
 
         tok = self.session_csrf()
         r = self.client.post("/account/design", data={"csrf_token": tok, "theme": "dark", "contrast": "high"})
