@@ -35,9 +35,11 @@
       {% call(attrs) field("probe", "Ausführen auf", help="Die Probe holt den Test ab; ein PC meldet sich spätestens alle 30 s. IP-Info läuft immer auf dem Wachtl-Server.") %}
         <select name="probe" {{ attrs }}>
           {% for p in probes %}<option value="{{ p.id }}"{% if current and p.id == current.id %} selected{% endif %}>
-            {{ 'Wachtl-Server' if p.kind == 'server' else p.hostname }}{% if not single_site %} · {{ p.site_name }}{% endif %}{% if not p.online %} (offline){% endif %}</option>{% endfor %}
+            {#- „offline“ vor dem Standort, sonst schneidet ein schmales Feld es ab #}
+            {{ 'Wachtl-Server' if p.kind == 'server' else p.hostname }}{% if not p.online %} (offline){% endif %}{% if not single_site %} · {{ p.site_name }}{% endif %}</option>{% endfor %}
         </select>
       {% endcall %}
+      <p class="field muted" data-tool-server hidden><strong>Ausführen auf:</strong> Wachtl-Server – dieses Werkzeug fragt die Registries immer vom Server aus.</p>
     </div>
   </fieldset>
 

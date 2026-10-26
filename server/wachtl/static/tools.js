@@ -18,6 +18,11 @@
   const hostInput = form.elements.host;
   const hostLabel = form.querySelector('label[for="f-host"]');
   const hint = form.querySelector("[data-tool-hint]");
+  const hostHelp = document.getElementById("f-host-help");
+  const probeField = form.elements.probe?.closest(".field");
+  const serverNote = form.querySelector("[data-tool-server]");
+  // Hilfetext unter „Ziel“ passend zum Werkzeug
+  const HOST_HELP = { dns: "Name, bei einer IP-Adresse der PTR-Eintrag.", http: "Vollständige Adresse mit http:// oder https://." };
   let polling = null;
 
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -28,8 +33,9 @@
   function showTool() {
     const t = tool(), [, label, ph, text] = info[t] || [];
     form.querySelectorAll("fieldset[data-tool]").forEach((fs) => { fs.hidden = fs.dataset.tool !== t; });
-    // IP-Info fragt die Registries vom Wachtl-Server aus – dort gibt es keine Probe-Auswahl
-    if (form.elements.probe) form.elements.probe.disabled = (form.dataset.serverOnly || "").split(" ").includes(t);
+    serverOnly(t);
+    hostError("");   // Meldung passte zum vorigen Werkzeug
+    if (hostHelp) hostHelp.textContent = HOST_HELP[t] || "Hostname oder IP-Adresse.";
     if (hostLabel && label) hostLabel.textContent = label;
     if (ph) hostInput.placeholder = ph;
     if (hint && text) hint.textContent = text;
@@ -38,8 +44,42 @@
     url.searchParams.set("probe", val("probe"));
     window.history.replaceState(null, "", url);
   }
+  // IP-Info fragt die Registries vom Wachtl-Server aus – statt der Probe-Auswahl steht dort ein Hinweis
+  function serverOnly(t) {
+    const only = (form.dataset.serverOnly || "").split(" ").includes(t);
+    if (form.elements.probe) form.elements.probe.disabled = only;
+    if (probeField) probeField.hidden = only;
+    if (serverNote) serverNote.hidden = !only;
+  }
   form.querySelectorAll("input[name=tool]").forEach((r) => r.addEventListener("change", showTool));
-  if (form.elements.probe) form.elements.probe.disabled = (form.dataset.serverOnly || "").split(" ").includes(tool());
+  serverOnly(tool());
+  if (hostHelp) hostHelp.textContent = HOST_HELP[tool()] || "Hostname oder IP-Adresse.";
+
+  // Pflichtfeld Ziel: Meldung am Feld wie in allen Formularen (Symbol + Text, aria-invalid)
+  function hostError(msg) {
+    const fieldBox = hostInput.closest(".field");
+    let el = document.getElementById("f-host-error");
+    const ids = (hostInput.getAttribute("aria-describedby") || "").split(" ").filter((x) => x && x !== "f-host-error");
+    if (!msg) {
+      el?.remove();
+      fieldBox?.classList.remove("has-error");
+      hostInput.removeAttribute("aria-invalid");
+      if (ids.length) hostInput.setAttribute("aria-describedby", ids.join(" "));
+      return;
+    }
+    if (!el) {
+      el = document.createElement("p");
+      el.id = "f-host-error";
+      el.className = "field-error";
+      fieldBox?.appendChild(el);
+    }
+    el.innerHTML = `<span aria-hidden="true">⚠ </span>${esc(msg)}`;
+    fieldBox?.classList.add("has-error");
+    hostInput.setAttribute("aria-invalid", "true");
+    hostInput.setAttribute("aria-describedby", [...ids, "f-host-error"].join(" "));
+    hostInput.focus();
+  }
+  hostInput.addEventListener("input", () => { if (val("host")) hostError(""); });
   form.elements.probe?.addEventListener("change", showTool);
 
   function payload() {
@@ -64,7 +104,7 @@
       bar.classList.add("indet");
       fill.style.width = "";
       track.removeAttribute("aria-valuenow");
-      stepEl.textContent = job.ahead > 0 ? `Wartet, ${job.ahead} Test(s) davor …` : "Wartet auf die Probe …";
+      stepEl.textContent = job.ahead > 0 ? `Wartet, ${job.ahead} ${job.ahead === 1 ? "Test" : "Tests"} davor …` : "Wartet auf die Probe …";
       etaEl.textContent = "";
       noteEl.textContent = probeOnline === false ? "Die Probe ist gerade offline – der Test startet, sobald sie sich meldet (höchstens 5 Minuten)."
         : "Ein PC holt den Test beim nächsten Kontakt ab (spätestens nach 30 s), der Wachtl-Server sofort.";
@@ -141,7 +181,8 @@
   form.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (!runBtn) return;
-    if (!val("host")) { hostInput.focus(); return; }
+    if (!val("host")) { hostError(`Bitte ${(hostLabel?.textContent || "ein Ziel").replace(/ \(.*\)$/, "")} eingeben.`); return; }
+    hostError("");
     runBtn.disabled = true;
     runBtn.textContent = "Läuft …";
     out.innerHTML = "";

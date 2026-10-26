@@ -47,7 +47,13 @@ def tool_start():
         if probe is None:
             return jsonify(error="Dieses Werkzeug läuft auf dem Wachtl-Server – die Server-Probe ist nicht aktiv."), 400
     else:
-        probe = q1("SELECT * FROM probes WHERE id = ? AND status = 'active'", (int(data.get("probe") or 0),))
+        try:
+            probe_id = int(data.get("probe") or 0)
+        except (TypeError, ValueError, OverflowError):   # „abc“, Liste, Infinity … → Meldung statt 500
+            probe_id = 0
+        if not 0 < probe_id < 2**31:
+            probe_id = 0
+        probe = q1("SELECT * FROM probes WHERE id = ? AND status = 'active'", (probe_id,))
     if probe is None:
         return jsonify(error="Bitte eine aktive Probe wählen."), 400
     try:
