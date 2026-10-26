@@ -12,7 +12,8 @@ from collections import deque
 from pathlib import Path
 
 from .. import __version__, repo
-from . import icmp, net
+from . import adapters, icmp, net
+from .adapters import AdapterWatch
 from .api import Api, ApiError
 from .runners import (BandwidthRunner, NetscanRunner, PathRunner, PingRunner, RtpRunner, Runner, ScheduledRunner,
                       check_key)
@@ -72,6 +73,7 @@ class ServerProbe:
         self.pending_reports = PendingReports(self.state_dir / PENDING_FILE)
         self.tray: TrayEndpoint | None = None
         self.notices = NoticeFeed()
+        self.pending_findings: list[dict] = []
 
     # -- Registrierung ---------------------------------------------------------
     def ensure_registered(self) -> bool:
@@ -113,7 +115,7 @@ class ServerProbe:
                            self.discovery_loop, self.tool_loop, self.gateway_loop)]
         if self.tray:
             loops.append(threading.Thread(target=self.notice_loop, daemon=True, name="notice_loop"))
-            loops.append(threading.Thread(target=self.link_loop, daemon=True, name="link_loop"))
+        loops.append(threading.Thread(target=self.link_loop, daemon=True, name="link_loop"))
         for t in loops:
             t.start()
         self.stop_event.wait()
@@ -304,19 +306,49 @@ class ServerProbe:
                 log.debug("Hinweise für das Tray-Symbol nicht abrufbar: %s", exc)
             self.stop_event.wait(10)
 
-    def link_loop(self, has_route=None) -> None:
-        """Alle 5 s: hat dieser PC noch eine Default-Route? Zwei Fehlschläge in Folge = keine Netzwerkverbindung."""
+    def link_loop(self, has_route=None, read_adapters=None) -> None:
+        """Alle 5 s: hat dieser PC noch eine Default-Route? Netzwerkkarten (Geräte-Manager) alle 30 s und sofort, wenn
+        sich die Route ändert. Zwei Fehlschläge in Folge ohne erklärenden Hinweis = „Keine Netzwerkverbindung“."""
         has_route = has_route or net.has_default_route
-        misses = 0
+        read_adapters = read_adapters or adapters.read
+        watch = AdapterWatch()
+        misses, last_up, last_read = 0, None, 0.0
         while not self.stop_event.is_set():
             try:
                 up = has_route()
             except Exception:  # noqa: BLE001 – im Zweifel als verbunden werten, nie falsch alarmieren
                 up = True
+            now = time.time()
+            if up != last_up or now - last_read >= 30 or (not up and misses < 2):
+                last_read = now
+                try:
+                    changes = watch.update(read_adapters(), now)
+                except Exception:  # noqa: BLE001
+                    log.debug("Netzwerkkarten nicht auswertbar", exc_info=True)
+                    changes = []
+                for finding in changes:
+                    log.info("Netzwerkkarte: %s – %s", finding["title"], finding["adapter"])
+                    self.notices.local_finding(finding)
+                    self.pending_findings.append(finding)
+                del self.pending_findings[:-200]
+            last_up = up
             misses = 0 if up else misses + 1
             if up or misses >= 2:
-                self.notices.set_link(up)
+                self.notices.set_link(up, explained=watch.offline_explained)
+            self.flush_findings()
             self.stop_event.wait(5)
+
+    def flush_findings(self) -> None:
+        """Hinweise zur Netzwerkkarte an den Server (läuft auf 127.0.0.1, also auch ohne Netz erreichbar)."""
+        if not self.pending_findings or self.api is None:
+            return
+        batch = self.pending_findings[:50]
+        try:
+            self.api.findings(batch)
+        except (ApiError, OSError) as exc:
+            log.debug("Hinweise noch nicht zustellbar: %s", exc)
+            return
+        del self.pending_findings[:len(batch)]
 
     def handle_commands(self, commands: list[dict]) -> None:
         for cmd in commands:

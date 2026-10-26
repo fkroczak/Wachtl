@@ -263,3 +263,80 @@ def test_link_loop_erst_nach_zwei_fehlschlaegen(tmp_path):
     probe.stop_event.wait = lambda timeout: stop.is_set()
     probe.link_loop(has_route)
     assert probe.notices.link_down_since is not None
+
+
+WMI_UP = ('[{"GUID":"{AB-1}","NetConnectionID":"Ethernet","Name":"Intel(R) I219-V","PhysicalAdapter":true,'
+          '"NetEnabled":true,"NetConnectionStatus":2,"ConfigManagerErrorCode":0},'
+          '{"GUID":"{AB-2}","NetConnectionID":"Ethernet 2","Name":"Realtek","PhysicalAdapter":true,'
+          '"NetEnabled":true,"NetConnectionStatus":7,"ConfigManagerErrorCode":0}]')
+WMI_DISABLED = ('{"GUID":"{AB-1}","NetConnectionID":"Ethernet","Name":"Intel(R) I219-V","PhysicalAdapter":false,'
+                '"NetEnabled":false,"NetConnectionStatus":0,"ConfigManagerErrorCode":22}')
+
+
+def test_geraete_manager_auslesen():
+    from wachtl.serverprobe.adapters import parse_wmi
+
+    up = parse_wmi(WMI_UP)
+    assert [(a["id"], a["name"], a["state"]) for a in up] == [("ab-1", "Ethernet", "up"), ("ab-2", "Ethernet 2", "unplugged")]
+    assert parse_wmi(WMI_DISABLED)[0]["state"] == "disabled"     # einzelnes Objekt statt Liste
+    assert parse_wmi("") == []
+
+
+def test_netzwerkkarte_deaktiviert_und_wieder_aktiviert():
+    from wachtl.serverprobe.adapters import AdapterWatch, parse_wmi
+
+    watch = AdapterWatch()
+    assert watch.update(parse_wmi(WMI_UP), NOW) == []          # Start: nur merken
+    assert watch.update(None, NOW + 5) == []                     # nicht lesbar: nichts melden
+    [f] = watch.update(parse_wmi(WMI_DISABLED), NOW + 10)
+    assert (f["kind"], f["severity"], f["state"], f["adapter"]) == ("adapter_disabled", "critical", "active", "Ethernet")
+    assert f["title"] == "Netzwerkkarte deaktiviert" and "keine Netzwerkverbindung mehr" in f["message"]
+    assert watch.offline_explained
+    # „Ethernet 2“ war nie verbunden: kein Hinweis, auch nicht, wenn es fehlt
+    [r] = watch.update(parse_wmi(WMI_UP), NOW + 75)
+    assert (r["finding_id"], r["state"], r["title"]) == (f["finding_id"], "resolved", "Netzwerkkarte wieder aktiviert")
+    assert "1 min 5 s" in r["message"] and r["details"] == {"problem": "Netzwerkkarte deaktiviert"}
+    assert not watch.offline_explained
+
+
+def test_server_tray_zeigt_deaktivierte_karte_statt_ausfaellen(tmp_path):
+    import threading
+
+    from wachtl import findings
+    from wachtl.serverprobe.adapters import parse_wmi
+    from wachtl.serverprobe.probe import ServerProbe
+
+    stop = threading.Event()
+    probe = ServerProbe("https://127.0.0.1", "", tmp_path, stop_event=stop)
+    probe.notices.own_probe = "1"
+    probe.notices.accept({"cursor": {"a": 0, "f": 0}, "items": [], "active": []})
+    sent = []
+    probe.api = type("FakeApi", (), {"findings": lambda self, items: sent.extend(items) or {}})()
+    # Ablauf: verbunden, dann Karte deaktiviert (Route weg), dann wieder aktiviert
+    steps = iter([(True, WMI_UP), (False, WMI_DISABLED), (False, WMI_DISABLED), (False, WMI_DISABLED),
+                  (True, WMI_UP)])
+    current = {}
+
+    def has_route():
+        try:
+            current["route"], current["wmi"] = next(steps)
+        except StopIteration:
+            stop.set()
+        return current["route"]
+
+    probe.stop_event.wait = lambda timeout: stop.is_set()
+    probe.link_loop(has_route, lambda: parse_wmi(current["wmi"]))
+    out = probe.notices.since(0)["findings"]
+    states = [(f["finding_id"], f["state"]) for f in out]
+    assert states == [("local:adapter_disabled:ab-1", "resolved")]        # je finding_id der letzte Stand
+    assert out[0]["title"] == "Netzwerkkarte wieder aktiviert"
+    assert "link" not in {f["finding_id"] for f in out}                    # kein zweiter, allgemeiner Hinweis
+    assert [(f["kind"], f["state"]) for f in sent] == [("adapter_disabled", "active"), ("adapter_disabled", "resolved")]
+    for f in sent:                                                          # der Server nimmt sie an
+        findings.validate(f, now=f["detected_at"])
+    # eigene Hinweise kommen über den Server nicht noch einmal ins Tray
+    seq = probe.notices.seq
+    probe.notices.accept({"cursor": {"a": 0, "f": 1}, "active": [], "items": [
+        {"key": "finding:1", "source": "finding", "id": 1, "alertname": "adapter_disabled", "severity": "critical",
+         "state": "firing", "title": "Netzwerkkarte deaktiviert – AFISZ-PC", "text": "", "ts": NOW, "probe_id": "1"}]})
+    assert probe.notices.since(seq)["findings"] == []

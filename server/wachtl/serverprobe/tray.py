@@ -231,10 +231,23 @@ class NoticeFeed:
         }
 
     # -- eigene Netzwerkverbindung ---------------------------------------------------------------------------
-    def set_link(self, up: bool) -> None:
-        """Netzwerkverbindung dieses PCs (Default-Route vorhanden) – von der Server-Probe alle paar Sekunden."""
+    def local_finding(self, finding: dict) -> None:
+        """Hinweis zu einer eigenen Netzwerkkarte (deaktiviert, Kabel getrennt …) sofort zeigen."""
+        with self.lock:
+            entry = {k: finding.get(k) for k in ("kind", "severity", "state", "title", "message", "solution",
+                                                  "balloon", "adapter", "detected_at", "resolved_at")}
+            self._publish({**entry, "finding_id": "local:" + finding["finding_id"], "event": False})
+
+    def set_link(self, up: bool, explained: bool = False) -> None:
+        """Netzwerkverbindung dieses PCs (Default-Route vorhanden) – von der Server-Probe alle paar Sekunden.
+
+        ``explained``: ein Hinweis zur Netzwerkkarte nennt den Grund schon – dann kein zweiter allgemeiner Hinweis."""
         with self.lock:
             now = self.clock()
+            link = self.entries.get("link")
+            if explained and link and link["state"] == "active":
+                self._publish({**link, "state": "resolved", "quiet": True, "resolved_at": int(now)})
+                link = None
             if not up and self.link_down_since is None:
                 self.link_down_since = now
                 # schon gemeldete Ausfälle dieses PCs sind Folge der Trennung: still beenden
@@ -243,6 +256,8 @@ class NoticeFeed:
                     for key, item in group["members"].items():
                         self.absorbed[key] = item
                     self._publish({**group["entry"], "state": "resolved", "quiet": True, "resolved_at": int(now)})
+                if explained:
+                    return
                 self._publish({
                     "finding_id": "link", "kind": "link_down", "severity": "critical", "state": "active",
                     "title": "Keine Netzwerkverbindung",
@@ -257,6 +272,8 @@ class NoticeFeed:
             elif up and self.link_down_since is not None:
                 since, self.link_down_since = self.link_down_since, None
                 self.link_periods.append((since, now))
+                if not link or link["state"] != "active":
+                    return  # Grund stand schon im Hinweis zur Netzwerkkarte, der meldet auch „wieder aktiviert“
                 self._publish({"finding_id": "link", "kind": "link_down",
                                "severity": "critical", "state": "resolved",
                                "title": "Netzwerkverbindung wieder da",
@@ -294,6 +311,8 @@ class NoticeFeed:
             for item in response.get("items") or []:
                 if first:
                     continue  # beim Start nichts Altes nachholen, nur den Stand merken
+                if item.get("source") == "finding" and self.own_probe and str(item.get("probe_id")) == self.own_probe:
+                    continue  # eigene Hinweise (Netzwerkkarte) stehen schon über local_finding() im Tray
                 firing = item.get("source") == "alert" and item.get("state") == "firing" and item["key"] in active_ids
                 if item.get("source") == "alert" and item.get("alertname") in OUTAGE_ALERTS:
                     if self._caused_by_link(item):
