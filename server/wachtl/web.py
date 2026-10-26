@@ -564,6 +564,9 @@ def _probe_widgets(probes: list, states: dict, alerts: list, sparks: dict) -> tu
             "ref": ref, "jitter": (spark or {}).get("jitter"),
             "gateway": next((st for st in pings if st.check["role"] == "gateway"), None),
             "spark": _sparkline(spark, ref.check["name"]) if ref and active else None,
+            # nur Messungen mit Ergebnis – wartende Checks ohne Werte erscheinen nicht auf der Kachel
+            "bw": [st for st in sts if st.kind in checktypes.BANDWIDTH_TYPES and st.ts] if active else [],
+            "voice": [st for st in sts if st.kind == "rtp" and st.ts] if active else [],
         })
     widgets.sort(key=lambda w: (("bad", "warn", "ok", "inactive").index(w["level"]), w["probe"]["hostname"]))
     return widgets, internet, bandwidth, problems

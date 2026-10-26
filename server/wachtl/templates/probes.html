@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Probes{% endblock %}
-{% from "_links.html" import check_target with context %}
 {% from "_probe_cards.html" import probe_cards with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
@@ -10,7 +9,7 @@
 {% if widgets %}
 <p class="muted">
   {%- for lvl, text in (('bad', 'gestört'), ('warn', 'auffällig'), ('ok', 'ok'), ('inactive', 'deaktiviert')) if levels[lvl] %}{{ ' · ' if not loop.first }}<span class="{{ {'bad': 'down-t', 'warn': 'warn-t', 'ok': 'ok-t'}.get(lvl, '') }}">{{ levels[lvl] }} {{ text }}</span>{% endfor %}.
-  Probes mit Problemen stehen oben. Werte zur Internet-Referenz: Latenz der letzten Minute, Verlust und Jitter der letzten 5 Minuten; der Mini-Graph zeigt die letzte Stunde.</p>
+  Probes mit Problemen stehen oben. Werte zur Internet-Referenz: Latenz der letzten Minute, Verlust und Jitter der letzten 5 Minuten; der Mini-Graph zeigt die letzte Stunde. Bandbreite (↓ Download, ↑ Upload) und Sprachqualität zeigen die letzte Messung.</p>
 {% if widgets|length > 1 %}
 <p class="filter"><label for="filter">Probe{{ ' oder Standort' if not single_site }} suchen</label>
   <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
@@ -20,46 +19,4 @@
 {{ probe_cards(widgets, details=True, show_site=not single_site) }}
 {% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
-{% if bandwidth %}
-<h2>Bandbreite</h2>
-<table>
-  <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>Art</th><th>Download</th><th>Upload</th><th>Letzte Messung</th></tr></thead>
-  <tbody>
-  {% for p, st in bandwidth %}
-    <tr>
-      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
-      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
-      <td>{{ KIND_LABELS[st.kind] }}</td>
-      {% for d in ('down', 'up') %}
-        {% set r = st.values[d] %}
-        <td>{% if r and r.error %}<span class="badge critical" title="{{ r.error|explain_error }}">Fehler</span>{% elif r %}{{ r.mbps|mbps }}{% else %}–{% endif %}</td>
-      {% endfor %}
-      <td>{{ st.ts|ago if st.ts else st.detail }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
-
-{% if voice %}
-<h2>Sprachqualität</h2>
-<table>
-  <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>MOS</th><th>Laufzeit</th><th>Verlust</th><th>Jitter</th><th>Letzter Test</th></tr></thead>
-  <tbody>
-  {% for p, st in voice %}
-    {% set r = st.values.rtp %}
-    <tr>
-      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
-      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a> <span class="muted small">{{ check_target(st.check) }}</span></td>
-      {% if r and r.error %}<td colspan="4"><span class="badge critical">Fehler</span> <span class="small">{{ r.error|explain_error }}</span></td>
-      {% elif r %}<td>{{ r.mos|mos }}</td><td>{{ r.rtt_ms|ms }}</td><td>{{ r.loss_pct|pct }}</td><td>{{ r.jitter_ms|ms }}</td>
-      {% else %}<td>–</td><td>–</td><td>–</td><td>–</td>{% endif %}
-      <td>{{ st.ts|ago if st.ts else st.detail }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endif %}
 {% endblock %}

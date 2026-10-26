@@ -26,6 +26,22 @@
       {% if w.gateway %}<dt>Gateway</dt><dd><span class="dot {{ w.gateway.state }}"></span> {{ w.gateway.label }}</dd>{% endif %}
     </dl>
     {% endif %}
+    {% if w.bw or w.voice %}
+    <dl class="pw-kv">
+      {% for st in w.bw %}
+      <dt>{{ KIND_LABELS[st.kind] }}</dt>
+      <dd title="{{ st.check.name }} – {{ st.label }}, {{ st.ts|ago }}"><span class="dot {{ st.state }}"></span>
+        {%- for d, arrow in (('down', '↓'), ('up', '↑')) %}{% set r = st.values[d] %}{{ ' ·' if not loop.first }} {{ arrow }} {% if r and r.error %}<span class="badge critical" title="{{ r.error|explain_error }}">Fehler</span>{% elif r %}{{ r.mbps|mbps }}{% else %}–{% endif %}{% endfor %}
+        <span class="muted small">{{ st.ts|ago }}</span></dd>
+      {% endfor %}
+      {% for st in w.voice %}{% set r = st.values.rtp %}
+      <dt>Sprache</dt>
+      <dd title="{{ st.check.name }} – {{ st.label }}, {{ st.ts|ago }}"><span class="dot {{ st.state }}"></span>
+        {% if r and r.error %}<span class="badge critical" title="{{ r.error|explain_error }}">Fehler</span>{% elif r %}MOS {{ r.mos|mos }} · {{ r.loss_pct|pct }} Verlust{% else %}–{% endif %}
+        <span class="muted small">{{ st.ts|ago }}</span></dd>
+      {% endfor %}
+    </dl>
+    {% endif %}
     <p class="small">Checks:{% for k, lbl in (('ok', 'ok'), ('warn', 'auffällig'), ('down', 'gestört'), ('stale', 'keine Daten')) %}{{ ' ·' if not loop.first }} <span class="{{ k ~ '-t' if w.counts[k] else 'muted' }}">{{ w.counts[k] }} {{ lbl }}</span>{% endfor %}</p>
     {% if w.spark %}
     <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" role="img" aria-label="{{ w.spark.label }}">
