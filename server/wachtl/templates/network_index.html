@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Netzwerk{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+<h1>Netzwerk</h1>
+<p class="muted">Geräte und Clients je Standort aus dem Netzwerkscan der Probes. Standort wählen.</p>
+{% if not cards %}<p class="muted">Noch keine Standorte angelegt.</p>{% endif %}
+<div class="topo-cards">
+  {% for c in cards %}
+  <article class="card topo-card{{ ' topo-card-warn' if c.conflicts }}" aria-labelledby="ns-{{ c.site.id }}">
+    <div class="topo-side-head">
+      <div>
+        <h2 id="ns-{{ c.site.id }}"><a href="{{ url_for('web.network', site_id=c.site.id) }}">{{ c.site.name }}</a></h2>
+        {% if c.site.customer_no %}<p class="small muted">{{ c.site.customer_no }}</p>{% endif %}
+      </div>
+      {% if c.conflicts %}<span class="badge critical">{{ c.conflicts }} IP-{{ 'Konflikt' if c.conflicts == 1 else 'Konflikte' }}</span>
+      {% elif c.total %}<span class="badge on">{{ c.recent }} Geräte (24 h)</span>
+      {% else %}<span class="badge off">noch kein Scan</span>{% endif %}
+    </div>
+    <dl class="kvlist">
+      <dt>Geräte</dt><dd>{{ c.total or 'noch keine gefunden' }}</dd>
+      {% if c.last %}<dt>Letzter Scan</dt><dd>{{ c.last|ago }}</dd>{% endif %}
+    </dl>
+    <div class="actions">
+      <a class="button primary" href="{{ url_for('web.network', site_id=c.site.id) }}" aria-label="Netzwerk öffnen: {{ c.site.name }}">Netzwerk öffnen</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

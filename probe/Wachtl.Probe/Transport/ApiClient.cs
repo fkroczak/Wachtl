@@ -359,5 +359,18 @@ public sealed class ApiClient : IDisposable
         }
     }
 
+    /// <summary>Werkzeuge: nächsten Einzeltest holen (null = keiner wartet).</summary>
+    public async Task<Tools.ToolJob?> GetToolJobAsync(CancellationToken ct)
+    {
+        using var response = await SendAsync(() => Request(HttpMethod.Get, "tools/next"), ct).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await ErrorAsync(response, ct).ConfigureAwait(false);
+        }
+
+        var body = await response.Content.ReadFromJsonAsync<Tools.ToolNextResponse>(JsonOptions, ct).ConfigureAwait(false);
+        return body?.Job;
+    }
+
     public void Dispose() => _http.Dispose();
 }

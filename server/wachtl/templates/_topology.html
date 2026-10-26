@@ -1,11 +1,10 @@
 {#- Bausteine der Switch-Topologie (docs/TOPOLOGIE.md): Kopf mit Reitern, Baum (SVG), Frontansicht. -#}
-{% from "_tabs.html" import tabs as tabnav %}
+{% from "_tabs.html" import site_switch %}
 
 {% macro head(site, tabs, view, views, problem_count, poller, drafts=None) -%}
-<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=site.id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=site.id) }}">{{ site.name }}</a>{% endif %} / Topologie</nav>
-<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
-{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
-{{ tabnav(tab_items, 'topologie') }}
+{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.topology_index') }}">Topologie</a> / {{ site.name }}</nav>{% endif %}
+<h1>Topologie{% if not single_site %} · {{ site.name }}{% endif %}</h1>
+{{ site_switch(site_links, site.id) }}
 <div class="page-head topo-head">
   <nav class="seg" aria-label="Ansicht der Topologie">
     {%- for key, text in views.items() %}

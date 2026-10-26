@@ -185,7 +185,10 @@ def heartbeat():
     # laufende Störungen bei Alertmanager aktuell halten, verwaiste schließen – auch wenn gerade keine Pings kommen
     disturbance_service.housekeeping(ts)
     _, etag = repo.probe_config(g.probe)
-    return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]))
+    from .services import tools as tool_service
+
+    return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]),
+                   tools_pending=tool_service.pending(g.probe["id"]))
 
 
 @bp.post("/deregister")
@@ -518,6 +521,29 @@ def result_netscan():
     log.info("Probe %s: Netzwerkscan %s – %d Geräte%s", g.probe["hostname"], check["target"], len(values["hosts"]),
              f", Fehler: {values['error']}" if values["error"] else "")
     return jsonify(stored=len(values["hosts"])), 201
+
+
+@bp.get("/tools/next")
+@probe_auth
+def tool_next():
+    """Werkzeuge (docs/WERKZEUGE.md): nächsten Einzeltest für diese Probe abholen."""
+    from .services import tools as tool_service
+
+    return jsonify(job=tool_service.take(g.probe["id"]))
+
+
+@bp.post("/tools/<int:job_id>")
+@probe_auth
+def tool_update(job_id: int):
+    """Fortschritt (progress, step, lines) oder Ergebnis (done, ok, result, error) eines Einzeltests."""
+    from .services import tools as tool_service
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="JSON-Objekt erwartet"), 400
+    if not tool_service.update(job_id, g.probe["id"], data):
+        return jsonify(error="Auftrag unbekannt oder schon beendet", cancel=True), 409
+    return jsonify(stored=1)
 
 
 @bp.get("/topology/jobs")

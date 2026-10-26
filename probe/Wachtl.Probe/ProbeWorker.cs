@@ -7,6 +7,7 @@ using Wachtl.Probe.Config;
 using Wachtl.Probe.Diagnostics;
 using Wachtl.Probe.NetScan;
 using Wachtl.Probe.Rtp;
+using Wachtl.Probe.Tools;
 using Wachtl.Probe.Transport;
 using Wachtl.Probe.Tray;
 
@@ -32,6 +33,7 @@ public sealed class ProbeWorker : BackgroundService
     private IperfServerHost? _iperfServer;
     private RtpReflector? _rtpReflector;
     private readonly SemaphoreSlim _configChanged = new(0, 1);
+    private readonly SemaphoreSlim _toolsPending = new(0, 1);
     private readonly object _runnerLock = new();
     private readonly DateTimeOffset _started = DateTimeOffset.UtcNow;
 
@@ -109,6 +111,7 @@ public sealed class ProbeWorker : BackgroundService
                 ConfigLoopAsync(ct),
                 UploadLoopAsync(ct),
                 HeartbeatLoopAsync(ct),
+                ToolLoopAsync(ct),
                 _diagnostics.RunAsync(ct)).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -462,6 +465,42 @@ public sealed class ProbeWorker : BackgroundService
     private static TimeSpan NextBackoff(TimeSpan current) =>
         TimeSpan.FromSeconds(Math.Min(300, Math.Max(5, current.TotalSeconds * 2)));
 
+    // -- Werkzeuge (docs/WERKZEUGE.md) -----------------------------------------
+    /// <summary>
+    /// Einzeltests aus dem Web-UI: der Heartbeat meldet wartende Tests, dann holt die Probe sie ab und führt sie
+    /// nacheinander aus. Danach fragt sie zwei Minuten lang alle 3 s nach (weitere Tests ohne Heartbeat-Wartezeit).
+    /// </summary>
+    private async Task ToolLoopAsync(CancellationToken ct)
+    {
+        var fastUntil = DateTimeOffset.MinValue;
+        while (!ct.IsCancellationRequested)
+        {
+            if (DateTimeOffset.UtcNow >= fastUntil)
+            {
+                await _toolsPending.WaitAsync(ct).ConfigureAwait(false);
+            }
+            else
+            {
+                await _toolsPending.WaitAsync(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
+            }
+
+            try
+            {
+                while (await _api!.GetToolJobAsync(ct).ConfigureAwait(false) is { } job)
+                {
+                    _logger.LogInformation("Werkzeug {Tool} gestartet (Auftrag {Id})", job.Tool, job.Id);
+                    var runner = new ToolRunner(update => _api.PostResultAsync($"tools/{job.Id}", update, ct));
+                    await runner.RunAsync(job, ct).ConfigureAwait(false);
+                    fastUntil = DateTimeOffset.UtcNow.AddMinutes(2);
+                }
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogDebug("Werkzeug-Auftrag fehlgeschlagen: {Message}", ex.Message);
+            }
+        }
+    }
+
     // -- Heartbeat -----------------------------------------------------------
     private async Task HeartbeatLoopAsync(CancellationToken ct)
     {
@@ -484,6 +523,11 @@ public sealed class ProbeWorker : BackgroundService
                 if (response.Commands.Count > 0)
                 {
                     HandleCommands(response.Commands);
+                }
+
+                if (response.ToolsPending > 0 && _toolsPending.CurrentCount == 0)
+                {
+                    _toolsPending.Release();
                 }
 
                 if (response.ConfigEtag != _config?.Etag && _configChanged.CurrentCount == 0)

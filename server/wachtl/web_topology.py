@@ -11,7 +11,7 @@ from .db import ex, ins, q, q1
 from .security import current_user, login_required
 from .services import switchfind
 from .services import topology as topo_service
-from .web import SITE_TABS, _live, bp
+from .web import _live, bp, site_switch
 
 log = logging.getLogger(__name__)
 VIEWS = {"baum": "Baum", "switche": "Switches", "probleme": "Probleme", "verlauf": "Verlauf", "pfad": "Pfad suchen"}
@@ -54,7 +54,7 @@ def _common(site: dict, view: str, topo=None) -> dict:
                 "AND severity <> 'info'", (site["id"],))
     drafts = q("SELECT * FROM net_switches WHERE site_id = ? AND status = 'draft' ORDER BY id", (site["id"],))
     need = [c for c in switchfind.candidates(site["id"]) if c["access"] != "none"]
-    return {"site": site, "tabs": SITE_TABS, "tab": "topologie", "view": view, "views": VIEWS, "need_creds": need,
+    return {"site": site, "site_links": site_switch("web.topology"), "tabs": {}, "tab": "topologie", "view": view, "views": VIEWS, "need_creds": need,
             "problem_count": int(counts["n"] or 0), "poller": _poller(), "drafts": drafts,
             "speed_text": topo_service.speed_text, "speed_short": topo_service.speed_short,
             "speed_class": topo_service.speed_class, "link_label": topo_service.link_label, "topo": topo,

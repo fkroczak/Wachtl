@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Netzwerk · {{ site.name }}{% endblock %}
-{% from "_tabs.html" import tabs as tabnav %}
+{% block title %}Netzwerk{% if not single_site %} · {{ site.name }}{% endif %}{% endblock %}
+{% from "_tabs.html" import site_switch %}
 {% block content %}
-{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>{% endif %}
-<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
-{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
-{{ tabnav(tab_items, tab) }}
+{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.network_index') }}">Netzwerk</a> / {{ site.name }}</nav>{% endif %}
+<h1>Netzwerk{% if not single_site %} · {{ site.name }}{% endif %}</h1>
+<p class="muted">Alle Geräte und Clients im Netz{% if not single_site %} dieses Standorts{% endif %}: wann sie erreichbar waren, welche Dienste sie anbieten und was auffällt.</p>
+{{ site_switch(site_links, site.id) }}
 
 {% if not scans %}
 <section class="card">
@@ -39,7 +39,7 @@
       <td>{% if has_role(user, 'operator') %}{% if sc.pending %}<span class="muted">Scan beauftragt</span>{% else %}
         <form method="post" action="{{ url_for('web.check_run', probe_id=sc.probe.id, check_id=sc.check.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="next" value="{{ url_for('web.site', site_id=site.id, tab='netzwerk') }}">
+          <input type="hidden" name="next" value="{{ url_for('web.network', site_id=site.id) }}">
           <button class="link" aria-label="Jetzt scannen: {{ sc.check.name }} auf {{ sc.probe.hostname }}">Jetzt scannen</button></form>{% endif %}{% endif %}</td>
     </tr>
   {% endfor %}</tbody>
@@ -47,7 +47,7 @@
 
 <h2 id="geraete">Geräte</h2>
 <nav class="tabs" aria-label="Zeitraum">
-  {%- for key, (text, _s) in ranges.items() %}<a href="{{ url_for('web.site', site_id=site.id, tab='netzwerk', zeitraum=key) }}"{% if key == rng %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
+  {%- for key, (text, _s) in ranges.items() %}<a href="{{ url_for('web.network', site_id=site.id, zeitraum=key) }}"{% if key == rng %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
 </nav>
 <p class="muted">Auffällige Geräte stehen oben. Die Leiste zeigt, wann das Gerät bei den Scans im gewählten Zeitraum erreichbar war (grün = gesehen, gelb = nicht gesehen, grau = noch nicht gescannt).
   Unregelmäßig = mindestens 3-mal neu aufgetaucht in 24 Stunden. Die Links starten die Verbindung <strong>von diesem PC aus</strong> – sie funktionieren nur, wenn er das Gerät erreicht (gleiches Netz oder VPN).</p>

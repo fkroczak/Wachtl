@@ -154,6 +154,9 @@ public sealed class HeartbeatResponse
     public string ConfigEtag { get; init; } = string.Empty;
     public long ServerTime { get; init; }
     public List<ProbeCommand> Commands { get; init; } = new();
+
+    /// <summary>Wartende Einzeltests aus dem Web-UI (Werkzeuge) – dann sofort GET tools/next.</summary>
+    public int ToolsPending { get; init; }
 }
 
 public sealed class ProbeCommand

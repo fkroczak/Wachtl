@@ -108,7 +108,7 @@ class ServerProbe:
                 return
         loops = [threading.Thread(target=fn, daemon=True, name=fn.__name__)
                  for fn in (self.config_loop, self.upload_loop, self.heartbeat_loop, self.topology_loop,
-                           self.discovery_loop)]
+                           self.discovery_loop, self.tool_loop)]
         if self.tray:
             loops.append(threading.Thread(target=self.notice_loop, daemon=True, name="notice_loop"))
         for t in loops:
@@ -243,6 +243,12 @@ class ServerProbe:
         from . import discovery
 
         discovery.loop(lambda: self.api if self.config is not None else None, self.stop_event)
+
+    def tool_loop(self) -> None:
+        """Werkzeuge (docs/WERKZEUGE.md): Einzeltests aus dem Web-UI ausführen."""
+        from . import tools
+
+        tools.loop(lambda: self.api if self.config is not None else None, self.stop_event)
 
     def heartbeat_loop(self) -> None:
         while not self.stop_event.is_set():

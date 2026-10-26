@@ -153,7 +153,7 @@ class NetscanServerTest(AppTestCase):
         # Seite, Links, RDP-Datei, Bezeichnung
         self.make_user()
         self.login()
-        html = self.client.get(f"/sites/{self.site}?tab=netzwerk").get_data(as_text=True)
+        html = self.client.get(f"/sites/{self.site}/netzwerk").get_data(as_text=True)
         self.assertIn('href="https://192.168.10.254/"', html)
         self.assertIn('href="ssh://192.168.10.254"', html)
         self.assertIn("IP-Konflikt", html)
@@ -168,7 +168,7 @@ class NetscanServerTest(AppTestCase):
                                 data={"note": "Router Keller", "csrf_token": self.csrf()})
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(q1("SELECT note FROM net_devices WHERE id = ?", (r["id"],))["note"], "Router Keller")
-        self.assertIn("Router Keller", self.client.get(f"/sites/{self.site}?tab=netzwerk&zeitraum=7d").get_data(as_text=True))
+        self.assertIn("Router Keller", self.client.get(f"/sites/{self.site}/netzwerk?zeitraum=7d").get_data(as_text=True))
 
     def test_error_run_and_empty_page(self):
         self.assertEqual(self.post([], self.now, error="Netz zu groß (8192 Adressen)").status_code, 201)
@@ -177,11 +177,11 @@ class NetscanServerTest(AppTestCase):
         self.assertEqual(q("SELECT * FROM net_devices"), [])
         self.make_user()
         self.login()
-        html = self.client.get(f"/sites/{self.site}?tab=netzwerk").get_data(as_text=True)
+        html = self.client.get(f"/sites/{self.site}/netzwerk").get_data(as_text=True)
         self.assertIn("Netz zu groß", html)
         # ohne Scan-Check: Hinweis zum Einrichten
         ex("DELETE FROM checks WHERE id = ?", (self.cid,))
-        html = self.client.get(f"/sites/{self.site}?tab=netzwerk").get_data(as_text=True)
+        html = self.client.get(f"/sites/{self.site}/netzwerk").get_data(as_text=True)
         self.assertIn("Netzwerkscan einrichten", html)
 
     def test_check_form_and_run_now(self):
@@ -200,7 +200,7 @@ class NetscanServerTest(AppTestCase):
         c = q1("SELECT * FROM checks WHERE name = 'Scan 2'")
         self.assertEqual((c["target"], c["interval_s"]), ("192.168.10.0/24", 900))
         r = self.client.post(f"/probes/{self.a['probe_id']}/checks/{self.cid}/run",
-                             data={"csrf_token": self.csrf(), "next": f"/sites/{self.site}?tab=netzwerk"})
+                             data={"csrf_token": self.csrf(), "next": f"/sites/{self.site}/netzwerk"})
         self.assertEqual(r.status_code, 302)
         self.assertEqual(q1("SELECT type FROM probe_commands")["type"], "run_check")
 
