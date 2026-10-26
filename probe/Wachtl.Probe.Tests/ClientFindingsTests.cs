@@ -98,15 +98,119 @@ public class FindingEvaluatorTests
     }
 
     [Fact]
-    public void NoCableFindingForAdapterNeverSeenUpOrDisabled()
+    public void NoFindingForAdapterNeverSeenUp()
     {
         Assert.Empty(PollFor(TimeSpan.FromMinutes(1), Eth(LinkStatus.Down)));
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(1), Eth(LinkStatus.Disabled)));
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(1)));
+    }
 
-        var eval = new FindingEvaluator();
-        eval.Evaluate(new AdapterSnapshot(T0, new[] { Eth() }));
-        // deaktiviert: verschwindet aus der Liste bzw. Status Disabled
-        Assert.Empty(eval.Evaluate(new AdapterSnapshot(T0.AddSeconds(5), new[] { Eth(LinkStatus.Disabled) })));
-        Assert.Empty(eval.Evaluate(new AdapterSnapshot(T0.AddSeconds(10), Array.Empty<AdapterState>())));
+    [Fact]
+    public void DisabledAdapterIsCriticalWithoutOtherConnection()
+    {
+        Poll(Eth());
+        Assert.Empty(Poll(Eth(LinkStatus.Disabled))); // eine Abfrage abwarten
+        var fired = Assert.Single(Poll(Eth(LinkStatus.Disabled)));
+        Assert.Equal(FindingKinds.AdapterDisabled, fired.Kind);
+        Assert.Equal("critical", fired.Severity);
+        Assert.Equal("Netzwerkkarte deaktiviert", fired.Title);
+        Assert.Contains("aktivieren", fired.Balloon);
+        Assert.Empty(PollFor(TimeSpan.FromMinutes(1), Eth(LinkStatus.Disabled)));
+
+        // wieder aktiviert: erst ohne Link (handelt aus), dann verbunden – keine „Kabel getrennt“-Meldung
+        var back = Assert.Single(Poll(Eth(LinkStatus.Down)));
+        Assert.Equal(fired.FindingId, back.FindingId);
+        Assert.Equal("resolved", back.State);
+        Assert.Equal("Netzwerkkarte wieder aktiviert", back.Title);
+        Assert.Empty(PollFor(TimeSpan.FromSeconds(30), Eth()));
+    }
+
+    [Fact]
+    public void DisabledAdapterWhileWifiCarriesOnIsWarning()
+    {
+        Poll(Eth(), Wifi());
+        var fired = Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(LinkStatus.Disabled), Wifi()));
+        Assert.Equal(FindingKinds.AdapterDisabled, fired.Kind);
+        Assert.Equal("warning", fired.Severity); // trotzdem Sprechblase
+        Assert.Contains("„WLAN“", fired.Message);
+    }
+
+    [Fact]
+    public void DisabledAdapterThatVanishesFromInterfaceListIsDisabledNotRemoved()
+    {
+        // Windows führt deaktivierte Karten nicht mehr als Schnittstelle, nur noch der Geräte-Manager kennt sie
+        Poll(Eth());
+        var disabled = new AdapterState { Id = "eth0", Name = "Ethernet", WmiPhysical = false, Status = LinkStatus.Disabled, PnpErrorCode = 22 };
+        var fired = Assert.Single(PollFor(TimeSpan.FromSeconds(10), disabled));
+        Assert.Equal(FindingKinds.AdapterDisabled, fired.Kind);
+    }
+
+    [Fact]
+    public void RemovedAdapterIsCriticalAfterGrace()
+    {
+        Poll(Eth());
+        var first = Assert.Single(PollFor(TimeSpan.FromSeconds(10)));
+        Assert.Equal(FindingKinds.AdapterRemoved, first.Kind);
+        Assert.Equal("info", first.Severity);
+        var escalated = Assert.Single(PollFor(TimeSpan.FromSeconds(10)));
+        Assert.Equal(first.FindingId, escalated.FindingId);
+        Assert.Equal("critical", escalated.Severity);
+        Assert.Equal("Netzwerkkarte entfernt", escalated.Title);
+
+        var back = Assert.Single(Poll(Eth()));
+        Assert.Equal("resolved", back.State);
+        Assert.Equal("Netzwerkkarte wieder vorhanden", back.Title);
+    }
+
+    [Fact]
+    public void RemovedThenConfirmedDisabledKeepsFindingId()
+    {
+        Poll(Eth());
+        var removed = Assert.Single(PollFor(TimeSpan.FromSeconds(10)));
+        Assert.Equal(FindingKinds.AdapterRemoved, removed.Kind);
+        var disabled = Assert.Single(Poll(Eth(LinkStatus.Disabled)));
+        Assert.Equal(removed.FindingId, disabled.FindingId);
+        Assert.Equal(FindingKinds.AdapterDisabled, disabled.Kind);
+        Assert.Equal("critical", disabled.Severity);
+    }
+
+    [Fact]
+    public void UndockWhileWifiCarriesOnIsOnlyInfo()
+    {
+        Poll(Eth(), Wifi());
+        var changes = PollFor(TimeSpan.FromMinutes(1), Wifi());
+        var removed = Assert.Single(changes);
+        Assert.Equal(FindingKinds.AdapterRemoved, removed.Kind);
+        Assert.Equal("info", removed.Severity);
+    }
+
+    [Fact]
+    public void ShortDriverReloadIsNotReported()
+    {
+        Poll(Eth());
+        Assert.Empty(Poll());
+        Assert.Empty(PollFor(TimeSpan.FromSeconds(30), Eth()));
+    }
+
+    [Fact]
+    public void CableUnplugIsReportedEveryTime()
+    {
+        Poll(Eth());
+        for (var i = 0; i < 3; i++)
+        {
+            var changes = PollFor(TimeSpan.FromSeconds(20), Eth(LinkStatus.Down));
+            Assert.Contains(changes, c => c.Kind == FindingKinds.CableUnplugged && c.Severity == "critical");
+            Assert.Contains(PollFor(TimeSpan.FromSeconds(15), Eth()), c => c.State == "resolved");
+        }
+    }
+
+    [Fact]
+    public void DisablingTwiceIsReportedTwice()
+    {
+        Poll(Eth());
+        Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(LinkStatus.Disabled)));
+        PollFor(TimeSpan.FromSeconds(30), Eth());
+        Assert.Single(PollFor(TimeSpan.FromSeconds(10), Eth(LinkStatus.Disabled)), f => f.State == "active");
     }
 
     [Fact]
@@ -138,17 +242,14 @@ public class FindingEvaluatorTests
     }
 
     [Fact]
-    public void SameFindingIsSuppressedFor30MinutesAfterResolution()
+    public void WarningIsSuppressedFor30MinutesAfterResolution()
     {
         Poll(Eth());
-        Assert.Single(Poll(Eth(LinkStatus.Down)));
         PollFor(TimeSpan.FromSeconds(10), Eth());
-        Assert.Empty(Poll(Eth(LinkStatus.Down))); // wieder gezogen, innerhalb von 30 min: keine neue Meldung
-        PollFor(TimeSpan.FromSeconds(10), Eth());
-
-        _now = _now.AddMinutes(31);
-        var again = Assert.Single(Poll(Eth(LinkStatus.Down)));
-        Assert.Equal(FindingKinds.CableUnplugged, again.Kind);
+        Assert.Contains(PollFor(TimeSpan.FromSeconds(10), Eth(speed: 100_000_000)), f => f.Kind == FindingKinds.LinkSpeedChanged);
+        Assert.Contains(PollFor(TimeSpan.FromSeconds(10), Eth()), f => f.State == "resolved");
+        // wieder langsamer, innerhalb von 30 min: keine neue Meldung
+        Assert.DoesNotContain(PollFor(TimeSpan.FromSeconds(10), Eth(speed: 100_000_000)), f => f.Kind == FindingKinds.LinkSpeedChanged);
     }
 
     [Fact]
@@ -158,8 +259,8 @@ public class FindingEvaluatorTests
         Assert.Equal("info", Assert.Single(Poll(Eth(LinkStatus.Down), Wifi())).Severity);
         PollFor(TimeSpan.FromSeconds(10), Eth(), Wifi());
         // jetzt ohne WLAN: nach 15 s kritisch, also trotz Sperrfrist
-        Assert.DoesNotContain(PollFor(TimeSpan.FromSeconds(15), Eth(LinkStatus.Down)), f => f.Kind == FindingKinds.CableUnplugged);
-        var fired = Assert.Single(Poll(Eth(LinkStatus.Down)), f => f.Kind == FindingKinds.CableUnplugged);
+        Assert.DoesNotContain(PollFor(TimeSpan.FromSeconds(15), Eth(LinkStatus.Down), Wifi(LinkStatus.Down)), f => f.Kind == FindingKinds.CableUnplugged);
+        var fired = Assert.Single(Poll(Eth(LinkStatus.Down), Wifi(LinkStatus.Down)), f => f.Kind == FindingKinds.CableUnplugged);
         Assert.Equal("critical", fired.Severity);
     }
 

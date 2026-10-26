@@ -23,6 +23,8 @@ KINDS = {
     "apipa": "Keine Adresse vom DHCP-Server",
     "no_gateway": "Kein Standard-Gateway",
     "nic_errors": "Übertragungsfehler der Netzwerkkarte",
+    "adapter_disabled": "Netzwerkkarte deaktiviert",
+    "adapter_removed": "Netzwerkkarte entfernt",
 }
 SEVERITIES = {"info": "Info", "warning": "Warnung", "critical": "Kritisch"}
 STATES = {"active": "aktiv", "resolved": "behoben"}

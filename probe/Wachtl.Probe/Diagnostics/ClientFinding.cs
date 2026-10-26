@@ -22,11 +22,13 @@ public static class FindingKinds
     public const string Apipa = "apipa";
     public const string NoGateway = "no_gateway";
     public const string NicErrors = "nic_errors";
+    public const string AdapterDisabled = "adapter_disabled";
+    public const string AdapterRemoved = "adapter_removed";
 
     public static readonly IReadOnlyList<string> All = new[]
     {
         CableUnplugged, WifiDisconnected, LinkSpeedChanged, LinkSpeedLow, LinkFlapping, DriverError, NicReset, Apipa,
-        NoGateway, NicErrors,
+        NoGateway, NicErrors, AdapterDisabled, AdapterRemoved,
     };
 }
 
