@@ -14,7 +14,7 @@ from .services import topology as topo_service
 from .web import SITE_TABS, _live, bp
 
 log = logging.getLogger(__name__)
-VIEWS = {"baum": "Baum", "switche": "Switches", "probleme": "Probleme", "pfad": "Pfad suchen"}
+VIEWS = {"baum": "Baum", "switche": "Switches", "probleme": "Probleme", "verlauf": "Verlauf", "pfad": "Pfad suchen"}
 
 
 def _site(site_id: int) -> dict:
@@ -57,24 +57,96 @@ def _common(site: dict, view: str, topo=None) -> dict:
     return {"site": site, "tabs": SITE_TABS, "tab": "topologie", "view": view, "views": VIEWS, "need_creds": need,
             "problem_count": int(counts["n"] or 0), "poller": _poller(), "drafts": drafts,
             "speed_text": topo_service.speed_text, "speed_short": topo_service.speed_short,
-            "speed_class": topo_service.speed_class, "link_label": topo_service.link_label, "topo": topo}
+            "speed_class": topo_service.speed_class, "link_label": topo_service.link_label, "topo": topo,
+            "intervals": topo_service.intervals()}
 
 
 @bp.get("/sites/<int:site_id>/topologie")
 @login_required()
 def topology(site_id: int):
-    """Baum: Internet → Gateway → Switches → Geräte; rechts der gewählte Switch."""
+    """Baum: Internet → Gateway → Switches → Geräte; rechts der gewählte Switch oder die Zeitleiste.
+
+    Mit ``ereignis`` oder ``zeit`` zeigt der Baum den damaligen Stand (Zeitreise)."""
+    from .services import topo_history
+
     site = _site(site_id)
-    topo = topo_service.build(site_id)
+    now = repo.now()
+    ev = topo_history.event_by_id(site_id, request.args.get("ereignis", type=int) or 0)
+    at = request.args.get("zeit", type=int)
+    if ev:
+        at = min(ev["ts"] + 120, now)          # Stand nach dem Ereignis (die Abfrage kam bis zu einer Minute später)
+    if at is not None and not 0 < at < now - 30:
+        at = None
+    topo = topo_service.build(site_id, at=at)
+    side = "verlauf" if at or request.args.get("seite") == "verlauf" else "switch"
+    show_all = request.args.get("alle") == "1"
+    timeline = None
+    if side == "verlauf":
+        rows = topo_history.events(site_id, art="alle" if show_all else "stoerungen", limit=40)
+        ref = ev["ts"] if ev else (at or now)
+        timeline = {"days": topo_history.group_by_day(rows), "all": show_all,
+                    "older": topo_history.neighbor_event(site_id, ref, False, not show_all),
+                    "newer": topo_history.neighbor_event(site_id, ref, True, not show_all) if at else None}
     if not topo.switches:
-        return render_template("topology.html", lay=None, selected=None, **_common(site, "baum", topo))
+        return render_template("topology.html", lay=None, selected=None, at=at, ev=ev, side=side, tl_data=timeline,
+                               highlight=set(), **_common(site, "baum", topo))
     sel_id = request.args.get("switch", type=int)
     if sel_id not in topo.switches:
-        sel_id = _first_switch(topo)
+        sel_id = ev["switch_id"] if ev and ev["switch_id"] in topo.switches else _first_switch(topo)
     selected = _switch_panel(site_id, topo, sel_id)
-    lay = topo_service.layout(topo, show_devices=request.args.get("geraete", "1") != "0")
-    return render_template("topology.html", lay=lay, selected=selected, show_devices=request.args.get("geraete", "1") != "0",
-                           **_common(site, "baum", topo))
+    highlight = {topo.switches[ev["switch_id"]]["node"]} if ev and ev["switch_id"] in topo.switches else set()
+    show_devices = request.args.get("geraete", "1") != "0"
+    lay = topo_service.layout(topo, show_devices=show_devices)
+    return render_template("topology.html", lay=lay, selected=selected, show_devices=show_devices, at=at, ev=ev,
+                           side=side, tl_data=timeline, highlight=highlight, **_common(site, "baum", topo))
+
+
+@bp.get("/sites/<int:site_id>/topologie/verlauf")
+@login_required()
+def topology_history(site_id: int):
+    """Chronik: alle Änderungen nach Tagen, gefiltert; rechts das gewählte Ereignis mit dem Baum von damals."""
+    from .services import topo_history
+
+    site = _site(site_id)
+    art = request.args.get("art", "alle")
+    if art not in topo_history.FILTERS:
+        art = "alle"
+    switch_id = request.args.get("switch", type=int)
+    before = request.args.get("bis", type=int)
+    rows = topo_history.events(site_id, art=art, switch_id=switch_id, before=before, limit=100)
+    ev = topo_history.event_by_id(site_id, request.args.get("ereignis", type=int) or 0) or (rows[0] if rows else None)
+    detail = None
+    if ev:
+        at = min(ev["ts"] + 120, repo.now())
+        topo = topo_service.build(site_id, at=at)
+        hl = {topo.switches[ev["switch_id"]]["node"]} if ev["switch_id"] in topo.switches else set()
+        measure = None
+        if ev["switch_id"] in topo.switches and ev.get("if_index") in topo.switches[ev["switch_id"]]["ports"]:
+            measure = _port_measurement(site_id, topo.switches[ev["switch_id"]]["ports"][ev["if_index"]])
+        detail = {"ev": ev, "lay": topo_service.layout(topo, show_devices=False) if topo.switches else None,
+                  "highlight": hl, "topo": topo, "measure": measure}
+    switches = q("SELECT id, name, sys_name, host FROM net_switches WHERE site_id = ? AND status <> 'draft' "
+                 "ORDER BY COALESCE(name, sys_name, host)", (site_id,))
+    return render_template("topo_history.html", days=topo_history.group_by_day(rows), detail=detail, art=art,
+                           filters=topo_history.FILTERS, switches=switches, switch_id=switch_id,
+                           more=rows[-1]["ts"] if len(rows) == 100 else None, before=before,
+                           **_common(site, "verlauf", topo_service.build(site_id)))
+
+
+@bp.get("/sites/<int:site_id>/topologie/kontext")
+@login_required()
+def topology_context(site_id: int):
+    """Störung im Kontext: Paketverlust der Probe neben Ports, Switches und Ereignissen derselben Zeit."""
+    from .services import topo_history
+
+    site = _site(site_id)
+    start = request.args.get("von", type=int)
+    end = request.args.get("bis", type=int) or start
+    if not start or not end or end < start or start > repo.now():
+        abort(404)
+    probe = q1("SELECT * FROM probes WHERE id = ? AND site_id = ?", (request.args.get("probe", type=int) or 0, site_id))
+    ctx = topo_history.context(site_id, probe, start, end)
+    return render_template("topo_context.html", ctx=ctx, **_common(site, "verlauf", topo_service.build(site_id)))
 
 
 @bp.get("/topologie")
@@ -182,13 +254,17 @@ def topology_switch(site_id: int, switch_id: int):
     measure = _port_measurement(site_id, port) if port else None
     errors = q("SELECT if_index, ts, errors FROM net_port_errors WHERE switch_id = ? AND ts >= ? ORDER BY ts DESC LIMIT 20",
                (switch_id, repo.now() - 7 * 86400)) if port else []
-    events = q("SELECT * FROM net_topo_events WHERE switch_id = ? ORDER BY ts DESC LIMIT 20", (switch_id,))
+    from .services import topo_history
+
+    events = topo_history.events(site_id, switch_id=switch_id, limit=20)
+    rng = request.args.get("verlauf", "24h")
+    lanes = topo_history.port_lanes(row, ports, rng if rng in topo_history.RANGES else "24h")
     creds = None
     try:
         creds = topo_service.credential_hint(secretbox.unseal(row["secret"]))
     except secretbox.SecretError as exc:
         creds = str(exc)
-    return render_template("topo_switch.html", sw=panel, port=port, path=path, measure=measure, events=events,
+    return render_template("topo_switch.html", sw=panel, port=port, path=path, measure=measure, events=events, lanes=lanes,
                            port_errors=[e for e in errors if port and e["if_index"] == port.index], creds=creds,
                            all_ports=sorted(ports.values(), key=lambda p: (not p.physical, p.index)),
                            **_common(site, "switche", topo))
@@ -471,7 +547,9 @@ def topology_activate(site_id: int, switch_id: int):
        (repo.now(), repo.now(), switch_id))
     user = current_user()["username"]
     repo.audit(user, "topology.switch_activate", f"switch:{switch_id}", sw["host"])
-    msg = f"{topo_service.switch_label(sw)} wird jetzt alle {topo_service.POLL_MIN} Minuten abgefragt."
+    full_s, quick_s = topo_service.intervals()
+    msg = (f"{topo_service.switch_label(sw)} wird jetzt alle {full_s // 60} Minuten vollständig abgefragt"
+           + (f", der Port-Status alle {quick_s} Sekunden." if quick_s else "."))
     added, failed = [], []
     for c in _also(site_id, request.form.get("auch")):
         # dieselben Zugangsdaten für weitere gefundene Switches – nur die, die der Benutzer angehakt hat

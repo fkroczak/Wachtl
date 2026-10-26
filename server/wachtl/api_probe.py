@@ -501,7 +501,7 @@ def topology_jobs():
 
     if g.probe.get("kind") != "server":
         return jsonify(error="Switch-Abfragen laufen nur über die Server-Probe"), 403
-    return jsonify(jobs=topology.jobs(), poll_s=30)
+    return jsonify(jobs=topology.jobs(), poll_s=15)
 
 
 @bp.post("/results/topology")
@@ -519,15 +519,17 @@ def result_topology():
     if sw is None:
         return jsonify(error="Switch unbekannt"), 422
     ts = _result_ts(data.get("ts"))
+    kind = "quick" if data.get("kind") == "quick" else "full"
     error = data.get("error")
     snapshot = None
     if not error:
         try:
-            snapshot = topology.clean_snapshot(data.get("snapshot"))
+            snapshot = (topology.clean_quick if kind == "quick" else topology.clean_snapshot)(data.get("snapshot"))
         except ValueError as exc:
             error = str(exc)
-    topology.store_result(sw, snapshot, str(error) if error else None, ts)
-    log.info("Switch %s (%s): %s", sw["id"], sw["host"], f"Fehler: {error}" if error else "abgefragt")
+    topology.store_result(sw, snapshot, str(error) if error else None, ts, kind)
+    log.log(logging.INFO if error or kind == "full" else logging.DEBUG, "Switch %s (%s): %s", sw["id"], sw["host"],
+            f"Fehler: {error}" if error else f"abgefragt ({kind})")
     return jsonify(stored=1), 201
 
 

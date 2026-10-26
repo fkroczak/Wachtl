@@ -430,6 +430,9 @@ class FindAndEnterTest(AppTestCase):
             ex("UPDATE net_switches SET last_poll = ?", (repo.now() - 3600,))
             jobs = self.client.get("/api/probe/v1/topology/jobs", headers=auth).get_json()["jobs"]
             self.assertEqual({j["access"] for j in jobs}, {"easysmart"})
+            self.assertEqual({j["kind"] for j in jobs}, {"full"})
+            ex("UPDATE net_switches SET last_full = ?, last_poll = ?", (repo.now(), repo.now() - 3600))
+            self.assertEqual(self.client.get("/api/probe/v1/topology/jobs", headers=auth).get_json()["jobs"], [])
             self.assertEqual(jobs[0]["credentials"]["password"], "geheim-123")
         audit = " ".join(r["detail"] or "" for r in q("SELECT detail FROM audit_log"))
         self.assertNotIn("geheim-123", audit)

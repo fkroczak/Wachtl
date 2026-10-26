@@ -18,28 +18,30 @@ def poll(job: dict) -> dict:
     ts = int(time.time())
     if job.get("access") == "easysmart":
         try:
-            return {"switch_id": job["switch_id"], "ts": ts,
+            return {"switch_id": job["switch_id"], "ts": ts, "kind": "full",
                     "snapshot": easysmart.poll(job["host"], job.get("credentials") or {}, port=int(job.get("port") or 80))}
         except easysmart.EasySmartError as exc:
-            return {"switch_id": job["switch_id"], "ts": ts, "error": str(exc)}
+            return {"switch_id": job["switch_id"], "ts": ts, "kind": "full", "error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             log.exception("Switch %s: Abfrage unerwartet fehlgeschlagen", job.get("host"))
-            return {"switch_id": job["switch_id"], "ts": ts, "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
+            return {"switch_id": job["switch_id"], "ts": ts, "kind": "full",
+                    "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
     try:
         creds = snmp.Credentials(**{k: v for k, v in (job.get("credentials") or {}).items()
                                     if k in snmp.Credentials.__dataclass_fields__})
         with snmp.Session(job["host"], creds, port=int(job.get("port") or 161), timeout=2.0, retries=1) as sess:
-            snapshot = snmpcollect.collect(sess)
-        return {"switch_id": job["switch_id"], "ts": ts, "snapshot": snapshot}
+            snapshot = snmpcollect.quick(sess) if job.get("kind") == "quick" else snmpcollect.collect(sess)
+        return {"switch_id": job["switch_id"], "ts": ts, "kind": job.get("kind") or "full", "snapshot": snapshot}
     except snmp.SnmpError as exc:
-        return {"switch_id": job["switch_id"], "ts": ts, "error": str(exc)}
+        return {"switch_id": job["switch_id"], "ts": ts, "kind": job.get("kind") or "full", "error": str(exc)}
     except Exception as exc:  # noqa: BLE001 – ein kaputter Switch darf die Probe nie beenden
         log.exception("Switch %s: Abfrage unerwartet fehlgeschlagen", job.get("host"))
-        return {"switch_id": job["switch_id"], "ts": ts, "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
+        return {"switch_id": job["switch_id"], "ts": ts, "kind": job.get("kind") or "full",
+                "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
 
 
 def loop(api_getter: Callable, stop: threading.Event, poller: Callable[[dict], dict] = poll) -> None:
-    """Alle 30 s fällige Abfragen holen und erledigen; Ergebnisse sofort melden."""
+    """Regelmäßig fällige Abfragen holen (schnell und vollständig) und erledigen; Ergebnisse sofort melden."""
     with ThreadPoolExecutor(max_workers=PARALLEL, thread_name_prefix="snmp") as pool:
         while not stop.is_set():
             wait = 30

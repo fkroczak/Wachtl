@@ -35,7 +35,8 @@
       <td class="nowrap">{{ o.start|dt }}</td>
       <td class="nowrap">{{ o.duration|duration }}{% if o.end is none %} <span class="badge critical">aktiv</span>{% endif %}</td>
       <td><span class="cause cause-{{ o.cause }}" title="{{ causes[o.cause][1] }}">{{ o.cause_label }}</span>
-        {% if o.consequence_of %}<br><span class="muted small">Folge von: {{ o.consequence_of }}</span>{% endif %}</td>
+        {% if o.consequence_of %}<br><span class="muted small">Folge von: {{ o.consequence_of }}</span>{% endif %}
+        {% if o.site in switch_sites %}<br><a class="small" href="{{ url_for('web.topology_context', site_id=o.site|int, probe=o.probe|int if o.probe|int else None, von=o.start, bis=o.end or o.start + o.duration) }}" aria-label="Switch-Netz zur Zeit der Störung: {{ o.probe_name }}, {{ o.start|dt }}">Switch-Netz zu dieser Zeit</a>{% endif %}</td>
       <td>{% if o.site %}<a href="{{ url_for('web.site', site_id=o.site|int) }}">{{ o.site_name }}</a>{% endif %}</td>
       <td>{% if o.probe %}<a href="{{ url_for('web.probe', probe_id=o.probe|int) }}">{{ o.probe_name }}</a>{% endif %}</td>
       <td>{% if o.cause not in ('probe', 'wan') %}{% if o.probe|int and o.check_id|int %}<a href="{{ url_for('web.target', probe_id=o.probe|int, check_id=o.check_id|int) }}" aria-label="{{ o.target }} von {{ o.probe_name }}">{{ o.target }}</a>{% else %}{{ o.target }}{% endif %}{% endif %}</td>

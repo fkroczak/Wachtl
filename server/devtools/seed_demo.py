@@ -245,6 +245,7 @@ def _seed_topology(site: int, now: int) -> int:
         (site, secret, now - 240, "Keine Antwort von 192.168.1.6 (Zeitüberschreitung) – Adresse, Benutzer und "
          "Firewall (UDP 161) prüfen.", now - 86400, now))
     ins("INSERT INTO net_port_errors (switch_id, if_index, ts, errors) VALUES (?, 4, ?, 1204)", (ids[1], now - 3600))
+    _seed_history(site, ids, {"core": core, "eg": eg, "og": og, "lager": lag}, now)
     for i in range(3):
         ins("INSERT INTO net_topo_events (site_id, switch_id, ts, kind, if_index, mac, detail) VALUES (?, ?, ?, "
             "'mac_moved', 3, ?, ?)", (site, ids[0], now - 3600 * (i + 1), og_pcs[0], f"{og_pcs[0]}: Port 3 → Port 7"))
@@ -256,6 +257,42 @@ def _seed_topology(site: int, now: int) -> int:
         {"proto": "nsdp", "mac": ng, "ip": "192.168.1.31", "model": "GS108Ev3", "name": None, "firmware": "2.06.10"}], now)
     topology.refresh_findings(site, now)
     return ids[1]
+
+
+def _seed_history(site: int, ids: list[int], snaps: dict, now: int) -> None:
+    """Verlauf der letzten Tage: Stände zum Zurückblättern und typische Ereignisse (wie in den Entwürfen)."""
+    import copy
+
+    from wachtl.services import topo_history
+
+    core, eg, og, lager = ids
+    for sid, key in ((core, "core"), (eg, "eg"), (og, "og"), (lager, "lager")):
+        topo_history.store_snapshot(sid, snaps[key], now - 3 * 86400)
+    slow = copy.deepcopy(snaps["eg"])
+    next(i for i in slow["interfaces"] if i["index"] == 25)["speed_mbps"] = 100
+    t_slow = now - 86400 + 2 * 3600
+    topo_history.store_snapshot(eg, slow, t_slow)
+    topo_history.store_snapshot(eg, snaps["eg"], t_slow + 7200)
+    down = copy.deepcopy(snaps["eg"])
+    next(i for i in down["interfaces"] if i["index"] == 4)["oper_up"] = False
+    topo_history.store_snapshot(eg, down, now - 3700)
+    topo_history.store_snapshot(eg, snaps["eg"], now - 3580)
+
+    def ev(sid, ts, kind, sev, port, detail, data=None):
+        topo_history.event({"id": sid, "site_id": site}, ts, kind, sev, port, None, detail, data)
+
+    ev(lager, now - 2 * 86400 - 3600, "switch_restart", "warning", None, "Neu gestartet (Laufzeit jetzt 2 min)")
+    ev(eg, now - 2 * 86400 + 5000, "mac_moved", "info", 4, "pc-empfang.kunde.local: Port 9 → Port 4", {"from": 9, "to": 4})
+    ev(og, now - 86400 - 3000, "device_new", "info", 12, "02:00:00:42:00:00 an Port 12")
+    ev(eg, t_slow - 60, "link_flap", "critical", 25, "Port 25: kurz ohne Link zwischen zwei Abfragen")
+    ev(eg, t_slow, "speed_changed", "warning", 25, "Port 25: 10 Gbit/s → 100 Mbit/s", {"from": 10000, "to": 100})
+    ev(eg, t_slow + 7200, "speed_changed", "info", 25, "Port 25: 100 Mbit/s → 10 Gbit/s", {"from": 100, "to": 10000})
+    ev(eg, now - 3700, "link_down", "info", 4, "Port 4: Link weg", {"from": "up", "to": "down", "speed": 1000})
+    ev(eg, now - 3580, "link_up", "info", 4, "Port 4: Link wieder da, 1 Gbit/s", {"from": "down", "to": "up", "speed": 1000})
+    ev(eg, now - 3500, "port_errors", "critical", 4, "Port 4: 1.204 fehlerhafte Pakete seit der letzten Abfrage",
+       {"count": 1204})
+    ev(eg, now - 40000, "link_down", "info", 6, "Port 6: Link weg", {"from": "up", "to": "down", "speed": 1000})
+    ev(eg, now - 9000, "link_up", "info", 6, "Port 6: Link wieder da, 1 Gbit/s", {"from": "down", "to": "up", "speed": 1000})
 
 
 if __name__ == "__main__":

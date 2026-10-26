@@ -124,3 +124,46 @@ svg.topo a:focus-visible .tn-box { stroke: var(--focus); stroke-width: 3; }
 .topo-list-narrow { display: none; }
 .topo-list-narrow h3 { font-size: 0.95rem; margin: 0.6rem 0 0.2rem; } .topo-list-narrow ul ul { padding-left: 1.1rem; }
 @media (max-width: 700px) { .topo-list-narrow { display: block; } details.topo-list { display: none; } }
+/* Verlauf: Zeitreise, Zeitleiste, Chronik, Port-Verlauf, Störung im Kontext */
+.topo-side { display: flex; flex-direction: column; gap: 0.6rem; }
+.topo-sidenav { align-self: flex-start; }
+.topo-banner { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; justify-content: space-between;
+  background: var(--text); color: var(--bg); border-radius: var(--radius-sm); padding: 0.6rem 1rem; margin-bottom: 1rem; }
+.topo-banner p { margin: 0; }
+.tn-hl .tn-box { stroke: var(--warn); stroke-width: 3; }
+.tn-hl .tn-ic { fill: var(--warn); } .tn-hl .tn-glyph { stroke: var(--on-fill); }
+.tl-tools { font-size: 0.85rem; margin: 0.2rem 0 0.4rem; }
+.tl-now { display: inline-flex; align-items: center; min-height: 36px; font-weight: 600; }
+.tl-day { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin: 0.9rem 0 0.2rem; }
+.tl-list { list-style: none; margin: 0; padding: 0 0 0 0.45rem; border-left: 2px solid var(--border); }
+.tl-item { display: flex; gap: 0.5rem; align-items: baseline; padding: 0.45rem 0.4rem; border-radius: var(--radius-sm);
+  color: var(--text); text-decoration: none; min-height: 44px; margin-left: -0.85rem; }
+.tl-item:hover { background: var(--surface-2); color: var(--text); }
+.tl-on { background: var(--accent-soft); }
+.tl-item time { min-width: 2.8rem; font-size: 0.8rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.tl-text { font-size: 0.88rem; min-width: 0; overflow-wrap: anywhere; }
+.tl-dot { flex: none; width: 0.75rem; height: 0.75rem; border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); align-self: center; }
+.tl-dot.sev-critical { background: var(--bad); } .tl-dot.sev-warning { background: var(--warn); }
+.topo-filter { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; align-items: flex-end; margin-bottom: 1rem; }
+.topo-filter .field { margin: 0; }
+.topo-chron { flex: 1 1 360px; min-width: 0; }
+.ctx-grid { display: grid; grid-template-columns: 11rem minmax(640px, 1fr); gap: 0.4rem 0.8rem; align-items: center; min-width: 820px; }
+.ctx-axis { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--text-muted); }
+.ctx-lab { font-size: 0.85rem; color: var(--text); line-height: 1.2; }
+.ctx-lab small { display: block; font-size: 0.75rem; color: var(--text-muted); }
+a.ctx-lab { text-decoration: none; min-height: 32px; display: flex; flex-direction: column; justify-content: center; }
+.ctx-bad { font-weight: 600; }
+.lane { display: grid; height: 1.15rem; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.lane-72 { grid-template-columns: repeat(72, minmax(0, 1fr)); } .lane-96 { grid-template-columns: repeat(96, minmax(0, 1fr)); }
+.lane-120 { grid-template-columns: repeat(120, minmax(0, 1fr)); } .lane-168 { grid-template-columns: repeat(168, minmax(0, 1fr)); }
+.ln-10 { background: var(--accent); } .ln-1, .ln-up { background: var(--ok); } .ln-100 { background: var(--warn); }
+.ln-err { background: var(--bad); } .ln-down { background: var(--none-fill); } .ln-none { background: transparent; }
+.ln-flap { background: repeating-linear-gradient(90deg, var(--bad) 0 2px, var(--none-fill) 2px 4px); }
+.topo-legend .sq.ln-down { background: var(--none-fill); }
+.lane .in-win, .ctx-loss .in-win { box-shadow: inset 0 2px 0 var(--text), inset 0 -2px 0 var(--text); }
+.ctx-loss { display: grid; grid-template-columns: repeat(120, minmax(0, 1fr)); gap: 1px; align-items: end; height: 3rem; }
+.ctx-loss i { display: block; background: var(--band); border-radius: 1px 1px 0 0; height: 6%; }
+.ctx-loss .lv1 { height: 30%; background: var(--warn); } .ctx-loss .lv2 { height: 65%; background: var(--bad); }
+.ctx-loss .lv3 { height: 100%; background: var(--bad); }
+.topo-verdict { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.7rem 1rem; margin: 0 0 1rem; background: var(--surface); }
+.topo-verdict-bad { border-color: var(--bad); } .topo-verdict-warn { border-color: var(--warn); } .topo-verdict-ok { border-color: var(--ok); }

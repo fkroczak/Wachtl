@@ -11,6 +11,7 @@
 - **Wahrscheinliche Knotenpunkte**: Hängen an einem Port mehrere Geräte ohne LLDP-Nachbarn, zeigt der Baum einen nicht verwalteten Switch – ab 3 Geräten „wahrscheinlich“, bei 2 „möglich“. Virtuelle Maschinen eines Hosts zählen nicht mit.
 - **Menüpunkt Topologie** in der Seitenleiste: bei einem Standort direkt der Baum, bei mehreren zuerst je Standort eine Kachel mit Zahl der Switches, Problemen und gefundenen Switches, die noch Zugangsdaten brauchen.
 - Windows-Server: neue Firewall-Regel „Wachtl Server Switch-Suche“ (UDP 29809, 63321, 63323, nur aus dem eigenen Netz) für die Antworten auf den Rundruf.
+- **Verlauf der Topologie**: Wachtl prüft den Port-Status der Switches jede Minute und fragt sie alle 5 Minuten vollständig ab (beides einstellbar). Kurze Aussetzer zwischen zwei Abfragen erkennt es über den Zeitpunkt der letzten Statusänderung am Port. Jede Änderung wird gespeichert: Link weg/da, kurz ohne Link, Geschwindigkeit, Port-Fehler, Neustart, Switch nicht erreichbar, Nachbar geändert, Gerät neu oder umgesteckt. **Zeitleiste am Baum** wie Time Machine: Klick auf eine Änderung zeigt den Baum von damals. Dazu **Chronik** mit Filtern, **Port-Verlauf** je Switch (jeder Port über 6 h, 24 h oder 7 Tage) und **Störung im Kontext**: Paketverlust einer Probe neben den Ports auf ihrem Weg und den Änderungen derselben Zeit, mit Einschätzung der Ursache (Link aus der Ausfallübersicht).
 
 ## Neu in 0.9.5
 
