@@ -18,7 +18,7 @@
     {% set why = site_why.get(s.id, []) %}<h2><span class="dot {{ state }}" aria-hidden="true"{% if why %} title="{{ why|map(attribute='text')|join(' · ') }}"{% endif %}></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></h2>
     {% if s.customer_no %}<p class="muted small">Kd.-Nr. {{ s.customer_no }}</p>{% endif %}
     {{ healthbar(s, h) }}
-    <p class="tile-scale muted small" aria-hidden="true"><span>vor {{ health_label }}</span><span>{{ uptime(h) }} ohne Störung</span><span>jetzt</span></p>
+    <p class="tile-scale muted small" aria-hidden="true"><span>vor {{ health_label }}</span><span>{% if h.up is none %}nicht überwacht{% else %}{{ uptime(h) }} ohne Störung{% endif %}</span><span>jetzt</span></p>
     <dl class="tile-kv">
       <div><dt>Probes online</dt><dd>{{ st.online }} / {{ st.probes }}</dd></div>
       <div><dt>Probleme</dt><dd class="{{ 'down-t' if st.problems }}">{{ st.problems }}</dd></div>

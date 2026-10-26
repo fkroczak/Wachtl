@@ -448,6 +448,11 @@ def _with_health(f: dict) -> list:
     min_s = settings_service.get()["outage_min_s"]
     items = outages.load(now - max(span, RECENT_OUTAGES_S), None, min_s, refine=f["live_ok"])
     f["site_health"] = outages.site_health(items, f["sites"], now - span, now, buckets=buckets)
+    # Standort ohne Probe und ohne je gemeldete Störung wird nicht überwacht: grau statt „100 % ohne Störung“
+    for sid, h in f["site_health"].items():
+        if not f["site_stats"].get(sid, {}).get("probes") and not h["count"]:
+            h.update(cells=["none"] * len(h["cells"]), up=None,
+                     slots=[dict(sl, state="none") for sl in h["slots"]])
     f.update(health_range=key, health_ranges=HEALTH_RANGES, health_label=label, health_step=step)
     return [o for o in items if o.end is None or o.end >= now - RECENT_OUTAGES_S]
 

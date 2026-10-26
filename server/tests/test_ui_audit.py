@@ -43,3 +43,11 @@ class UiAuditTest(AppTestCase):
         html = self.client.get(f"/probes/{self.pid}?tab=ping").get_data(as_text=True)
         self.assertIn('<span class="dot stale"></span> keine Daten', html)
         self.assertNotIn("dot unknown", html)
+
+    def test_site_without_probe_is_not_monitored(self):
+        fid = q1("SELECT id FROM sites WHERE name = 'Filiale'")["id"]
+        html = self.client.get("/standorte").get_data(as_text=True)
+        tile = html.split("<main")[1].split(f'href="/sites/{fid}"')[1].split("</li>")[0]
+        self.assertIn("nicht überwacht", tile)
+        self.assertNotIn("ohne Störung", tile)
+        self.assertNotIn('class="hb-ok"', tile)
