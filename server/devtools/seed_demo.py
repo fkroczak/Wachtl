@@ -21,7 +21,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from wachtl import checktypes, create_app, findings, repo, reports, rtp  # noqa: E402
-from wachtl.db import ins, q1  # noqa: E402
+from wachtl.db import ex, ins, q1  # noqa: E402
 from wachtl.security import hash_token  # noqa: E402
 from wachtl.services import alerts  # noqa: E402
 
@@ -160,6 +160,11 @@ def main(base: str) -> dict:
             netscan_service.store(scanner, {"id": scan}, netscan_service.validate(
                 {"hosts": hosts, "subnets": ["192.168.1.0/24"], "duration_s": 21.4}), now - (7 - i) * 900)
         switch = _seed_topology(site, now)
+        # Gateway-Erkennung: Probes melden 192.168.1.1, die Server-Probe hat per TR-064 das Modell erfahren
+        ex("UPDATE probes SET gateway = '192.168.1.1' WHERE site_id = ?", (site,))
+        ins("INSERT INTO net_gateway_info (site_id, ip, mac, data, ts) VALUES (?, ?, ?, ?, ?)",
+            (site, "192.168.1.1", None, json.dumps({"services": [], "upnp": {
+                "manufacturer": "AVM Berlin", "modelName": "FRITZ!Box 7590 AX", "softwareVersion": "7.57"}}), now))
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
     return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice,
             "switch": switch}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "_forms.html" import field %}
+{% block title %}Werkzeuge{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='tools.css') }}">{% endblock %}
+{% block content %}
+<h1>Werkzeuge</h1>
+<p class="muted">Einzeltest wie in Hop7 – direkt von einer Probe aus: vom Wachtl-Server oder von einem PC beim Kunden.
+  So prüfen Sie genau den Weg, den die Probe auch im Alltag nimmt.</p>
+
+{% if not probes %}
+<section class="card">
+  <h2>Noch keine Probe aktiv</h2>
+  <p>Werkzeuge laufen auf einer Probe. Sobald der Wachtl-Server selbst misst oder ein PC angemeldet ist, geht es hier los.</p>
+</section>
+{% else %}
+<form class="settings-form tool-form" data-tool-form data-start="{{ url_for('web.tool_start') }}"
+      data-job="{{ url_for('web.tool_job', job_id=0) }}" novalidate>
+  <fieldset>
+    <legend>Werkzeug</legend>
+    <div class="tool-pick">
+      {% for key, (label, _l, _p, hint) in TOOLS.items() %}
+      <label class="tool-tile"><input type="radio" name="tool" value="{{ key }}"{% if key == tool %} checked{% endif %}>
+        <span class="tool-name">{{ label }}</span></label>
+      {% endfor %}
+    </div>
+    <p class="muted tool-hint" data-tool-hint>{{ TOOLS[tool][3] }}</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Ziel und Probe</legend>
+    <div class="grid-form">
+      {% call(attrs) field("host", TOOLS[tool][1], help="Hostname, IP-Adresse oder – bei HTTP(S) – die vollständige Adresse.") %}
+        <input name="host" maxlength="500" autocomplete="off" required value="{{ prefill }}" placeholder="{{ TOOLS[tool][2] }}" {{ attrs }}>
+      {% endcall %}
+      {% call(attrs) field("probe", "Ausführen auf", help="Die Probe holt den Test ab; ein PC meldet sich spätestens alle 30 s.") %}
+        <select name="probe" {{ attrs }}>
+          {% for p in probes %}<option value="{{ p.id }}"{% if current and p.id == current.id %} selected{% endif %}>
+            {{ 'Wachtl-Server' if p.kind == 'server' else p.hostname }}{% if not single_site %} · {{ p.site_name }}{% endif %}{% if not p.online %} (offline){% endif %}</option>{% endfor %}
+        </select>
+      {% endcall %}
+    </div>
+  </fieldset>
+
+  <fieldset data-tool="ping"{% if tool != 'ping' %} hidden{% endif %}>
+    <legend>Ping</legend>
+    <div class="grid-form">
+      {% call(attrs) field("p_count", "Anzahl", help="1 bis 100 Pakete") %}<input name="p_count" type="number" min="1" max="100" value="10" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("p_size", "Nutzdaten", unit="Byte", help="IP-Paket = Nutzdaten + 28 Byte") %}<input name="p_size" type="number" min="0" max="8972" value="32" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("p_interval", "Intervall", unit="s") %}<input name="p_interval" type="number" min="0.2" max="5" step="0.1" value="1" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("p_df", "Nicht fragmentieren (DF)", check=True) %}<input name="p_df" type="checkbox" {{ attrs }}>{% endcall %}
+    </div>
+  </fieldset>
+  <fieldset data-tool="mtu"{% if tool != 'mtu' %} hidden{% endif %}>
+    <legend>MTU</legend>
+    <div class="grid-form">
+      {% call(attrs) field("m_min", "MTU von", unit="Byte") %}<input name="m_min" type="number" min="68" max="9000" value="576" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("m_max", "MTU bis", unit="Byte", help="1500 = Ethernet, 1492 = PPPoE, 9000 = Jumbo") %}<input name="m_max" type="number" min="68" max="9000" value="1500" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("m_tries", "Pings je Größe") %}<input name="m_tries" type="number" min="1" max="5" value="2" {{ attrs }}>{% endcall %}
+    </div>
+  </fieldset>
+  <fieldset data-tool="trace"{% if tool != 'trace' %} hidden{% endif %}>
+    <legend>Traceroute</legend>
+    <div class="grid-form">
+      {% call(attrs) field("t_count", "Pakete je Hop") %}<input name="t_count" type="number" min="1" max="10" value="3" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("t_hops", "Höchstens Hops") %}<input name="t_hops" type="number" min="1" max="40" value="30" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("t_names", "Namen auflösen", check=True) %}<input name="t_names" type="checkbox" checked {{ attrs }}>{% endcall %}
+    </div>
+  </fieldset>
+  <fieldset data-tool="dns"{% if tool != 'dns' %} hidden{% endif %}>
+    <legend>DNS</legend>
+    <div class="grid-form">
+      {% call(attrs) field("d_type", "Typ") %}<select name="d_type" {{ attrs }}>{% for t in DNS_TYPES %}<option>{{ t }}</option>{% endfor %}</select>{% endcall %}
+      {% call(attrs) field("d_server", "DNS-Server", help="Leer = Resolver der Probe") %}<input name="d_server" maxlength="45" placeholder="z. B. 1.1.1.1" list="tool-dns" {{ attrs }}>{% endcall %}
+    </div>
+    <datalist id="tool-dns"><option value="1.1.1.1">Cloudflare</option><option value="8.8.8.8">Google</option><option value="9.9.9.9">Quad9</option></datalist>
+  </fieldset>
+  <fieldset data-tool="port"{% if tool != 'port' %} hidden{% endif %}>
+    <legend>Port</legend>
+    <div class="grid-form">
+      {% call(attrs) field("o_ports", "Ports", help="Bis zu 10, mit Komma getrennt") %}<input name="o_ports" value="22,80,443,3389" list="tool-ports" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("o_timeout", "Wartezeit", unit="s") %}<input name="o_timeout" type="number" min="1" max="10" value="3" {{ attrs }}>{% endcall %}
+    </div>
+    <datalist id="tool-ports"><option value="22,80,443">SSH, Web</option><option value="443,4443,4444,8443,10443">HTTPS, Firewall-Portale</option><option value="3389">RDP</option><option value="25,465,587,993">Mail</option><option value="5060,5061">SIP</option></datalist>
+  </fieldset>
+  <fieldset data-tool="http"{% if tool != 'http' %} hidden{% endif %}>
+    <legend>HTTP(S)</legend>
+    <div class="grid-form">
+      {% call(attrs) field("h_method", "Methode") %}<select name="h_method" {{ attrs }}><option value="HEAD">HEAD (nur Kopfzeilen)</option><option value="GET">GET</option></select>{% endcall %}
+      {% call(attrs) field("h_insecure", "Zertifikatsfehler ignorieren", check=True) %}<input name="h_insecure" type="checkbox" {{ attrs }}>{% endcall %}
+    </div>
+  </fieldset>
+  <fieldset data-tool="tls"{% if tool != 'tls' %} hidden{% endif %}>
+    <legend>Zertifikat</legend>
+    <div class="grid-form">
+      {% call(attrs) field("s_port", "Port") %}<input name="s_port" type="number" min="1" max="65535" value="443" list="tool-tls" {{ attrs }}>{% endcall %}
+      {% call(attrs) field("s_sni", "Servername (SNI)", help="Leer = wie Ziel") %}<input name="s_sni" maxlength="253" {{ attrs }}>{% endcall %}
+    </div>
+    <datalist id="tool-tls"><option value="443">HTTPS</option><option value="465">SMTPS</option><option value="993">IMAPS</option><option value="636">LDAPS</option><option value="8443">HTTPS alt</option><option value="4444">Sophos Admin</option></datalist>
+  </fieldset>
+
+  <div class="actions">
+    {% if has_role(user, 'operator') %}<button class="primary" data-tool-run>Test starten</button>
+    {% else %}<p class="muted">Tests starten dürfen Operatoren und Administratoren.</p>{% endif %}
+  </div>
+</form>
+
+<section class="tool-result" aria-labelledby="tool-result-h" data-tool-result hidden>
+  <h2 id="tool-result-h">Ergebnis</h2>
+  <div class="tool-progress" data-tool-progress>
+    <div class="ptop"><span data-tool-step></span><span class="peta" data-tool-eta></span></div>
+    <div class="ptrack" role="progressbar" aria-label="Fortschritt des Tests" aria-valuemin="0" aria-valuemax="100"><i></i></div>
+    <p class="muted small" data-tool-note></p>
+  </div>
+  <div data-tool-out aria-live="polite"></div>
+</section>
+{% endif %}
+
+<h2>Letzte Tests</h2>
+{% if history %}
+<div class="scroll"><table>
+  <thead><tr><th>Zeit</th><th>Werkzeug</th><th>Ziel</th><th>Probe</th><th>Ergebnis</th><th>Von</th></tr></thead>
+  <tbody>{% for j in history %}
+    <tr><td class="nowrap">{{ j.created_at|dt }}</td><td>{{ j.label }}</td>
+      <td><button type="button" class="link" data-tool-show="{{ j.id }}" aria-label="Ergebnis anzeigen: {{ j.label }} {{ j.target }}">{{ j.target }}</button></td>
+      <td><a href="{{ url_for('web.probe', probe_id=j.probe_id) }}">{{ j.hostname }}</a></td>
+      <td>{% if j.status == 'ok' %}<span class="badge on">fertig</span>{% elif j.status == 'error' %}<span class="badge critical" title="{{ j.error or '' }}">Fehler</span>{% else %}<span class="badge info">{{ 'läuft' if j.status == 'running' else 'wartet' }}</span>{% endif %}</td>
+      <td>{{ j.created_by or '–' }}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">Noch keine Tests.</p>{% endif %}
+
+<script type="application/json" id="tool-info">{{ TOOLS|tojson }}</script>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='tools.js') }}" defer></script>{% endblock %}

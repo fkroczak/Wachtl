@@ -162,6 +162,12 @@ def heartbeat():
     if g.probe.get("uptime_s") and 0 <= uptime < int(g.probe["uptime_s"]):
         # Dienst neu gestartet: ältere aktive Hinweise kann die Probe nicht mehr auflösen
         finding_service.close_stale(g.probe["id"], ts - uptime, "Nicht mehr bestätigt – Wachtl-Dienst neu gestartet")
+    from .services import gateways
+
+    gw_ip, gw_mac = gateways.clean_probe_gateway(data.get("gateway"), data.get("gateway_mac"))
+    if gw_ip:
+        ex("UPDATE probes SET gateway = ?, gateway_mac = COALESCE(?, CASE WHEN gateway = ? THEN gateway_mac END) "
+           "WHERE id = ?", (gw_ip, gw_mac, gw_ip, g.probe["id"]))
     ex(
         "UPDATE probes SET last_seen = ?, last_ip = ?, version = ?, os = ?, buffer_items = ?, uptime_s = ?, "
         "addresses = ? WHERE id = ?",
@@ -185,7 +191,10 @@ def heartbeat():
     # laufende Störungen bei Alertmanager aktuell halten, verwaiste schließen – auch wenn gerade keine Pings kommen
     disturbance_service.housekeeping(ts)
     _, etag = repo.probe_config(g.probe)
-    return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]))
+    from .services import tools as tool_service
+
+    return jsonify(config_etag=etag, server_time=ts, commands=repo.take_commands(g.probe["id"]),
+                   tools_pending=tool_service.pending(g.probe["id"]))
 
 
 @bp.post("/deregister")
@@ -520,6 +529,29 @@ def result_netscan():
     return jsonify(stored=len(values["hosts"])), 201
 
 
+@bp.get("/tools/next")
+@probe_auth
+def tool_next():
+    """Werkzeuge (docs/WERKZEUGE.md): nächsten Einzeltest für diese Probe abholen."""
+    from .services import tools as tool_service
+
+    return jsonify(job=tool_service.take(g.probe["id"]))
+
+
+@bp.post("/tools/<int:job_id>")
+@probe_auth
+def tool_update(job_id: int):
+    """Fortschritt (progress, step, lines) oder Ergebnis (done, ok, result, error) eines Einzeltests."""
+    from .services import tools as tool_service
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="JSON-Objekt erwartet"), 400
+    if not tool_service.update(job_id, g.probe["id"], data):
+        return jsonify(error="Auftrag unbekannt oder schon beendet", cancel=True), 409
+    return jsonify(stored=1)
+
+
 @bp.get("/topology/jobs")
 @probe_auth
 def topology_jobs():
@@ -575,6 +607,20 @@ def result_discovery():
     n = switchfind.store_discovery(int(g.probe["site_id"]), data.get("devices") or [], ts)
     topology.refresh_findings(int(g.probe["site_id"]), ts)
     return jsonify(stored=n), 201
+
+
+@bp.post("/results/gateway")
+@probe_auth
+def result_gateway():
+    """Was die Server-Probe über ihr Gateway herausgefunden hat (Weboberfläche, Zertifikat, UPnP/TR-064)."""
+    from .services import gateways
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="JSON-Objekt erwartet"), 400
+    if not gateways.store_info(int(g.probe["site_id"]), data, repo.now()):
+        return jsonify(error="Gateway-Adresse fehlt oder ist ungültig"), 422
+    return jsonify(stored=1), 201
 
 
 def _int_or_none(v) -> int | None:

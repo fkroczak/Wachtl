@@ -5,7 +5,7 @@ Gerät: welche Switches wie verbunden sind, welche Ports belegt sind, welches Ge
 dabei auffällt (Port-Fehler, langsame Verbindungen, nicht verwaltete Switches, Kabelkreise).
 
 Im Web-UI: Menüpunkt **Topologie** links (bei einem Standort direkt dessen Baum, bei mehreren zuerst eine Kachel je
-Standort mit Switches, Problemen und gefundenen Switches) oder Standort › **Topologie**, jeweils mit vier Ansichten:
+Standort mit Gateway, Switches, Problemen und gefundenen Switches; oben wechselt man den Standort). Ansichten:
 
 | Ansicht | Inhalt |
 | --- | --- |
@@ -18,7 +18,7 @@ Standort mit Switches, Problemen und gefundenen Switches) oder Standort › **To
 
 ## Switch eintragen (Assistent)
 
-Standort › Topologie › **Switch hinzufügen** (nur Administratoren), je Switch:
+Topologie › **Switch hinzufügen** (nur Administratoren), je Switch:
 
 1. **Switch und Zugang**: Adresse, Bezeichnung, Ort, UDP-Port; SNMP-Version und Zugangsdaten – oder „wie bei Switch X“
    übernehmen (viele Switches teilen sich dieselben Zugangsdaten).
@@ -63,7 +63,7 @@ Kameras und Drucker mit eindeutigem Titel fallen heraus) und wie er sich abfrage
 | Weboberfläche | TP-Link Easy Smart (TL-SG105E, TL-SG108E, TL-SG105PE, TL-SG108PE, TL-SG1016PE …) – können kein SNMP | Benutzer und Passwort der Weboberfläche |
 | keine | Netgear ProSAFE Plus (GS105E, GS108E, GS305E …) | – |
 
-Standort › Topologie › **Switches** zeigt die Funde unter **Gefundene Switches**. Der Baum hängt jeden Fund an den Port,
+Topologie › **Switches** zeigt die Funde unter **Gefundene Switches**. Der Baum hängt jeden Fund an den Port,
 an dem ein verwalteter Switch seine MAC sieht, mit den Geräten dahinter (gestrichelt, „Zugangsdaten fehlen“ bzw. „ohne
 Abfrage“). **Wachtl probiert keine Passwörter aus.** Fehlen Zugangsdaten, fragt Wachtl danach: Hinweis über dem Baum,
 Befund „ohne Zugangsdaten“ und **Zugangsdaten eingeben** am Fund. Der Assistent ist dann mit Adresse, Name und
@@ -85,6 +85,39 @@ Eine MAC-Tabelle und LLDP haben diese Switches nicht. Wachtl hängt sie deshalb 
 der als einziger sie sieht. Die Geräte dahinter gehören zum Easy-Smart-Switch, an welchem seiner Ports sie hängen,
 bleibt aber unbekannt. Ohne einen verwalteten Switch darüber steht er unter dem Baum. Die Weboberfläche lässt nur
 wenige gleichzeitige Anmeldungen zu – Wachtl meldet sich deshalb nach jeder Abfrage ab.
+
+## Gateway automatisch erkennen
+
+Die Wurzel des Baums baut Wachtl selbst, auch ganz ohne eingetragene Switches: **Internet → Gateway → Geräte**.
+
+1. Jede Probe meldet mit dem Heartbeat ihr **Default-Gateway** und dessen MAC (aus ihrer ARP-Tabelle). Das Gateway, das
+   die meisten Probes eines Standorts melden, ist das Gateway des Standorts. Kennt ein Switch sein Gateway (SNMP), gilt
+   dieses.
+2. Hersteller und Modell erkennt Wachtl **ohne Anmeldung am Gerät**:
+
+| Quelle | Beispiel |
+| --- | --- |
+| Hersteller der MAC-Adresse | AVM, Ubiquiti, Sophos, Fortinet, Juniper, LANCOM, MikroTik, Cisco Meraki, SonicWall, WatchGuard, DrayTek, Palo Alto, Check Point, Zyxel, Teltonika, Provider-Router (Sagemcom, Arcadyan, Technicolor, Compal) |
+| Weboberfläche (Titel, Server-Kennung) | „FRITZ!Box“, „UniFi OS“, „Sophos“, „SSR Conductor“, „pfSense“, „OPNsense“, „Speedport Smart 4“, „USG FLEX 200“ |
+| Zertifikat der Weboberfläche | CN=FGT60F… → FortiGate 60F, CN=XGS2100… → Sophos XGS2100, CN=UDM-Pro |
+| UPnP/TR-064 (Server-Probe) | FRITZ!Box, Speedport, Vodafone Station melden Hersteller, Modell und Firmware |
+| LLDP/CDP der Switches | Router-Nachbar mit Systembeschreibung (z. B. Juniper Session Smart Router, Cisco ISR) |
+
+   Die Server-Probe fragt ihr eigenes Gateway alle 30 Minuten ab: Weboberflächen auf TCP 80, 443, 4443, 4444, 8080,
+   8443, 10443, TR-064 (TCP 49000) und UPnP (SSDP, UDP 1900). Gateways anderer Standorte erkennt Wachtl über den
+   Netzwerkscan der dortigen Probes (Portscan einschalten) und die MAC-Adresse.
+3. Im Baum: Hängt das Gateway an einem Port eines eingetragenen Switches, zeigt der Baum genau diesen Port. Sonst steht
+   das Gateway **vermutet** (gestrichelt) über dem zentralen Switch. Ohne Switches hängen gefundene Switches und alle
+   Geräte, die der Netzwerkscan in den letzten 7 Tagen gesehen hat, direkt am Gateway.
+4. Klick auf das Gateway: Seitenbereich mit Hersteller, Modell, Adresse, MAC, Firmware, „erkannt über“ und
+   **Weboberfläche öffnen** (der passende Port, z. B. 4444 bei Sophos) sowie Ping und Traceroute über die Werkzeuge.
+   Eine eigene Bezeichnung aus Netzwerk › Gerät gilt auch hier.
+
+Unterstützt sind u. a. FRITZ!Box, UniFi (Dream Machine, Cloud Gateway, USG, UXG), Sophos (XG/XGS, SG/UTM), FortiGate,
+Juniper SSR und SRX, LANCOM, MikroTik, Cisco Meraki und ISR, SonicWall, WatchGuard, DrayTek Vigor, Zyxel USG FLEX/ATP,
+pfSense, OPNsense, Securepoint, Palo Alto, Check Point, Barracuda, bintec, Teltonika, Stormshield, Peplink, Viprinet,
+Speedport, Vodafone Station und o2 HomeBox. Was Wachtl nicht kennt, erscheint als „Gateway“ mit seiner Adresse und dem
+Namen aus dem Netzwerkscan.
 
 ### Wahrscheinliche Knotenpunkte
 

@@ -1,11 +1,10 @@
 {#- Bausteine der Switch-Topologie (docs/TOPOLOGIE.md): Kopf mit Reitern, Baum (SVG), Frontansicht. -#}
-{% from "_tabs.html" import tabs as tabnav %}
+{% from "_tabs.html" import site_switch %}
 
 {% macro head(site, tabs, view, views, problem_count, poller, drafts=None) -%}
-<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=site.id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=site.id) }}">{{ site.name }}</a>{% endif %} / Topologie</nav>
-<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
-{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
-{{ tabnav(tab_items, 'topologie') }}
+{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.topology_index') }}">Topologie</a> / {{ site.name }}</nav>{% endif %}
+<h1>Topologie{% if not single_site %} · {{ site.name }}{% endif %}</h1>
+{{ site_switch(site_links, site.id) }}
 <div class="page-head topo-head">
   <nav class="seg" aria-label="Ansicht der Topologie">
     {%- for key, text in views.items() %}
@@ -58,8 +57,9 @@
   {%- set sub = STATUS_TEXT[n.status] or n.sub or n.ip or '' %}
   {%- set label = KIND_TEXT[n.kind] ~ ' ' ~ n.label ~ (', ' ~ sub if sub else '') ~ (', ' ~ b.chip if b.chip else '') %}
   {%- set href = (url_for('web.topology', site_id=site.id, switch=n.switch_id, **(link_args or {})) if mode == 'select' else url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id)) if n.switch_id
+       else (url_for('web.topology', site_id=site.id, seite='gateway') if n.kind == 'gateway' and mode == 'select' and not link_args
        else (url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) if n.kind == 'neighbor' and n.ip and has_role(user, 'admin')
-       else (url_for('web.topology_new', site_id=site.id, kandidat=n.candidate_id) if n.kind == 'candidate' and n.access != 'none' and has_role(user, 'admin') else None)) %}
+       else (url_for('web.topology_new', site_id=site.id, kandidat=n.candidate_id) if n.kind == 'candidate' and n.access != 'none' and has_role(user, 'admin') else None))) %}
   {%- if href %}<a href="{{ href }}" aria-label="{{ label }}{{ ' (ausgewählt)' if selected and n.switch_id == selected }}{{ ' – Zugangsdaten eintragen' if n.kind in ('neighbor', 'candidate') }}">{% endif %}
   <g class="tn tn-{{ n.kind }} st-{{ n.status }}{{ ' tn-sel' if selected and n.switch_id == selected }}{{ ' tn-hl' if highlight and n.id in highlight }}"{% if not href %} role="img" aria-label="{{ label }}"{% endif %}>
     <rect class="tn-box" x="{{ b.x }}" y="{{ b.y }}" width="{{ lay.node_w }}" height="56" rx="10"/>

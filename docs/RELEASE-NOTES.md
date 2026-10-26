@@ -3,6 +3,13 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu (nächste Version)
+
+- **Neue Menüpunkte Netzwerk, Topologie und Werkzeuge**: Netzwerk (alle Geräte und Clients aus dem Netzwerkscan) und Topologie stehen nicht mehr als Reiter in der Standort- bzw. Probes-Ansicht, sondern als eigene Menüpunkte links. Bei mehreren Standorten wählt man oben den Standort. Alte Links leiten weiter.
+- **Werkzeuge wie in Hop7**: Ping, MTU, Traceroute, DNS, Port, HTTP(S) und Zertifikat als Einzeltest – direkt von einer Probe aus, also vom Wachtl-Server oder von einem PC beim Kunden. Fortschrittsbalken mit aktuellem Schritt, vergangener und geschätzter Restzeit; Ergebnis mit Einschätzung, Kennzahlen, Tabelle und kompletter Ausgabe. Details: [WERKZEUGE.md](WERKZEUGE.md).
+- **Gateway automatisch erkennen**: Jede Probe meldet ihr Gateway; Wachtl erkennt Hersteller und Modell ohne Anmeldung am Gerät (MAC, Weboberfläche, Zertifikat, UPnP/TR-064, LLDP) – FRITZ!Box, UniFi, Sophos, FortiGate, Juniper SSR, LANCOM, MikroTik, Meraki, SonicWall, WatchGuard, DrayTek, Zyxel, pfSense, OPNsense, Speedport u. v. m.
+- **Topologie baut sich selbst auf**: Der Baum beginnt mit Internet → Gateway, auch ganz ohne eingetragene Switches; dann hängen gefundene Switches und alle Geräte aus dem Netzwerkscan am Gateway. Mit Switches steht das Gateway am richtigen Port oder vermutet über dem zentralen Switch. Klick aufs Gateway: Hersteller, Modell, Firmware, Weboberfläche, Ping/Traceroute. Details: [TOPOLOGIE.md](TOPOLOGIE.md#gateway-automatisch-erkennen).
+
 ## Neu in 1.0.1
 
 - **Jede Störung sichtbar und gemeldet**: Ausfälle und jeder einzelne verlorene Ping werden jetzt direkt aus den Messwerten erkannt, sobald sie beim Server ankommen – auch **nachträglich**, wenn ein PC selbst kein Netz hatte und seine Werte erst danach schickt. Bisher fielen genau diese Ausfälle (Kabel gezogen, Switch aus) unter den Tisch: Graph rot, Übersicht „0 Ausfälle“. Neue Alarmregel **Jeder Paketverlust** (Standard: jeder verlorene Ping, per E-Mail/Teams). Details: [BENACHRICHTIGUNGEN.md](BENACHRICHTIGUNGEN.md).

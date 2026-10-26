@@ -503,6 +503,7 @@ class Node:
     via: str | None = None      # Quelle eines Nachbarn: lldp | cdp
     candidate_id: int | None = None                     # gefundener Switch (net_switch_candidates)
     access: str | None = None   # Zugangsart eines gefundenen Switches: snmp | easysmart | none
+    info: dict = field(default_factory=dict)            # Gateway: Hersteller, Modell, Weboberfläche (services/gateways.py)
 
 
 @dataclass
@@ -515,7 +516,11 @@ class Topology:
     devices: dict[str, dict]                   # MAC → Gerät (Netzwerkscan, ARP)
     gateway_ip: str | None = None
     findings: list[dict] = field(default_factory=list)
+    gateway: dict | None = None                # erkanntes Gateway des Standorts (auch ohne Switches)
     behind: dict[str, str] = field(default_factory=dict)  # MAC → Knoten (Switch ohne MAC-Tabelle), an dem sie hängt
+
+
+RECENT_DEVICE_S = 7 * 86400     # Geräte ohne Switch-Zuordnung: nur, wenn in dieser Zeit gesehen
 
 
 def _norm(name: str | None) -> str:
@@ -540,21 +545,35 @@ def build(site_id: int, ts: int | None = None, at: int | None = None, with_candi
                    "AND ts >= ? GROUP BY switch_id, if_index", [r["id"] for r in rows] + [ts - 86400]):
             errs[(r["switch_id"], r["if_index"])] = int(r["n"] or 0)
     devices: dict[str, dict] = {}
-    for d in q("SELECT id, mac, ip, hostname, note, is_probe FROM net_devices WHERE site_id = ? AND mac IS NOT NULL",
-               (site_id,)):
+    for d in q("SELECT id, mac, ip, hostname, note, is_probe, last_seen FROM net_devices WHERE site_id = ? "
+               "AND mac IS NOT NULL", (site_id,)):
         devices[d["mac"]] = {"mac": d["mac"], "ip": d["ip"], "hostname": d["hostname"], "device_id": d["id"],
-                             "label": d["note"] or d["hostname"] or d["ip"] or d["mac"], "is_probe": bool(d["is_probe"])}
+                             "label": d["note"] or d["hostname"] or d["ip"] or d["mac"], "is_probe": bool(d["is_probe"]),
+                             "last_seen": d["last_seen"]}
     cands = []
     if with_candidates and not at:          # Funde gelten nur für den heutigen Stand
         from . import switchfind
 
         cands = [c for c in switchfind.candidates(site_id) if c.get("mac")]
-    return analyze(rows, devices, errs, cands)
+    gateway = None
+    if with_candidates:
+        from . import gateways
+
+        snaps = [json.loads(r["snapshot"]) if isinstance(r.get("snapshot"), str) and r["snapshot"] else
+                 (r.get("snapshot") or {}) for r in rows]
+        sw_gw = next((sn.get("gateway") for sn in snaps if sn.get("gateway")), None)
+        lldp = [e for sn in snaps for kind in ("lldp", "cdp") for e in sn.get(kind) or [] if e.get("router")]
+        try:
+            gateway = gateways.for_site(site_id, sw_gw, lldp)
+        except Exception:  # noqa: BLE001 – der Baum kommt auch ohne Erkennung aus
+            log.exception("Gateway-Erkennung für Standort %s fehlgeschlagen", site_id)
+    return analyze(rows, devices, errs, cands, gateway=gateway, now=ts)
 
 
 def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, int], int] | None = None,
-            candidates: list[dict] | None = None) -> Topology:
-    """Reine Auswertung (ohne Datenbank, testbar). candidates: gefundene, noch nicht eingetragene Switches."""
+            candidates: list[dict] | None = None, gateway: dict | None = None, now: int | None = None) -> Topology:
+    """Reine Auswertung (ohne Datenbank, testbar). candidates: gefundene, noch nicht eingetragene Switches;
+    gateway: erkanntes Gateway (services/gateways.py) – Wurzel des Baums, auch ohne Switches."""
     errs = errs or {}
     behind: dict[str, str] = {}
     devices = {m: dict(d) for m, d in devices.items()}
@@ -757,16 +776,26 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
                 links.append(lk)
                 p.link = lk
 
-    # 5. Gateway und Wurzel
-    gw_ip = next((sw["snapshot"].get("gateway") for sw in switches.values() if sw["snapshot"].get("gateway")), None)
-    gw_mac = next((m for m, d in devices.items() if gw_ip and d.get("ip") == gw_ip), None)
+    # 5. Gateway und Wurzel: aus der MAC-Tabelle (Port bekannt), aus LLDP (Router-Nachbar) oder erkannt (vermutet)
+    gw_info = gateway or {}
+    gw_ip = next((sw["snapshot"].get("gateway") for sw in switches.values() if sw["snapshot"].get("gateway")),
+                 None) or gw_info.get("ip")
+    gw_mac = next((m for m, d in devices.items() if gw_ip and d.get("ip") == gw_ip), None) or \
+        (gw_info.get("mac") if gw_info.get("ip") == gw_ip else None)
+    if gw_info.get("ip") != gw_ip:
+        gw_info = {}
+
+    def gw_node() -> Node:
+        dev = devices.get(gw_mac or "") or {}
+        label = gw_info.get("label") or dev.get("label") or dev.get("hostname") or f"Gateway {gw_ip}"
+        return Node("gw", "gateway", label, gw_ip or "", ip=gw_ip, mac=gw_mac, info=gw_info)
+
     root = None
+    attach_core = False
     if gw_mac and gw_mac in locations:
         sid, pidx = locations[gw_mac]
-        gw = devices[gw_mac]
         gid = "gw"
-        nodes[gid] = Node(gid, "gateway", gw.get("label") or gw.get("hostname") or f"Gateway {gw_ip}", gw_ip or "",
-                          ip=gw_ip)
+        nodes[gid] = gw_node()
         port = switches[sid]["ports"][pidx]
         if gw_mac in behind:            # hinter einem Switch ohne MAC-Tabelle bzw. einem gefundenen Switch
             host = nodes[behind[gw_mac]]
@@ -780,17 +809,45 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
         root = gid
     else:
         routers = [n for n in nodes.values() if n.kind == "gateway"]
-        if routers:
-            root = routers[0].id
+        mine = next((n for n in routers if gw_ip and (n.ip == gw_ip or (gw_mac and n.mac == gw_mac))), None)
+        if mine or routers:
+            root = (mine or routers[0]).id
+            if mine and gw_info:
+                mine.info, mine.label, mine.sub = gw_info, gw_info.get("label") or mine.label, gw_ip or mine.sub
+        elif gw_ip:
+            nodes["gw"] = gw_node()
+            root, attach_core = "gw", True
+    if root == "gw" and attach_core and not switches:
+        # Ohne Switches: gefundene Switches und alle Geräte aus dem Netzwerkscan direkt unter dem Gateway
+        recent = (now or 0) - RECENT_DEVICE_S
+        shown = {gw_mac}
+        for c in cand_by_mac.values():
+            nid = f"c{c['id']}"
+            nodes[nid] = Node(nid, "candidate", c.get("label") or "Switch",
+                              "ohne Abfrage" if c.get("access") == "none" else "Zugangsdaten fehlen",
+                              status="warn" if c.get("access") != "none" else "ok", ip=c.get("ip"), mac=c["mac"],
+                              candidate_id=c["id"], access=c.get("access"))
+            links.append(Link("gw", None, nid, None, None, None, "vermutet"))
+            shown.add(c["mac"])
+        nodes["gw"].devices = sorted((d for m, d in devices.items() if m not in shown and
+                                      (d.get("last_seen") or recent) >= recent),
+                                     key=lambda d: (not d.get("is_probe"), str(d.get("label") or "")))
     adj: dict[str, list[tuple[str, Link]]] = {}
     for lk in links:
         adj.setdefault(lk.a, []).append((lk.b, lk))
         adj.setdefault(lk.b, []).append((lk.a, lk))
-    if root is None and switches:
-        def switch_links(n: str) -> int:
-            return sum(1 for o, _lk in adj.get(n, []) if nodes[o].kind in ("switch", "neighbor"))
+    def switch_links(n: str) -> int:
+        return sum(1 for o, _lk in adj.get(n, []) if nodes[o].kind in ("switch", "neighbor"))
 
+    if root is None and switches:
         root = max((s["node"] for s in switches.values()), key=lambda n: (switch_links(n), -nodes[n].switch_id))
+    elif attach_core and switches:
+        # Gateway erkannt, aber an keinem Port gesehen: vermutet über dem zentralen Switch
+        core = max((s["node"] for s in switches.values()), key=lambda n: (switch_links(n), -nodes[n].switch_id))
+        lk = Link("gw", None, core, None, None, None, "vermutet")
+        links.append(lk)
+        adj.setdefault("gw", []).append((core, lk))
+        adj.setdefault(core, []).append(("gw", lk))
     roots: list[str] = []
     seen_nodes: set[str] = set()
     order = [root] if root else []
@@ -811,12 +868,13 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
                 nodes[nxt].parent, nodes[nxt].link = cur, lk
                 nodes[cur].children.append(nxt)
                 queue.append(nxt)
-    if "gw" in nodes and nodes["gw"].parent is None:
+    top = root if root and nodes[root].kind == "gateway" and nodes[root].parent is None else None
+    if top:
         nodes["internet"] = Node("internet", "internet", "Internet", "")
-        nodes["gw"].parent = "internet"
-        nodes["internet"].children.append("gw")
-        nodes["gw"].link = Link("internet", None, "gw", None, None, None, "gateway")
-        roots = ["internet" if r == "gw" else r for r in roots]
+        nodes[top].parent = "internet"
+        nodes["internet"].children.append(top)
+        nodes[top].link = Link("internet", None, top, None, None, None, "gateway")
+        roots = ["internet" if r == top else r for r in roots]
 
     # Rollen der Ports: Uplink zeigt zum Elternknoten
     for sid, s in switches.items():
@@ -834,7 +892,7 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
             else:
                 p.role = "free"
 
-    topo = Topology(nodes, roots, switches, links, locations, devices, gw_ip, behind=behind)
+    topo = Topology(nodes, roots, switches, links, locations, devices, gw_ip, behind=behind, gateway=gateway)
     topo.findings = findings(topo)
     return topo
 
@@ -1088,7 +1146,7 @@ def layout(topo: Topology, show_devices: bool = True) -> dict:
             n = sum(len(p.devices) for p in topo.switches[node.switch_id]["ports"].values()
                     if not (p.link and p.link.b.startswith(("u", "c")))) + len(node.devices)
             return count_text(n) if n else None
-        if node.kind in ("unmanaged", "ap", "candidate") and node.devices:
+        if node.kind in ("unmanaged", "ap", "candidate", "gateway") and node.devices:
             return count_text(len(node.devices))
         return None
 

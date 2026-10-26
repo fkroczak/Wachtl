@@ -24,6 +24,8 @@
   'web.outages_view': '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
   'web.report_view': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   'web.topology_index': '<rect x="9" y="2" width="6" height="5" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/><path d="M12 7v5M5 17v-5h14v5"/>',
+  'web.network_index': '<rect x="2" y="3" width="20" height="13" rx="1.5"/><path d="M8 21h8M12 16v5"/><circle cx="7" cy="9.5" r="1"/><circle cx="12" cy="9.5" r="1"/><circle cx="17" cy="9.5" r="1"/>',
+  'web.tools': '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8V21h3.2l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/>',
   'web.admin': '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
 } %}
 <div class="shell">
@@ -35,11 +37,13 @@
   <div class="side-drawer" id="side-drawer" data-menu>
   <nav class="side-nav" aria-label="Hauptnavigation">
     {% set nav = [('web.overview', 'Übersicht')] + ([] if single_site else [('web.sites_view', 'Standorte')])
-                 + [('web.topology_index', 'Topologie'), ('web.probes_view', 'Probes'),
+                 + [('web.probes_view', 'Probes'), ('web.network_index', 'Netzwerk'), ('web.topology_index', 'Topologie'),
+                    ('web.tools', 'Werkzeuge'),
                   ('web.alerts', 'Alarme'), ('web.outages_view', 'Störungen'), ('web.report_view', 'Bericht')]
                  + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
     {#- Alarme, Störungsmeldungen und PC-Hinweise sind Reiter unter einem Menüpunkt #}
-    {% set nav_groups = {'web.alerts': ('web.alerts', 'web.reports_view', 'web.findings_view')} %}
+    {% set nav_groups = {'web.alerts': ('web.alerts', 'web.reports_view', 'web.findings_view'),
+                         'web.network_index': ('web.network_index', 'web.network'), 'web.tools': ('web.tools',)} %}
     {% for endpoint, label in nav %}
     {%- set here = request.endpoint in nav_groups.get(endpoint, (endpoint,)) or (single_site and endpoint == 'web.overview' and request.endpoint == 'web.site')
                    or (endpoint == 'web.topology_index' and (request.endpoint or '').startswith('web.topology')) %}

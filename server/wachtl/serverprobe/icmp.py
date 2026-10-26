@@ -58,14 +58,19 @@ def parse_ping_output(out: str) -> Reply:
     if "Time to live exceeded" in out or "Time exceeded" in out:
         src = _FROM_RE.search(out)
         return Reply(False, source=src.group(1) if src else None, ttl_expired=True, error="TtlExpired")
+    if "Frag needed" in out or "message too long" in out or "Message too long" in out:
+        return Reply(False, error="PacketTooBig")
     if "Unreachable" in out:
         return Reply(False, error="DestinationUnreachable")
     return Reply(False, error="TimedOut")
 
 
-def _ping_posix(address: str, timeout_ms: int, size: int, ttl: int) -> Reply:
+def _ping_posix(address: str, timeout_ms: int, size: int, ttl: int, df: bool = False) -> Reply:
     timeout_s = max(0.2, timeout_ms / 1000)
-    args = ["ping", "-n", "-c", "1", "-W", f"{timeout_s:g}", "-s", str(size), "-t", str(ttl), address]
+    args = ["ping", "-n", "-c", "1", "-W", f"{timeout_s:g}", "-s", str(size), "-t", str(ttl)]
+    if df:
+        args += ["-M", "do"]
+    args.append(address)
     start = time.perf_counter()
     try:
         proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout_s + 2,
@@ -113,11 +118,11 @@ def _windows_api():
 IP_SUCCESS = 0
 IP_TTL_EXPIRED_TRANSIT = 11013
 IP_TTL_EXPIRED_REASSEM = 11014
-_WIN_STATUS = {11002: "DestinationNetworkUnreachable", 11003: "DestinationHostUnreachable",
+_WIN_STATUS = {11002: "DestinationNetworkUnreachable", 11003: "DestinationHostUnreachable", 11009: "PacketTooBig",
                11010: "TimedOut", 11013: "TtlExpired", 11050: "GeneralFailure"}
 
 
-def _ping_windows(address: str, timeout_ms: int, size: int, ttl: int) -> Reply:
+def _ping_windows(address: str, timeout_ms: int, size: int, ttl: int, df: bool = False) -> Reply:
     ctypes, lib, Options, EchoReply = _windows_api()
     handle = lib.IcmpCreateFile()
     if not handle or handle == ctypes.c_void_p(-1).value:
@@ -125,7 +130,7 @@ def _ping_windows(address: str, timeout_ms: int, size: int, ttl: int) -> Reply:
     try:
         dest = int.from_bytes(socket.inet_aton(address), "little")
         payload = ctypes.create_string_buffer(b"\x61" * size, size) if size else None
-        opts = Options(Ttl=ttl)
+        opts = Options(Ttl=ttl, Flags=2 if df else 0)   # 2 = IP_FLAG_DF
         buf_size = ctypes.sizeof(EchoReply) + size + 8 + 64
         buf = ctypes.create_string_buffer(buf_size)
         start = time.perf_counter()
@@ -146,8 +151,11 @@ def _ping_windows(address: str, timeout_ms: int, size: int, ttl: int) -> Reply:
         lib.IcmpCloseHandle(handle)
 
 
-def ping(address: str, timeout_ms: int = 1000, size: int = 32, ttl: int = 128) -> Reply:
-    size = max(0, min(1472, int(size)))
+def ping(address: str, timeout_ms: int = 1000, size: int = 32, ttl: int = 128, df: bool = False) -> Reply:
+    """Ein Echo. ``df`` = nicht fragmentieren (MTU-Test); Nutzdaten bis 8972 Byte (Jumbo-Frames)."""
+    size = max(0, min(8972, int(size)))
     ttl = max(1, min(255, int(ttl)))
     timeout_ms = max(100, min(5000, int(timeout_ms)))
-    return _ping_windows(address, timeout_ms, size, ttl) if IS_WINDOWS else _ping_posix(address, timeout_ms, size, ttl)
+    if IS_WINDOWS:
+        return _ping_windows(address, timeout_ms, size, ttl, df)
+    return _ping_posix(address, timeout_ms, size, ttl, df)

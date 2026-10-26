@@ -5,7 +5,7 @@ welche Geräte sind da, wann kommen und gehen sie, welche Ports sind offen und w
 So fallen Geräte auf, die sich unregelmäßig anmelden (WLAN-Repeater, defekte Netzteile, Geräte mit
 doppelter IP-Adresse) und Störungen verursachen können.
 
-Im Web-UI: Standort › **Netzwerk**. Für erkannte Dienste (SSH, HTTP, HTTPS, RDP, VNC, FTP, Telnet, SMB)
+Im Web-UI: Menüpunkt **Netzwerk** (bei mehreren Standorten oben den Standort wählen). Für erkannte Dienste (SSH, HTTP, HTTPS, RDP, VNC, FTP, Telnet, SMB)
 erscheint ein Link, der die Verbindung **vom eigenen Browser-PC** aus startet – er funktioniert also nur,
 wenn dieser PC das Gerät erreicht (z. B. im selben Netz oder per VPN).
 

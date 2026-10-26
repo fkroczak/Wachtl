@@ -4,3 +4,10 @@
   {%- for key, text, url in items %}<a href="{{ url }}"{% if key == current %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
 </nav>
 {%- endmacro %}
+
+{#- Standortwahl für Netzwerk, Topologie und Werkzeuge (nur bei mehreren Standorten) -#}
+{% macro site_switch(links, current) -%}
+{% if links %}<nav class="tabs" aria-label="Standort">
+  {%- for sid, name, url in links %}<a href="{{ url }}"{% if sid == current %} class="active" aria-current="page"{% endif %}>{{ name }}</a>{% endfor -%}
+</nav>{% endif %}
+{%- endmacro %}

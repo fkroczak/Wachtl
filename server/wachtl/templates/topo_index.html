@@ -17,10 +17,11 @@
       </div>
       {% if c.bad %}<span class="badge critical">{{ c.bad }} antwortet nicht</span>
       {% elif c.problems %}<span class="badge warning">{{ c.problems }} {{ 'Problem' if c.problems == 1 else 'Probleme' }}</span>
-      {% elif c.switches %}<span class="badge on">in Ordnung</span>
+      {% elif c.switches or c.gateway %}<span class="badge on">in Ordnung</span>
       {% else %}<span class="badge off">keine Switches</span>{% endif %}
     </div>
     <dl class="kvlist">
+      <dt>Gateway</dt><dd>{% if c.gateway %}{{ c.gateway.label }} <span class="muted">· {{ c.gateway.ip }}</span>{% else %}<span class="muted">noch nicht bekannt</span>{% endif %}</dd>
       <dt>Switches</dt><dd>{{ c.switches or 'noch keine eingetragen' }}</dd>
       <dt>Gefunden</dt><dd>{% if c.found %}{{ c.found }}{% if c.need %} · <span class="warn-t">{{ c.need }} {{ 'braucht' if c.need == 1 else 'brauchen' }} Zugangsdaten</span>{% endif %}{% else %}<span class="muted">keine neuen</span>{% endif %}</dd>
       {% if c.last_ok %}<dt>Abgefragt</dt><dd>{{ c.last_ok|ago }}</dd>{% endif %}

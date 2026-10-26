@@ -371,6 +371,7 @@ def prune(ingest_days: int = 2, audit_days: int = 730, alert_days: int = 730, hi
     ex("DELETE FROM bandwidth_runs WHERE ts < ?", (ts - history_days * 86400,))
     ex("DELETE FROM rtp_runs WHERE ts < ?", (ts - history_days * 86400,))
     ex("DELETE FROM probe_commands WHERE created_at < ?", (ts - 7 * 86400,))
+    ex("DELETE FROM tool_jobs WHERE created_at < ?", (ts - 30 * 86400,))
     ex("DELETE FROM ingest_batches WHERE received_at < ?", (ts - ingest_days * 86400,))
     ex("DELETE FROM audit_log WHERE ts < ?", (ts - audit_days * 86400,))
     ex("DELETE FROM alert_events WHERE status = 'resolved' AND ends_at < ?", (ts - alert_days * 86400,))

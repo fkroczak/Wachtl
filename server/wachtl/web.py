@@ -523,7 +523,7 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
 
 
 SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Störungen", "meldungen": "Hinweise & Meldungen",
-             "messungen": "Alle Messungen", "netzwerk": "Netzwerk", "topologie": "Topologie"}
+             "messungen": "Alle Messungen"}
 PROBE_TABS_DETAIL = {"messungen": "Messungen", "ping": "Ping & Pfade", "bandbreite": "Bandbreite & Sprache",
                      "meldungen": "Hinweise & Meldungen", "alarme": "Alarme", "details": "Details"}
 
@@ -538,12 +538,13 @@ def _tab(tabs: dict, default: str) -> str:
 @bp.get("/sites/<int:site_id>")
 @login_required()
 def site(site_id: int):
+    # Netzwerk und Topologie sind eigene Menüpunkte; alte Links auf die Reiter führen dorthin
+    if request.args.get("tab") == "netzwerk":
+        return redirect(url_for("web.network", site_id=site_id, zeitraum=request.args.get("zeitraum")))
+    if request.args.get("tab") == "topologie":
+        return redirect(url_for("web.topology", site_id=site_id))
     tab = _tab(SITE_TABS, "probes")
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
-    if tab == "netzwerk":
-        return _site_network(s)
-    if tab == "topologie":
-        return redirect(url_for("web.topology", site_id=site_id))
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
         "WHERE p.site_id = ? ORDER BY p.hostname",
@@ -1750,9 +1751,40 @@ def notify_test():
 NETSCAN_RANGES = {"24h": ("24 Stunden", 86400), "7d": ("7 Tage", 7 * 86400), "30d": ("30 Tage", 30 * 86400)}
 
 
-def _site_network(s: dict):
-    """Reiter „Netzwerk“ eines Standorts: Geräte, Anwesenheit, Dienste mit Links, Auffälligkeiten."""
+def site_switch(endpoint: str, **args) -> list[tuple[int, str, str]]:
+    """Standortwahl über Netzwerk, Topologie und Werkzeuge: (id, Name, Adresse) je Standort, leer bei nur einem."""
+    if single_site():
+        return []
+    return [(s["id"], s["name"], url_for(endpoint, site_id=s["id"], **args))
+            for s in q("SELECT id, name FROM sites ORDER BY name")]
+
+
+@bp.get("/netzwerk")
+@login_required()
+def network_index():
+    """Menüpunkt Netzwerk: bei einem Standort direkt seine Geräte, sonst eine Kachel je Standort."""
+    if only := single_site():
+        return redirect(url_for("web.network", site_id=only["id"]))
+    since = repo.now() - 86400
+    cards = []
+    for s in q("SELECT * FROM sites ORDER BY name"):
+        n = q1("SELECT COUNT(*) AS total, SUM(CASE WHEN last_seen >= ? THEN 1 ELSE 0 END) AS recent "
+               "FROM net_devices WHERE site_id = ?", (since, s["id"]))
+        last = q1("SELECT MAX(ts) AS ts FROM netscan_runs WHERE site_id = ?", (s["id"],))
+        conflicts = q1("SELECT COUNT(DISTINCT ip) AS n FROM net_events WHERE site_id = ? AND kind = 'ip_conflict' "
+                       "AND ts >= ?", (s["id"], since))
+        cards.append({"site": s, "total": int(n["total"] or 0), "recent": int(n["recent"] or 0),
+                      "last": last["ts"] if last else None, "conflicts": int(conflicts["n"] or 0)})
+    return render_template("network_index.html", cards=cards)
+
+
+@bp.get("/sites/<int:site_id>/netzwerk")
+@login_required()
+def network(site_id: int):
+    """Netzwerk eines Standorts: Geräte (Clients), Anwesenheit, Dienste mit Links, Auffälligkeiten."""
     from .services import netscan
+
+    s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
 
     rng = request.args.get("zeitraum", "24h")
     if rng not in NETSCAN_RANGES:
@@ -1785,7 +1817,10 @@ def _site_network(s: dict):
         "new": sum("new" in d["flags"] for d in devices),
         "services": sum(len([x for x in d["services"] if x["link"]]) for d in devices),
     }
-    return render_template("netscan.html", tab="netzwerk", tabs=SITE_TABS, site=s, scans=scans, devices=devices,
+    from .services import gateways
+
+    return render_template("netscan.html", site=s, site_links=site_switch("web.network"), scans=scans, devices=devices,
+                           gateway=gateways.summary(s["id"]),
                            events=events, kpi=kpi, rng=rng, ranges=NETSCAN_RANGES, since=since, until=until,
                            FLAG_LABELS=netscan.FLAG_LABELS)
 
@@ -1821,7 +1856,7 @@ def netscan_note(device_id: int):
     ex("UPDATE net_devices SET note = ? WHERE id = ?", (note, device_id))
     repo.audit(current_user()["username"], "netscan.note", f"device:{device_id}", note or "(entfernt)")
     flash("Bezeichnung gespeichert." if note else "Bezeichnung entfernt.", "ok")
-    return redirect(url_for("web.site", site_id=d["site_id"], tab="netzwerk", zeitraum=request.form.get("zeitraum"))
+    return redirect(url_for("web.network", site_id=d["site_id"], zeitraum=request.form.get("zeitraum"))
                     + f"#geraet-{device_id}")
 
 
@@ -1934,3 +1969,4 @@ def report_pdf():
 
 
 from . import web_topology  # noqa: E402,F401 – Routen der Switch-Topologie
+from . import web_tools  # noqa: E402,F401 – Routen der Werkzeuge

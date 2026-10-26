@@ -147,6 +147,10 @@ public sealed class HeartbeatRequest
     public long BufferItems { get; init; }
     public long UptimeS { get; init; }
     public List<string> Addresses { get; init; } = new();
+
+    /// <summary>Default-Gateway und seine MAC (ARP) – der Server erkennt daraus das Gateway des Standorts.</summary>
+    public string? Gateway { get; init; }
+    public string? GatewayMac { get; init; }
 }
 
 public sealed class HeartbeatResponse
@@ -154,6 +158,9 @@ public sealed class HeartbeatResponse
     public string ConfigEtag { get; init; } = string.Empty;
     public long ServerTime { get; init; }
     public List<ProbeCommand> Commands { get; init; } = new();
+
+    /// <summary>Wartende Einzeltests aus dem Web-UI (Werkzeuge) – dann sofort GET tools/next.</summary>
+    public int ToolsPending { get; init; }
 }
 
 public sealed class ProbeCommand
