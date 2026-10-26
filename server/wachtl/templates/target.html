@@ -21,7 +21,7 @@
      data-stats-url="{{ url_for('api_admin.stats', probe_id=probe.id, check_id=check.id, **q) }}"
      data-reports-url="{{ url_for('api_reports.reports', probe_id=probe.id) }}"{% if at %} data-at="{{ at }}"{% endif %}>
   <div class="range-buttons">
-    <span class="seg" role="group" aria-label="Zeitraum des Graphen">{% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}" aria-pressed="{{ 'true' if r == '1h' else 'false' }}">{{ range_label(r) }}</button>{% endfor %}</span>
+    <span class="seg" role="group" aria-label="Zeitraum des Graphen">{% set sel = request.args.get('range') if request.args.get('range') in ranges else '1h' %}{% for r in ranges %}<button type="button" data-range="{{ r }}" aria-pressed="{{ 'true' if r == sel else 'false' }}">{{ range_label(r) }}</button>{% endfor %}</span>
     <span id="chart-source" class="muted small"></span>
   </div>
   {% set lw, lb = thr.loss_warn_pct, thr.loss_bad_pct %}
