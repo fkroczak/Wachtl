@@ -28,10 +28,10 @@ try {
 
     # Server-Probe ist registriert und online
     $server = $null
-    foreach ($i in 1..12) {
+    foreach ($i in 1..30) {   # bis 1 min, alle 2 s
         $server = (Get-Json '/api/v1/probes') | Where-Object kind -eq 'server' | Select-Object -First 1
         if ($server -and $server.online) { break }
-        Start-Sleep 5
+        Start-Sleep 2
     }
     if (-not $server) {
         Get-Content C:\WachtlData\logs\serverprobe.log -Tail 60 -ErrorAction SilentlyContinue
@@ -47,8 +47,8 @@ try {
     } | Out-Null
     $loop = ((Get-Json '/api/v1/checks') | Where-Object name -eq 'CI Loopback').id
     $up = $null
-    foreach ($i in 1..18) {
-        Start-Sleep 10
+    foreach ($i in 1..90) {   # bis 3 min, alle 2 s
+        Start-Sleep 2
         $up = (Get-Json '/api/v1/status') | Where-Object { $_.probe -eq "$($server.id)" -and $_.check_id -eq "$loop" }
         if ($up -and $up.up -eq 1) { break }
     }
@@ -63,10 +63,10 @@ try {
     $loopPath = ((Get-Json '/api/v1/checks') | Where-Object { $_.type -eq 'path' -and $_.target -eq '127.0.0.1' } | Select-Object -First 1).id
     if (-not $loopPath) { throw 'Pfad-Check zu 127.0.0.1 aus test-v03 fehlt' }
     $path = $null
-    foreach ($i in 1..12) {
+    foreach ($i in 1..30) {   # bis 1 min, alle 2 s
         $path = (Get-Json "/api/v1/probes/$($server.id)/paths") | Where-Object check_id -eq $loopPath | Select-Object -First 1
         if ($path) { break }
-        Start-Sleep 5
+        Start-Sleep 2
     }
     if (-not $path -or -not $path.reached) { throw 'Server-Probe: kein Pfad zu 127.0.0.1' }
     $summary.Add("Server-Probe Pfad: $($path.hops.Count) Hop(s), erreicht")

@@ -172,6 +172,10 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "Server-Prüfung" -Command "./.github/scripts/test-server.ps1"
 
+      - name: "Nur CI: Heartbeat der Probes 10 s statt 30 s (E2E-Tests warten oft auf den Heartbeat)"
+        shell: pwsh
+        run: ./.github/scripts/run-logged.ps1 -Title "CI-Heartbeat" -Command "./.github/scripts/ci-heartbeat.ps1"
+
       - name: Vorbelegtes Setup aus dem Web-UI unbeaufsichtigt installieren (Probe)
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "Probe-Prüfung" -Command "./.github/scripts/test-probe.ps1"

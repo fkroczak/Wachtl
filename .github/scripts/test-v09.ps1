@@ -37,9 +37,9 @@ function New-RtpCheck([string]$Name, [hashtable]$Peer, [string]$ProbeId) {
 # nächsten Heartbeat, ein früher zugestellter Auftrag läuft sonst ins Leere.
 function Wait-RtpRun([string]$ProbeId, [string]$CheckId, [string]$Label) {
     $run = $null
-    foreach ($i in 1..40) {
-        if ($i % 7 -eq 1) { Post-Form "/probes/$ProbeId/checks/$CheckId/run" @{} | Out-Null }
-        Start-Sleep 5
+    foreach ($i in 1..100) {   # bis 200 s, alle 2 s; Auftrag alle 16 s neu (Heartbeat in der CI: 10 s)
+        if ($i % 8 -eq 1) { Post-Form "/probes/$ProbeId/checks/$CheckId/run" @{} | Out-Null }
+        Start-Sleep 2
         $run = (Get-Json "/api/v1/probes/$ProbeId/rtp") | Where-Object check_id -eq $CheckId | Select-Object -First 1
         if ($run) { break }
     }
@@ -92,7 +92,7 @@ try {
     #    die Probe bekommt deshalb andere Ports (Verwaltung › Messung bzw. Einstellungen der Probe).
     Post-Form '/admin/measure' @{
         iperf_enabled = 'on'; iperf_host = ''; iperf_port = '5201'; rtp_enabled = 'on'; rtp_host = ''; rtp_port = '5004'
-        upload_interval_s = '10'; heartbeat_interval_s = '30'; config_poll_s = '300'; probe_iperf_port = '5201'
+        upload_interval_s = '10'; heartbeat_interval_s = '10'; config_poll_s = '300'; probe_iperf_port = '5201'
         probe_rtp_port = '5005'; client_findings_enabled = 'on'; client_findings_notify = 'on'; history_days = '400'
         outage_min_s = '0'
     } | Out-Null
