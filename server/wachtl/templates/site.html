@@ -11,7 +11,7 @@
 <h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
 {% if site.description %}<p class="muted">{{ site.description }}</p>{% endif %}
 {% if has_role(user, 'admin') %}
-<details class="site-edit"{{ ' open' if request.args.get('bearbeiten') }}><summary>Standort bearbeiten</summary>
+<details{{ ' open' if request.args.get('bearbeiten') }}><summary>Standort bearbeiten</summary>
   <form method="post" action="{{ url_for('web.site_edit', site_id=site.id) }}" class="row">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Name <input name="name" required maxlength="100" value="{{ site.name }}"></label>
