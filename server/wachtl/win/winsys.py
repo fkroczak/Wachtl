@@ -24,6 +24,7 @@ FW_HTTPS = "Wachtl Server HTTPS"
 FW_HTTP = "Wachtl Server HTTP"
 FW_IPERF = "Wachtl Server iperf3"
 FW_RTP = "Wachtl Server RTP"
+FW_DISCOVERY = "Wachtl Server Switch-Suche"      # Antworten auf den Rundruf (TP-Link Easy Smart, Netgear NSDP)
 TASK_BACKUP = "Wachtl Server Backup"
 # Anzeigename im Zertifikatspeicher; daran erkennt das Server-Setup „sein“ Stammzertifikat (Probe: „Wachtl Server (Probe)“)
 CERT_FRIENDLY_NAME = "Wachtl Server"
@@ -161,11 +162,14 @@ def configure_firewall(layout: Layout, run: Runner) -> None:
     if layout.port("RTP"):
         run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_RTP}", "dir=in", "action=allow",
              "protocol=UDP", f"localport={layout.port('RTP')}", "profile=any"])
+    # Switches ohne SNMP antworten auf den Rundruf der Server-Probe per Broadcast – nur aus dem eigenen Netz
+    run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_DISCOVERY}", "dir=in", "action=allow",
+         "protocol=UDP", "localport=29809,63321,63323", "remoteip=localsubnet", "profile=any"])
 
 
 def remove_firewall(run: Runner, programs: list[Path] | None = None) -> None:
     """Eigene Regeln entfernen; mit ``programs`` auch Regeln, die Windows für diese Programme angelegt hat."""
-    for name in (FW_HTTPS, FW_HTTP, FW_IPERF, FW_RTP):
+    for name in (FW_HTTPS, FW_HTTP, FW_IPERF, FW_RTP, FW_DISCOVERY):
         run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={name}"], check=False)
     for program in programs or []:
         run(["netsh", "advfirewall", "firewall", "delete", "rule", "name=all", f"program={program}"], check=False)

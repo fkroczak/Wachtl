@@ -3,9 +3,14 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
-## Unveröffentlicht
+## Neu in 1.0.0
 
 - **Nur ein Standort**: Gibt es genau einen Standort, blendet Wachtl ihn aus. „Übersicht“ zeigt direkt die Standortseite mit Probes, Netzwerk, Topologie und dem Verlauf (24 h bis 90 Tage). Menüpunkt „Standorte“, Standortliste in der Seitenleiste sowie Standortauswahl in Filtern, Bericht, Messungen, Setup und Einrichtung entfallen; die Einrichtung nutzt den vorhandenen Standort oder legt „Hauptstandort“ an. Ab dem zweiten Standort erscheint alles wieder.
+- **Switches automatisch finden**: Wachtl erkennt Switches gängiger Hersteller (TP-Link, D-Link, Zyxel, Netgear, Aruba/HPE, Cisco, Ubiquiti, MikroTik, LANCOM …) selbst – ohne Anmeldung am Gerät: am Hersteller der MAC-Adresse und der Weboberfläche aus dem Netzwerkscan, an LLDP/CDP der eingetragenen Switches und an einem **Rundruf der Server-Probe**, auf den TP-Link Easy Smart und Netgear ProSAFE Plus mit Modell, Name, IP und Firmware antworten. Standort › Topologie › Switches zeigt sie unter **Gefundene Switches**; fehlen Zugangsdaten, fragt Wachtl danach. Der Assistent ist mit Adresse, Name und Zugangsart vorbelegt und übernimmt dieselben Zugangsdaten auf Wunsch für weitere angehakte Funde. Wachtl probiert keine Passwörter selbst aus. Funde ohne Abfragemöglichkeit erscheinen trotzdem im Baum.
+- **TP-Link Easy Smart ohne SNMP** (TL-SG105E/108E/105PE/108PE/1016PE …): Wachtl liest Ports, Geschwindigkeit, Paketfehler und PoE über die Weboberfläche. Im Baum hängt der Switch an dem Port, an dem ihn der übergeordnete Switch sieht, mit den Geräten dahinter; „Pfad suchen“ führt durch ihn hindurch.
+- **Wahrscheinliche Knotenpunkte**: Hängen an einem Port mehrere Geräte ohne LLDP-Nachbarn, zeigt der Baum einen nicht verwalteten Switch – ab 3 Geräten „wahrscheinlich“, bei 2 „möglich“. Virtuelle Maschinen eines Hosts zählen nicht mit.
+- **Menüpunkt Topologie** in der Seitenleiste: bei einem Standort direkt der Baum, bei mehreren zuerst je Standort eine Kachel mit Zahl der Switches, Problemen und gefundenen Switches, die noch Zugangsdaten brauchen.
+- Windows-Server: neue Firewall-Regel „Wachtl Server Switch-Suche“ (UDP 29809, 63321, 63323, nur aus dem eigenen Netz) für die Antworten auf den Rundruf.
 
 ## Neu in 0.9.6
 

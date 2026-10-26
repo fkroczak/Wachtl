@@ -474,6 +474,13 @@ def result_netscan():
         return jsonify(error=str(exc)), 400
     ts = _result_ts(data.get("ts"))
     netscan.store(g.probe, check, values, ts)
+    if not values["error"]:
+        from .services import topology
+
+        try:
+            topology.refresh_findings(int(g.probe["site_id"]), ts)     # gefundene Switches neu bewerten
+        except Exception:  # noqa: BLE001 – Auswertung ist Zusatz, der Scan ist gespeichert
+            log.exception("Switch-Erkennung nach dem Netzwerkscan fehlgeschlagen")
     lines = [ingest.server_lines("wachtl_netscan_ok", g.probe, check, 0 if values["error"] else 1, ts, {})]
     if not values["error"]:
         lines.append(ingest.server_lines("wachtl_netscan_hosts", g.probe, check, len(values["hosts"]), ts, {}))
@@ -524,6 +531,23 @@ def result_topology():
     log.log(logging.INFO if error or kind == "full" else logging.DEBUG, "Switch %s (%s): %s", sw["id"], sw["host"],
             f"Fehler: {error}" if error else f"abgefragt ({kind})")
     return jsonify(stored=1), 201
+
+
+@bp.post("/results/discovery")
+@probe_auth
+def result_discovery():
+    """Rundruf der Server-Probe: Switches ohne SNMP im eigenen Netz (TP-Link Easy Smart, Netgear ProSAFE Plus)."""
+    from .services import switchfind, topology
+
+    if g.probe.get("kind") != "server":
+        return jsonify(error="Der Rundruf läuft nur über die Server-Probe"), 403
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="JSON-Objekt erwartet"), 400
+    ts = _result_ts(data.get("ts"))
+    n = switchfind.store_discovery(int(g.probe["site_id"]), data.get("devices") or [], ts)
+    topology.refresh_findings(int(g.probe["site_id"]), ts)
+    return jsonify(stored=n), 201
 
 
 def _int_or_none(v) -> int | None:

@@ -5,8 +5,39 @@
 {% block content %}
 {{ head(site, tabs, view, views, problem_count, poller, drafts) }}
 <h2 class="sr-only">Switches</h2>
-{% if not cards and not unmanaged %}
-<p class="muted">Noch keine Switches eingetragen.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.topology_new', site_id=site.id) }}">Ersten Switch einrichten</a>{% endif %}</p>
+{% if not cards and not unmanaged and not found %}
+<p class="muted">Noch keine Switches eingetragen und keine gefunden.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.topology_new', site_id=site.id) }}">Ersten Switch einrichten</a>{% endif %}</p>
+<p class="small muted">Wachtl findet Switches selbst über den Netzwerkscan der Probes, LLDP/CDP der eingetragenen Switches und einen Rundruf der Server-Probe. Dafür am besten einen Netzwerkscan für diesen Standort einrichten.</p>
+{% endif %}
+
+{% if found %}
+<section class="card" id="gefunden" aria-labelledby="h-found">
+  <h3 id="h-found">Gefundene Switches <span class="tab-count">{{ found|length }}</span></h3>
+  <p class="small muted">Automatisch erkannt – ohne Anmeldung am Gerät. Wachtl probiert keine Passwörter aus: Für Ports, Fehler und PoE braucht jeder Switch einmal seine Zugangsdaten. Switches, die sich nicht abfragen lassen, stehen trotzdem im Baum.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th scope="col">Switch</th><th scope="col">Adresse</th><th scope="col">Erkannt über</th><th scope="col">Abfrage</th><th scope="col">Im Baum</th><th scope="col"><span class="sr-only">Aktionen</span></th></tr></thead>
+    <tbody>
+    {% for c in found %}
+      <tr>
+        <td><strong>{{ c.label }}</strong><br><span class="small muted">{{ [c.vendor, c.model if c.model != c.label else None, c.firmware]|select|join(' · ') or '–' }}</span></td>
+        <td>{{ c.ip or '–' }}<br><span class="small muted">{{ c.mac or '' }}</span></td>
+        <td class="small">{{ c.sources_text }}<br><span class="muted">{{ c.sure }} ein Switch</span></td>
+        <td class="small">{{ c.access_text }}</td>
+        <td class="small">{{ c.where or 'Port noch unbekannt' }}</td>
+        <td class="actions-cell">
+          {% if has_role(user, 'admin') %}
+          {% if c.access != 'none' and c.ip %}<a class="button primary" href="{{ url_for('web.topology_new', site_id=site.id, kandidat=c.id) }}" aria-label="Zugangsdaten eingeben: {{ c.label }}">Zugangsdaten eingeben</a>{% endif %}
+          <form method="post" action="{{ url_for('web.topology_ignore', site_id=site.id, cand_id=c.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="Ausblenden: {{ c.label }}">Ausblenden</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
 {% endif %}
 <div class="topo-cards">
   {% for c in cards %}{% set n = c.node %}
@@ -35,16 +66,29 @@
   </article>
   {% endfor %}
   {% for n in unmanaged %}
+  {% set sure = n.sub.startswith('wahrscheinlich') %}
   <article class="card topo-card topo-card-ghost" aria-labelledby="un-{{ loop.index }}">
     <div class="topo-side-head">
-      <div><h3 id="un-{{ loop.index }}">{{ n.label }}</h3><p class="small muted">{{ n.ip or n.sub }}</p></div>
-      <span class="badge off">{{ 'ohne Zugangsdaten' if n.kind == 'neighbor' else 'nicht verwaltet' }}</span>
+      <div><h3 id="un-{{ loop.index }}">{{ n.label }}</h3><p class="small muted">{{ n.sub }}</p></div>
+      <span class="badge off">{{ 'wahrscheinlich' if sure else 'möglich' }}</span>
     </div>
     {% set parent = topo.nodes[n.parent] if n.parent else None %}
     <p class="topo-uplink small">{% if parent %}<span aria-hidden="true">↑</span> {{ link_label(topo, n) or 'verbunden' }} → {{ parent.label }}{% endif %}</p>
-    <p class="small">{{ 'Per LLDP/CDP gefunden. Mit Zugangsdaten erscheinen seine Ports und Geräte.' if n.kind == 'neighbor' else n.devices|length ~ ' Geräte an einem Port – vermutlich ein Tisch-Switch ohne SNMP.' }}</p>
-    {% if n.kind == 'neighbor' and n.ip and has_role(user, 'admin') %}<div class="actions"><a class="button" href="{{ url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) }}" aria-label="Zugangsdaten eintragen: {{ n.label }}">Zugangsdaten eintragen</a></div>{% endif %}
+    <p class="small">{{ n.devices|length }} Geräte an einem Port – {{ 'wahrscheinlich' if sure else 'möglicherweise' }} ein Knotenpunkt: Tisch-Switch oder ein anderer Switch ohne Verwaltung (ohne Weboberfläche und SNMP).</p>
+    <ul class="small topo-nb">{% for d in n.devices[:6] %}<li><span>{{ d.label }}</span><span class="muted">{{ d.ip or d.mac }}</span></li>{% endfor %}{% if n.devices|length > 6 %}<li class="muted">und {{ n.devices|length - 6 }} weitere</li>{% endif %}</ul>
   </article>
   {% endfor %}
 </div>
+{% if ignored %}
+<details class="card">
+  <summary>Ausgeblendet ({{ ignored|length }})</summary>
+  <ul>
+    {% for c in ignored %}
+    <li>{{ c.label }} <span class="muted small">{{ c.ip or c.mac }}</span>
+      {% if has_role(user, 'admin') %}<form method="post" action="{{ url_for('web.topology_ignore', site_id=site.id, cand_id=c.id) }}" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link" aria-label="Wieder anzeigen: {{ c.label }}">Wieder anzeigen</button></form>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
 {% endblock %}

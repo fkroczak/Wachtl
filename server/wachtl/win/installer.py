@@ -302,7 +302,7 @@ def check_removed(layout: Layout | None, run: winsys.Runner) -> list[str]:
     left = []
     if winsys.service_state(run) is not None:
         left.append("Dienst WachtlServer (wird nach einem Neustart entfernt)")
-    for name in (winsys.FW_HTTPS, winsys.FW_HTTP, winsys.FW_IPERF, winsys.FW_RTP):
+    for name in (winsys.FW_HTTPS, winsys.FW_HTTP, winsys.FW_IPERF, winsys.FW_RTP, winsys.FW_DISCOVERY):
         if winsys.firewall_rule_exists(name, run):
             left.append(f"Firewall-Regel „{name}“")
     if winsys.backup_task_exists(run):
