@@ -14,7 +14,7 @@ mit einem fertigen Paket installiert. Rechne mit etwa 30 Minuten für den Server
 | Windows Server | `WachtlSetup-1.0.1.exe` als Administrator starten, Rolle **Wachtl-Server** wählen, den Seiten folgen. Die IP-Adressen des Servers ergänzt das Setup selbst. Details: [INSTALL-SERVER-WINDOWS.md](INSTALL-SERVER-WINDOWS.md) |
 | Linux-VM mit Docker | `sudo ./setup.sh wachtl.kunde.local` im Ordner `deploy`. Details: [INSTALL-SERVER.md](INSTALL-SERVER.md) |
 
-Am Ende zeigt das Setup die Adresse, den Admin-Zugang und den **SPKI-Pin**. Zugangsdaten sofort im
+Am Ende zeigt das Setup die Adresse; Admin-Zugang und **SPKI-Pin** stehen in `setup-info.txt`. Zugangsdaten sofort im
 Passwort-Tresor des Kunden ablegen, dann mit dem Browser anmelden und das Admin-Passwort ändern.
 
 Der Server **misst selbst mit** (Server-Probe): Er erscheint nach etwa einer Minute in der Übersicht als Probe
