@@ -10,7 +10,7 @@ using Wachtl.Tray.Core;
 
 namespace Wachtl.Tray
 {
-    /// <summary>Symbol neben der Uhr mit Menü, Statusabfrage alle 30 s und Netzwerk-Hinweisen (Abfrage alle 10 s, Anzeige im eigenen Hinweisfenster).</summary>
+    /// <summary>Symbol neben der Uhr mit Menü, Statusabfrage alle 30 s und Netzwerk-Hinweisen (Abfrage alle 5 s, Anzeige im eigenen Hinweisfenster).</summary>
     internal sealed class TrayContext : ApplicationContext
     {
         private readonly TrayClient _client;
@@ -31,7 +31,10 @@ namespace Wachtl.Tray
         private TrayStatus? _status;
         private bool _polling;
         private bool _findingsPolling;
-        private bool _findingsUnsupported;
+        private const int FindingsInterval = 5_000;
+
+        /// <summary>Dienst ohne Hinweis-Schnittstelle (Server-Probe, ältere Version, gerade im Update): selten erneut fragen.</summary>
+        private const int FindingsRetryInterval = 300_000;
         private Balloon? _lastBalloon;
         private NoticeForm? _notice;
         private ReportForm? _reportForm;
@@ -106,7 +109,7 @@ namespace Wachtl.Tray
             RefreshStatus();
 
             // Netzwerk-Hinweise getrennt vom Status: öfter abfragen, damit „Kabel getrennt“ schnell erscheint
-            _findingsTimer = new System.Windows.Forms.Timer { Interval = 10_000 };
+            _findingsTimer = new System.Windows.Forms.Timer { Interval = FindingsInterval };
             _findingsTimer.Tick += (s, e) => RefreshFindings();
             _findingsTimer.Start();
             _balloonTimer = new System.Windows.Forms.Timer { Interval = 2_000 };
@@ -176,7 +179,7 @@ namespace Wachtl.Tray
 
         public async void RefreshFindings()
         {
-            if (_findingsPolling || _findingsUnsupported)
+            if (_findingsPolling)
             {
                 return;
             }
@@ -189,14 +192,14 @@ namespace Wachtl.Tray
                 switch (poll.Status)
                 {
                     case FindingsPollStatus.Ok:
+                        _findingsTimer.Interval = FindingsInterval;
+                        _findingsItem.Visible = true;
                         _notifier.Accept(poll.Response!, DateTime.UtcNow);
                         ShowNextBalloon();
                         break;
                     case FindingsPollStatus.NotSupported:
-                        // Server-Probe oder ältere Probe: kein Endpunkt – bis zum Neustart des Tray nicht mehr fragen
-                        _findingsUnsupported = true;
-                        _findingsTimer.Stop();
-                        _balloonTimer.Stop();
+                        // Server-Probe oder ältere Probe: kein Endpunkt – nur noch alle 5 min fragen (nach einem Update gibt es ihn)
+                        _findingsTimer.Interval = FindingsRetryInterval;
                         _findingsItem.Visible = false;
                         break;
                 }
