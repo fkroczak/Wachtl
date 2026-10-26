@@ -43,8 +43,13 @@ jobs:
   ui-quality:
     # Barrierefreiheit, Tastatur, Reflow und Performance-Budgets des Web-UI (docs/quality-guardrails.md).
     # Blockierend: Playwright/axe und Lighthouse-Assertions mit Stufe "error". Nur Hinweis: Lesbarkeit.
-    name: UI-Qualität (axe, Tastatur, Lighthouse)
+    # Playwright und Lighthouse laufen parallel auf je eigenem Runner mit eigenem Server (halbiert die Dauer).
+    name: UI-Qualität (${{ matrix.suite }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [playwright, lighthouse]
     defaults:
       run:
         working-directory: server
@@ -71,18 +76,22 @@ jobs:
       - run: npm ci
         working-directory: server/e2e
       - run: npx playwright install --with-deps chromium
+        if: matrix.suite == 'playwright'   # Lighthouse nutzt das Chrome des Runners
         working-directory: server/e2e
       - name: Wachtl mit Demodaten starten
         run: WACHTL_E2E_DIR=$RUNNER_TEMP/wachtl e2e/start-server.sh
       - name: Barrierefreiheit, Tastatur, Reflow (Playwright + axe-core)
+        if: matrix.suite == 'playwright'
         run: npx playwright test
         working-directory: server/e2e
       - name: Lighthouse CI (3 Läufe je Seite, Median gegen Budgets)
+        if: matrix.suite == 'lighthouse'
         working-directory: server/e2e
         run: |
           export WACHTL_COOKIE=$(node login-cookie.js)
           npx lhci autorun --config=lighthouserc.cjs
       - name: Lesbarkeit deutscher UI-Texte (nur Hinweis)
+        if: matrix.suite == 'lighthouse'
         continue-on-error: true
         run: |
           export WACHTL_COOKIE=$(node e2e/login-cookie.js)
@@ -90,7 +99,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-quality-reports
+          name: ui-quality-reports-${{ matrix.suite }}
           path: |
             server/e2e/playwright-report/
             server/e2e/test-results/
@@ -122,6 +131,9 @@ jobs:
   windows-server:
     name: Windows-Server-Setup bauen und testen
     runs-on: windows-latest
+    env:
+      # Veröffentlichte Setups (main, Tags) mit höchster Kompression; PR-Läufe schnell (spart ~1 min)
+      SETUP_COMPRESSION: ${{ (github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')) && 'lzma2/fast' || '' }}
     # wartet nur auf die Probe, nicht auf die Python-Tests: die laufen parallel, und
     # Setups wandern erst ins Repository/Release, wenn auch die Server-Tests grün sind
     needs: [probe]
@@ -142,7 +154,7 @@ jobs:
           path: dist/probe
       - name: Setup-Assistent bauen
         shell: pwsh
-        run: ./.github/scripts/run-logged.ps1 -Title "Server-Setup-Build" -Command "./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist"
+        run: ./.github/scripts/run-logged.ps1 -Title "Server-Setup-Build" -Command "./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist -Compression '${{ env.SETUP_COMPRESSION }}'"
 
       - name: Unbeaufsichtigt installieren
         shell: pwsh

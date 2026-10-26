@@ -20,7 +20,9 @@ param(
     [string]$WinSWVersion = 'v2.12.0',
     [string]$ProbeDir = (Join-Path $PSScriptRoot '..\dist\probe'),   # wachtl-probe.exe + iperf3 aus probe\build.ps1
     [string]$IperfUrl = 'https://github.com/ar51an/iperf3-win-builds/releases/download/3.21/iperf-3.21-win64.zip',
-    [string]$Output = (Join-Path $PSScriptRoot '..\dist')
+    [string]$Output = (Join-Path $PSScriptRoot '..\dist'),
+    # Inno-Setup-Kompression; leer = Vorgabe aus WachtlSetup.iss (lzma2/ultra64). CI-PR-Läufe: lzma2/fast
+    [string]$Compression = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -164,7 +166,9 @@ if (-not $iscc) {
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 # ein Setup für beide Rollen: Server-Dateien aus $Build, Probe aus $ProbeDir
 if (-not (Test-Path (Join-Path $ProbeDir 'wachtl-probe.exe'))) { throw "wachtl-probe.exe fehlt in $ProbeDir (zuerst probe\build.ps1)" }
-& $iscc "/DAppVersion=$Version" "/DBuildDir=$Build" "/DProbeDir=$((Resolve-Path $ProbeDir).Path)" "/O$((Resolve-Path $Output).Path)" (Join-Path $PSScriptRoot 'WachtlSetup.iss') 2>&1 | ForEach-Object { "$_" }
+$isccArgs = @("/DAppVersion=$Version", "/DBuildDir=$Build", "/DProbeDir=$((Resolve-Path $ProbeDir).Path)", "/O$((Resolve-Path $Output).Path)")
+if ($Compression) { $isccArgs += "/DCompression=$Compression"; Write-Host "    Kompression: $Compression" }
+& $iscc @isccArgs (Join-Path $PSScriptRoot 'WachtlSetup.iss') 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup fehlgeschlagen' }
 Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 $setup = Get-Item (Join-Path $Output "WachtlSetup-$Version.exe")
