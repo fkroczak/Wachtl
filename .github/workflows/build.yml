@@ -46,6 +46,7 @@ jobs:
     # Playwright und Lighthouse laufen parallel auf je eigenem Runner mit eigenem Server (halbiert die Dauer).
     name: UI-Qualität (${{ matrix.suite }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +78,7 @@ jobs:
         working-directory: server/e2e
       - run: npx playwright install --with-deps chromium
         if: matrix.suite == 'playwright'   # Lighthouse nutzt das Chrome des Runners
+        timeout-minutes: 5   # dauert ~20 s; ein hängender Paket-Download soll nicht den ganzen Lauf blockieren
         working-directory: server/e2e
       - name: Wachtl mit Demodaten starten
         run: WACHTL_E2E_DIR=$RUNNER_TEMP/wachtl e2e/start-server.sh
