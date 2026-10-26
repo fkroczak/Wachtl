@@ -4,18 +4,22 @@
 {% from "_links.html" import alert_links, probe_state with context %}
 {% from "_findings.html" import findings_table with context %}
 {% from "_outages.html" import outage_table with context %}
+{% from "_tabs.html" import tabs as tabnav %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
 <h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
 {% if site.description %}<p class="muted">{{ site.description }}</p>{% endif %}
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
+{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
+{{ tabnav(tab_items, tab) }}
 
+{% if tab == 'probes' %}
 <section class="cards stats" aria-label="Kennzahlen des Standorts">
   <a class="card stat {{ 'bad' if kpi.online < kpi.active }}" href="#probes"><span class="num">{{ kpi.online }} / {{ kpi.active }}</span><span>Probes online</span></a>
   <a class="card stat {{ 'bad' if kpi.problems }}" href="#probes"><span class="num">{{ kpi.problems }}</span><span>Messungen mit Problemen</span></a>
-  <a class="card stat {{ 'bad' if alerts }}" href="#alarme"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
-  <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="#ausfaelle"><span class="num">{{ recent_outages|length }}</span><span>Ausfälle (24 h)</span></a>
+  <a class="card stat {{ 'bad' if alerts }}" href="{{ url_for('web.site', site_id=site.id, tab='ereignisse') }}"><span class="num">{{ alerts|length }}</span><span>Aktive Alarme</span></a>
+  <a class="card stat {{ 'bad' if recent_outages|selectattr('end', 'none')|list else 'warn' if recent_outages else '' }}" href="{{ url_for('web.site', site_id=site.id, tab='ereignisse') }}#ausfaelle"><span class="num">{{ recent_outages|length }}</span><span>Ausfälle (24 h)</span></a>
   <a class="card stat" href="{{ url_for('web.reports_view', site=site.id) }}"><span class="num">{{ kpi.reports }}</span><span>Offene Meldungen</span></a>
   <div class="card stat {{ {'gestört': 'bad', 'auffällig': 'warn'}.get(net, '') }}"><span class="num word">{{ net or '–' }}</span><span>Internet (Referenz-Pings)</span></div>
   {% if bw %}{% set p, st = bw %}
@@ -63,8 +67,9 @@
   </li>
   {% endfor %}
 </ul>
-{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.admin') }}#enrollment">Setup für diesen Standort herunterladen</a>{% endif %}</p>{% endif %}
+{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ admin_url('enrollment') }}">Setup für diesen Standort herunterladen</a>{% endif %}</p>{% endif %}
 
+{% elif tab == 'ereignisse' %}
 <h2 id="alarme">Aktive Alarme</h2>
 {% if alerts %}
 <div class="scroll">
@@ -92,6 +97,7 @@
 {{ outage_table(recent_outages, outage_causes, show_site=False) }}
 {% else %}<p class="muted">Keine Ausfälle an diesem Standort in den letzten 24 Stunden.</p>{% endif %}
 
+{% elif tab == 'meldungen' %}
 <h2 id="hinweise">Hinweise von PCs</h2>
 {% if client_findings %}
 <p class="muted">Was die Probes an diesem Standort auf ihrem PC erkannt haben – aktive und die der letzten 7 Tage.</p>
@@ -104,9 +110,9 @@
 {{ report_table(reports) }}
 {% else %}<p class="muted">Von diesem Standort gibt es keine Meldungen.</p>{% endif %}
 
+{% else %}
+<h2 id="alle-messungen" class="sr-only">Alle Messungen je Probe</h2>
 {% if probes %}
-<details id="alle-messungen">
-<summary><h2>Alle Messungen je Probe</h2></summary>
 <p class="muted">Bei Pings Latenz der letzten Minute und Verlust der letzten 5 Minuten, bei Pfaden die Hops, bei Bandbreiten die letzte Messung, bei Sprache MOS und Verlust des letzten Tests. Rot umrandet = keine aktuellen Daten.</p>
 <div class="scroll">
 <table class="matrix">
@@ -142,6 +148,6 @@
   </tbody>
 </table>
 </div>
-</details>
+{% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.</p>{% endif %}
 {% endif %}
 {% endblock %}

@@ -105,12 +105,12 @@ class WebTest(AppTestCase):
         tok = self.session_csrf()
         self.client.post("/admin/users", data={"csrf_token": tok, "username": "neu-kollege", "password": "",
                                                "role": "operator"})
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?tab=benutzer").get_data(as_text=True)
         self.assertIn('value="neu-kollege"', html)
         self.assertIn('value="operator" selected', html)
-        self.assertNotIn('value="neu-kollege"', self.client.get("/admin").get_data(as_text=True))  # nur einmal
+        self.assertNotIn('value="neu-kollege"', self.client.get("/admin?tab=benutzer").get_data(as_text=True))  # nur einmal
         self.client.post("/admin/notify", data={"csrf_token": tok, "email_to": "kein-mail", "smtp_password": "geheim"})
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?tab=benachrichtigungen").get_data(as_text=True)
         self.assertIn('value="kein-mail"', html)
         self.assertNotIn("geheim", html)
 
@@ -533,7 +533,7 @@ class SiteDashboardTest(AppTestCase):
         self.assertIn("Probes online", html)
         self.assertIn('<span class="num">1 / 2</span>', html)
         self.assertIn(f'href="/meldungen?site={self.site}"', html)
-        self.assertIn('href="#alarme"', html)
+        self.assertIn(f'href="/sites/{self.site}?tab=ereignisse"', html)
         self.assertLess(html.index("PC-AUS</a></h3>"), html.index("PC-OK</a></h3>"))
         bad = html[html.index('class="card pw bad"'):html.index("PC-OK</a></h3>")]
         self.assertIn("Probe offline – letzter Kontakt vor 1 h", bad)
@@ -541,7 +541,7 @@ class SiteDashboardTest(AppTestCase):
         self.assertIn("2 Probleme", bad)
         self.assertIn('class="card pw ok"', html)
         self.assertIn("12.5 ms", html)
-        self.assertIn('<details id="alle-messungen">', html)
+        self.assertIn(f'href="/sites/{self.site}?tab=messungen"', html)   # alle Messungen auf eigenem Reiter
 
     def test_sparkline_and_vm_failure(self):
         import time

@@ -93,7 +93,7 @@ try {
     if ($loopState.state -ne 'ok') { throw "Loopback-Ping der Server-Probe nicht ok: $($loopState.state) $($loopState.detail)" }
     $page = (Get-Page '/').Content
     if ($page -notmatch 'Messungen mit Problemen') { throw 'Übersicht ohne Abschnitt „Messungen mit Problemen“' }
-    if ($page -notmatch 'Checks ok / auffällig / gestört / keine Daten') { throw 'Übersicht zählt nicht alle Check-Arten' }
+    if ((Get-Page '/probes?tab=alle').Content -notmatch 'Checks ok / auffällig / gestört / keine Daten') { throw 'Seite „Probes“ zählt nicht alle Check-Arten' }
 
     $text = $summary -join "`n"
     Write-Host $text

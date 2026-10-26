@@ -70,7 +70,7 @@ class ClientFindingApiTest(AppTestCase):
         self.assertEqual(row["title"], "Netzwerkkabel getrennt")
         self.make_user()
         self.login()
-        self.assertIn("Wieder verbunden (Unterbrechung 3 Min.)", self.client.get(f"/probes/{self.pid}").get_data(as_text=True))
+        self.assertIn("Wieder verbunden (Unterbrechung 3 Min.)", self.client.get(f"/probes/{self.pid}?tab=meldungen").get_data(as_text=True))
 
     def test_restart_and_switch_off_close_active(self):
         self.post(self.item(detected_at=repo.now() - 600))
@@ -128,7 +128,7 @@ class ClientFindingApiTest(AppTestCase):
                                          solution="Kabel und Switch-Port prüfen."))
         self.make_user()
         self.login()
-        for url in ("/", f"/probes/{self.pid}", "/sites/1"):
+        for url in ("/hinweise", f"/probes/{self.pid}?tab=meldungen", "/sites/1?tab=meldungen"):
             html = self.client.get(url).get_data(as_text=True)
             self.assertIn("Netzwerkkabel getrennt", html, url)
             self.assertIn("auf 100 Mbit/s gesunken", html, url)
@@ -260,7 +260,7 @@ class DefaultChecksAndRemoveTest(AppTestCase):
         c = q1("SELECT * FROM checks WHERE id = ?", (quad9,))
         repo.update_check(quad9, "Quad9", c["target"], c["role"], 1, 1000, "all", None, {})
         self.assertNotIn("Quad9", self.names(self.pa))
-        self.assertIn("außer PC-A", self.client.get("/admin").get_data(as_text=True))
+        self.assertIn("außer PC-A", self.client.get("/admin?tab=checks").get_data(as_text=True))
         # wieder aufnehmen
         self.client.post(f"/probes/{self.pa['id']}/checks/{quad9}/restore", data={"csrf_token": self.session_csrf()})
         self.assertIn("Quad9", self.names(self.pa))

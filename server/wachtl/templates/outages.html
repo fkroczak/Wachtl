@@ -24,6 +24,7 @@
     {% for name, c in summary.by_site[:8] %}<dt>{% if c.site|int %}<a href="{{ url_for('web.site', site_id=c.site|int) }}">{{ name }}</a>{% else %}{{ name }}{% endif %}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
 </section>
 
+<div class="scroll">
 <table>
   <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th><th>Standort</th><th>Probe</th><th>Ziel</th><th>Meldung</th></tr></thead>
   <tbody>{% for o in items %}
@@ -39,5 +40,6 @@
     </tr>
   {% else %}<tr><td colspan="7" class="muted">Keine Ausfälle im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
 </table>
+</div>
 <p class="muted small">Der Beginn ist der Zeitpunkt der Alarmauslösung – je nach Regel einige Sekunden nach dem ersten fehlgeschlagenen Ping.</p>
 {% endblock %}

@@ -304,9 +304,9 @@ class RtpServerTest(AppTestCase):
         self.assertIn('id="mos-data"', page)
         self.assertIn(f"/probes/{self.a['probe_id']}/rtp/{cid}",
                       self.client.get(f"/probes/{self.a['probe_id']}").get_data(as_text=True))
-        site = self.client.get(f"/sites/{probe['site_id']}").get_data(as_text=True)
+        site = self.client.get(f"/sites/{probe['site_id']}?tab=messungen").get_data(as_text=True)
         self.assertIn(f"/probes/{self.a['probe_id']}/rtp/{cid}", site)
-        overview = self.client.get("/").get_data(as_text=True)
+        overview = self.client.get("/probes?tab=sprache").get_data(as_text=True)
         self.assertIn("Sprachqualität", overview)
         self.assertEqual(self.client.get(f"/probes/{self.a['probe_id']}/bandwidth/{cid}").status_code, 404)
         self.assertEqual(len(self.client.get(f"/api/v1/probes/{self.a['probe_id']}/rtp").get_json()), 3)
