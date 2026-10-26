@@ -30,8 +30,8 @@ if ($p.ExitCode -ne 0) { Get-Content dist\probe-install.log -Tail 60; throw 'Pro
 Get-Service Wachtl | Format-List Name, Status, StartType
 & "${env:ProgramFiles}\Wachtl\wachtl-probe.exe" status
 $online = $false
-foreach ($i in 1..12) {
-  Start-Sleep 10
+foreach ($i in 1..60) {   # bis 2 min, alle 2 s
+  Start-Sleep 2
   $list = & $w probes
   $list
   if ($list -match 'CI-PROBE.*online') { $online = $true; break }

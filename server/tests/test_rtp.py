@@ -2,6 +2,7 @@
 import json
 import socket
 import threading
+import time
 import unittest
 
 from wachtl import checktypes, repo, rtp
@@ -131,13 +132,14 @@ class LoopbackTest(unittest.TestCase):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("127.0.0.1", port))
             s.settimeout(0.05)
-            for _ in range(100):
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
                 try:
                     s.send(probe)
                     if s.recv(2048):
                         return
-                except OSError:      # noch nicht gebunden (ICMP) oder keine Antwort
-                    pass
+                except OSError:      # noch nicht gebunden (ICMP, kehrt sofort zurück) oder keine Antwort
+                    time.sleep(0.02)
         self.fail(f"Reflektor antwortet nicht auf Port {port}")
 
     def test_against_reflector(self):

@@ -63,8 +63,8 @@ try {
 
     # Probe übernimmt die Konfiguration mit dem nächsten Heartbeat und meldet den ersten Pfad
     $path = $null
-    foreach ($i in 1..24) {
-        Start-Sleep 5
+    foreach ($i in 1..60) {   # bis 2 min, alle 2 s
+        Start-Sleep 2
         $path = (Get-Json "/api/v1/probes/$pid_/paths") | Where-Object check_id -eq $pathCheck | Select-Object -First 1
         if ($path) { break }
     }
@@ -75,8 +75,8 @@ try {
     # Hop-Pings kommen an (Seite zeigt Verlust für 127.0.0.1). VictoriaMetrics liefert die letzten 30 s
     # erst verzögert (search.latencyOffset), daher bis zu 2 Minuten warten.
     $loss = ''
-    foreach ($i in 1..12) {
-        Start-Sleep 10
+    foreach ($i in 1..60) {   # bis 2 min, alle 2 s
+        Start-Sleep 2
         $page = (Get-Page "/probes/$pid_/path/$pathCheck").Content
         $loss = [regex]::Match($page, '<td class="num ?">(\d+[.,]\d) %</td>').Groups[1].Value
         if ($loss -ne '') { break }
@@ -94,8 +94,8 @@ try {
     # „Jetzt messen“
     Post-Form "/probes/$pid_/checks/$iperfCheck/run" @{} | Out-Null
     $runs = @()
-    foreach ($i in 1..30) {
-        Start-Sleep 5
+    foreach ($i in 1..75) {   # bis 2,5 min, alle 2 s
+        Start-Sleep 2
         $runs = @((Get-Json "/api/v1/probes/$pid_/bandwidth") | Where-Object check_id -eq $iperfCheck)
         if ($runs.Count -ge 2) { break }
     }

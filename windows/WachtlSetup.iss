@@ -50,7 +50,12 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.14393
 OutputBaseFilename=WachtlSetup-{#AppVersion}
-Compression=lzma2/ultra64
+; Standard: höchste Kompression (veröffentlichte Setups, GitHub-Grenze 100 MB).
+; PR-Läufe der CI übergeben /DCompression=lzma2/fast – gleiches Setup, nur schneller gebaut.
+#ifndef Compression
+  #define Compression "lzma2/ultra64"
+#endif
+Compression={#Compression}
 SolidCompression=yes
 WizardStyle=modern
 SetupIconFile=assets\wachtl.ico

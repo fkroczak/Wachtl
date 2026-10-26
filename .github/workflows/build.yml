@@ -1,13 +1,20 @@
 name: Build und Tests
 
 on:
+  # Branches nur über den Pull Request testen – sonst läuft jeder PR-Commit doppelt (push + pull_request).
+  # Branch ohne PR: Workflow von Hand starten (workflow_dispatch).
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
   release:
     types: [published]
+
+# Neuer Commit im PR bricht den veralteten Lauf ab; main und Tags laufen immer zu Ende.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   WACHTL_VERSION: "1.0.1"
@@ -21,17 +28,29 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q -n auto   # pytest-xdist: alle Kerne des Runners
 
   ui-quality:
     # Barrierefreiheit, Tastatur, Reflow und Performance-Budgets des Web-UI (docs/quality-guardrails.md).
     # Blockierend: Playwright/axe und Lighthouse-Assertions mit Stufe "error". Nur Hinweis: Lesbarkeit.
-    name: UI-Qualität (axe, Tastatur, Lighthouse)
+    # Playwright und Lighthouse laufen parallel auf je eigenem Runner mit eigenem Server (halbiert die Dauer).
+    name: UI-Qualität (${{ matrix.suite }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [playwright, lighthouse]
     defaults:
       run:
         working-directory: server
@@ -40,6 +59,12 @@ jobs:
       WACHTL_E2E_PASSWORD: e2e-admin-passwort
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -52,18 +77,23 @@ jobs:
       - run: npm ci
         working-directory: server/e2e
       - run: npx playwright install --with-deps chromium
+        if: matrix.suite == 'playwright'   # Lighthouse nutzt das Chrome des Runners
+        timeout-minutes: 5   # dauert ~20 s; ein hängender Paket-Download soll nicht den ganzen Lauf blockieren
         working-directory: server/e2e
       - name: Wachtl mit Demodaten starten
         run: WACHTL_E2E_DIR=$RUNNER_TEMP/wachtl e2e/start-server.sh
       - name: Barrierefreiheit, Tastatur, Reflow (Playwright + axe-core)
+        if: matrix.suite == 'playwright'
         run: npx playwright test
         working-directory: server/e2e
       - name: Lighthouse CI (3 Läufe je Seite, Median gegen Budgets)
+        if: matrix.suite == 'lighthouse'
         working-directory: server/e2e
         run: |
           export WACHTL_COOKIE=$(node login-cookie.js)
           npx lhci autorun --config=lighthouserc.cjs
       - name: Lesbarkeit deutscher UI-Texte (nur Hinweis)
+        if: matrix.suite == 'lighthouse'
         continue-on-error: true
         run: |
           export WACHTL_COOKIE=$(node e2e/login-cookie.js)
@@ -71,7 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ui-quality-reports
+          name: ui-quality-reports-${{ matrix.suite }}
           path: |
             server/e2e/playwright-report/
             server/e2e/test-results/
@@ -83,6 +113,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -97,9 +133,20 @@ jobs:
   windows-server:
     name: Windows-Server-Setup bauen und testen
     runs-on: windows-latest
-    needs: [server, probe]
+    env:
+      # Veröffentlichte Setups (main, Tags) mit höchster Kompression; PR-Läufe schnell (spart ~1 min)
+      SETUP_COMPRESSION: ${{ (github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')) && 'lzma2/fast' || '' }}
+    # wartet nur auf die Probe, nicht auf die Python-Tests: die laufen parallel, und
+    # Setups wandern erst ins Repository/Release, wenn auch die Server-Tests grün sind
+    needs: [probe]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -109,7 +156,7 @@ jobs:
           path: dist/probe
       - name: Setup-Assistent bauen
         shell: pwsh
-        run: ./.github/scripts/run-logged.ps1 -Title "Server-Setup-Build" -Command "./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist"
+        run: ./.github/scripts/run-logged.ps1 -Title "Server-Setup-Build" -Command "./windows/build-server.ps1 -Version $env:WACHTL_VERSION -ProbeDir dist/probe -Output dist -Compression '${{ env.SETUP_COMPRESSION }}'"
 
       - name: Unbeaufsichtigt installieren
         shell: pwsh
@@ -126,6 +173,10 @@ jobs:
       - name: Server prüfen
         shell: pwsh
         run: ./.github/scripts/run-logged.ps1 -Title "Server-Prüfung" -Command "./.github/scripts/test-server.ps1"
+
+      - name: "Nur CI: Heartbeat der Probes 10 s statt 30 s (E2E-Tests warten oft auf den Heartbeat)"
+        shell: pwsh
+        run: ./.github/scripts/run-logged.ps1 -Title "CI-Heartbeat" -Command "./.github/scripts/ci-heartbeat.ps1"
 
       - name: Vorbelegtes Setup aus dem Web-UI unbeaufsichtigt installieren (Probe)
         shell: pwsh
@@ -179,13 +230,19 @@ jobs:
   setups-ins-repo:
     name: Setups ins Repository legen
     runs-on: ubuntu-latest
-    needs: [windows-server]
+    needs: [server, windows-server]
     # nur auf main und nur einmal je Version (releases/<Version>/ noch nicht vorhanden)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # nur was der Job braucht – nicht die Setups aller früheren Versionen
+          sparse-checkout: |
+            /docs/
+            /releases/${{ env.WACHTL_VERSION }}/
+          sparse-checkout-cone-mode: false
       - name: Prüfen, ob diese Version schon im Repository liegt
         id: check
         run: |
@@ -221,12 +278,14 @@ jobs:
   release:
     name: Release veröffentlichen
     runs-on: ubuntu-latest
-    needs: [windows-server]
+    needs: [server, windows-server]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs
       - uses: actions/download-artifact@v4
         with:
           name: wachtl-setups
