@@ -1,0 +1,10 @@
+{#- Verlauf je Standort der letzten 24 h (Übersicht, Standorte) -#}
+{% macro healthbar(s, h) -%}
+<span class="healthbar" role="img" aria-label="{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in 24 Stunden{% if h.down_s %}, {{ h.down_s|duration }} gestört{% endif %}{% else %}keine Ausfälle in 24 Stunden{% endif %}">
+  {%- for c in h.cells %}<span class="hb-{{ c }}"></span>{% endfor -%}
+</span>
+{%- endmacro %}
+{% macro uptime(h) %}{% if h.up is not none %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% else %}–{% endif %}{% endmacro %}
+{% macro legend() -%}
+<p class="health-legend" aria-hidden="true"><span><i></i>ohne Ausfall</span><span><i class="hb-warn"></i>einzelnes Ziel / Paketverlust</span><span><i class="hb-down"></i>Probe, Gateway oder WAN gestört</span><span><i class="hb-none"></i>noch nicht überwacht</span></p>
+{%- endmacro %}

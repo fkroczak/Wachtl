@@ -227,3 +227,43 @@ def summarize(items: list[Outage]) -> dict:
         "total": len(items),
         "active": sum(1 for o in items if o.end is None),
     }
+
+
+# Ursachen, die einen Standort als gestört zeigen; die übrigen (einzelnes Ziel, Verlust) als auffällig
+SEVERE = ("probe", "gateway", "wan")
+
+
+def site_health(items: list[Outage], sites: list[dict], since: int, until: int, buckets: int = 48) -> dict:
+    """Verlauf je Standort für die Übersicht: Zeitraum in gleich lange Abschnitte geteilt, je Abschnitt der
+    schlimmste Zustand (ok, warn, down; none vor Anlage des Standorts) und der Anteil der Zeit ohne Störung."""
+    step = (until - since) / buckets
+    out = {}
+    for s in sites:
+        mine = [o for o in items if o.site == str(s["id"])]
+        start = max(since, s.get("created_at") or since)
+        cells = []
+        for i in range(buckets):
+            a, b = since + i * step, since + (i + 1) * step
+            if b <= start:
+                cells.append("none")
+                continue
+            hit = [o for o in mine if o.start < b and (o.end or until) > a]
+            cells.append("down" if any(o.cause in SEVERE for o in hit) else "warn" if hit else "ok")
+        # Gestörte Zeit als Vereinigung der Intervalle (gleichzeitige Ausfälle nicht doppelt zählen)
+        spans = sorted((max(o.start, start), min(o.end or until, until)) for o in mine if o.cause in SEVERE)
+        down, cur = 0, None
+        for a, b in spans:
+            if b <= a:
+                continue
+            if cur and a <= cur[1]:
+                cur = (cur[0], max(cur[1], b))
+            else:
+                if cur:
+                    down += cur[1] - cur[0]
+                cur = (a, b)
+        if cur:
+            down += cur[1] - cur[0]
+        total = until - start
+        out[s["id"]] = {"cells": cells, "count": len(mine), "down_s": down,
+                        "up": None if total <= 0 else 100 * (1 - down / total)}
+    return out

@@ -1,0 +1,5 @@
+<nav class="tabs" aria-label="Bereiche der Übersicht">
+  {% for endpoint, label in [('web.overview', 'Zeitleiste'), ('web.zustand', 'Zustand jetzt'), ('web.sites_view', 'Standorte'), ('web.probes_view', 'Probes'), ('web.findings_view', 'Hinweise von PCs')] %}
+  <a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} class="active" aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>

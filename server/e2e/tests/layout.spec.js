@@ -26,7 +26,7 @@ for (const width of [320, 640, 768, 900]) {
 
 // Label liegt näher an seinem eigenen Feld als an jedem anderen Feld – in allen Breiten
 const FORMS = ["/admin/checks/new/ping", "/admin/checks/new/iperf", "/admin/checks/new/speedtest", "/admin",
-               `/probes/${ids.probe}`, "/account", "/outages"];
+               `/probes/${ids.probe}?tab=details`, "/account", "/outages"];
 for (const width of [1280, 768, 320]) {
   test.describe(`Gesetz der Nähe ${width}px`, () => {
     test.use({ viewport: { width, height: 900 } });
@@ -77,7 +77,7 @@ test.describe("Auto-Refresh", () => {
 
   test("verwirft keine Eingaben auf Seiten mit Formular", async ({ page }) => {
     await page.clock.install();
-    await page.goto(`/probes/${ids.probe}`);
+    await page.goto(`/probes/${ids.probe}?tab=details`);
     const field = page.getByLabel("Adresse für andere Probes");
     await field.fill("10.0.0.99");
     await page.getByRole("heading", { level: 1 }).click();               // Fokus weg, Formular bleibt geändert
@@ -89,19 +89,19 @@ test.describe("Auto-Refresh", () => {
   });
 });
 
-test.describe("Suche auf der Zustandsseite", () => {
-  test("filtert Standorte und Probes und übersteht das Neuladen", async ({ page }) => {
+test.describe("Suche auf der Seite Standorte", () => {
+  test("filtert Standorte nach Kundennummer und übersteht das Neuladen", async ({ page }) => {
     await page.clock.install();
-    await page.goto("/zustand");
-    await page.getByLabel("Standort oder Probe suchen").fill("K-1002");          // Kundennummer der Filiale
-    await expect(page.locator("a.card.site:visible")).toHaveCount(1);
-    await expect(page).toHaveURL(/\?q=K-1002/);
+    await page.goto("/standorte");
+    await page.getByLabel("Standort suchen").fill("K-1002");          // Kundennummer der Filiale
+    await expect(page.locator("li.site-tile:visible")).toHaveCount(1);
+    await expect(page).toHaveURL(/[?&]q=K-1002/);
     await page.getByRole("heading", { level: 1 }).click();
     const reload = page.waitForEvent("load");
     await page.clock.runFor(31_000);                                              // Auto-Refresh läuft weiter
     await reload;
-    await expect(page.getByLabel("Standort oder Probe suchen")).toHaveValue("K-1002");
-    await page.getByLabel("Standort oder Probe suchen").fill("gibt-es-nicht");
-    await expect(page.getByText("Kein Standort und keine Probe passt")).toBeVisible();
+    await expect(page.getByLabel("Standort suchen")).toHaveValue("K-1002");
+    await page.getByLabel("Standort suchen").fill("gibt-es-nicht");
+    await expect(page.getByText("Kein Standort passt")).toBeVisible();
   });
 });

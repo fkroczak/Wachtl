@@ -36,18 +36,54 @@ def inject():
     return {
         "user": user,
         "open_reports": report_service.count("open") if user else 0,
+        "nav_sites": _nav_sites() if user else None,
         "csrf_token": csrf_token,
         "has_role": has_role,
         "ROLE_LABELS": ROLE_LABELS,
         "CHECK_ROLES": repo.CHECK_ROLES,
         "probe_online": repo.probe_online,
         "check_url": check_url,
+        "admin_url": admin_url,
         "report_graph_url": report_graph_url,
         "alert_refs": alert_refs,
         "admin_url": admin_url,
         "QUICK_TYPES": QUICK_TYPES,
         "quick_sites": lambda: q("SELECT id, name FROM sites ORDER BY name") if user else [],
     }
+
+
+NAV_SITES_MAX = 15
+SITE_STATE_LABELS = {"down": "gestört", "warn": "auffällig", "ok": "in Ordnung", "waiting": "ohne aktive Probe"}
+
+
+def site_states() -> dict[int, str]:
+    """Zustand je Standort ohne Messdaten-Abfrage (für jede Seite): gestört bei kritischem Alarm oder Probe
+    offline, auffällig bei Warnung, sonst in Ordnung; ohne aktive Probe „waiting“."""
+    states: dict[int, str] = {}
+    for p in q("SELECT site_id, last_seen FROM probes WHERE status = 'active'"):
+        sid = p["site_id"]
+        if not repo.probe_online(p):
+            states[sid] = "down"
+        else:
+            states.setdefault(sid, "ok")
+    for a in q("SELECT severity, labels FROM alert_events WHERE status = 'firing'"):
+        try:
+            sid = int(json.loads(a["labels"] or "{}").get("site") or 0)
+        except (ValueError, TypeError):
+            continue
+        if sid in states and states[sid] != "down":
+            states[sid] = "down" if a["severity"] == "critical" else "warn"
+    return states
+
+
+def _nav_sites() -> dict:
+    """Standorte in der Seitenleiste: zuerst die gestörten, dann alphabetisch; höchstens NAV_SITES_MAX."""
+    states = site_states()
+    order = {"down": 0, "warn": 1, "ok": 2, "waiting": 3}
+    sites = [{"id": s["id"], "name": s["name"], "state": states.get(s["id"], "waiting")}
+             for s in q("SELECT id, name FROM sites ORDER BY name")]
+    sites.sort(key=lambda s: order[s["state"]])
+    return {"items": sites[:NAV_SITES_MAX], "total": len(sites), "labels": SITE_STATE_LABELS}
 
 
 def check_url(probe: dict, check: dict) -> str:
@@ -371,10 +407,8 @@ def _dash_timeline(incs: list, heat: dict, sites: list, site_id: int | None, sta
     return {"lanes": list(lanes.values()), "ticks": ticks, "now_x": now_x, "start": start, "end": end}
 
 
-@bp.get("/zustand")
-@login_required()
-def zustand():
-    """Ausführlicher Zustand jetzt: alle Messungen mit Problemen, Alarme, Standorte, Probes, Bandbreite, Sprache."""
+def _fleet() -> dict:
+    """Zustand aller Standorte und Probes – gemeinsame Grundlage für Übersicht, Standorte und Probes."""
     sites = q("SELECT * FROM sites ORDER BY name")
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id ORDER BY s.name, p.hostname"
@@ -403,18 +437,70 @@ def zustand():
         bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.BANDWIDTH_TYPES]
         voice += [(p, st) for st in states[p["id"]] if st.kind == "rtp"]
     problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
+    # Zustand je Standort für Punkte und Sortierung: Alarme/Heartbeat, dazu auffällige Messungen
+    state = site_states()
+    for sid, st in site_stats.items():
+        if state.get(sid) == "ok" and st["problems"]:
+            state[sid] = "warn"
+    return {"sites": sites, "probes": probes, "per_probe": per_probe, "site_stats": site_stats,
+            "problems": problems, "offline": offline, "bandwidth": bandwidth, "voice": voice,
+            "live_ok": live_ok, "site_state": state, "KIND_LABELS": checkstatus.KIND_LABELS}
+
+
+def _with_health(f: dict) -> list:
+    """Ausfälle der letzten 24 h und daraus der Verlauf je Standort (legt site_health in f ab)."""
+    recent = _recent_outages(refine=f["live_ok"])
+    now = repo.now()
+    f["site_health"] = outages.site_health(recent, f["sites"], now - RECENT_OUTAGES_S, now)
+    return recent
+
+
+SITE_ORDER = {"down": 0, "warn": 1, "ok": 2, "waiting": 3}
+OVERVIEW_ROWS = 6  # Zeilen je Liste auf der Übersicht – passt ohne Scrollen auf einen Bildschirm
+
+
+@bp.get("/zustand")
+@login_required()
+def zustand():
+    """Zustand jetzt: Kennzahlen, 24-h-Verlauf je Standort, Probleme, Alarme und Ausfälle als Kompaktlisten."""
+    f = _fleet()
+    recent_outages = _with_health(f)
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
     since = repo.now() - 7 * 86400
-    recent_reports = report_service.search("open", since=since, limit=5)
-    client_findings = finding_service.search(since=repo.now() - 86400, limit=20)
-    recent_outages = _recent_outages(refine=live_ok)
+    worst = sorted(f["sites"], key=lambda s: (SITE_ORDER[f["site_state"].get(s["id"], "waiting")], s["name"]))
     return render_template(
-        "status.html", sites=sites, probes=probes, per_probe=per_probe, site_stats=site_stats,
-        client_findings=client_findings, recent_outages=recent_outages, outage_causes=outages.CAUSES,
-        alerts=alerts, live_ok=live_ok, problems=problems, offline=offline, bandwidth=bandwidth, voice=voice,
-        KIND_LABELS=checkstatus.KIND_LABELS, recent_reports=recent_reports,
-        recent_reports_total=report_service.count("open", since=since) if recent_reports else 0,
+        "overview.html", **f, health_sites=worst[:8], recent_outages=recent_outages,
+        outage_causes=outages.CAUSES, alerts=alerts, rows=OVERVIEW_ROWS,
+        findings_count=len(finding_service.search(since=repo.now() - 86400, limit=500)),
+        reports_count=report_service.count("open", since=since),
     )
+
+
+@bp.get("/standorte")
+@login_required()
+def sites_view():
+    f = _fleet()
+    _with_health(f)
+    return render_template("sites.html", **f)
+
+
+PROBE_TABS = {"probleme": "Probleme", "alle": "Alle Probes", "bandbreite": "Bandbreite", "sprache": "Sprache"}
+
+
+@bp.get("/probes")
+@login_required()
+def probes_view():
+    tab = request.args.get("tab", "probleme")
+    if tab not in PROBE_TABS:
+        abort(404)
+    return render_template("probes.html", **_fleet(), tab=tab, tabs=PROBE_TABS)
+
+
+@bp.get("/hinweise")
+@login_required()
+def findings_view():
+    return render_template("findings.html", client_findings=finding_service.search(since=repo.now() - 7 * 86400,
+                                                                                   limit=200))
 
 
 def _sparkline(data: dict | None, target: str) -> dict | None:
@@ -439,9 +525,23 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
     return {"d": " ".join(d), "loss": loss, "label": label}
 
 
+SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Ausfälle", "meldungen": "Hinweise & Meldungen",
+             "messungen": "Alle Messungen"}
+PROBE_TABS_DETAIL = {"messungen": "Messungen", "ping": "Ping & Pfade", "bandbreite": "Bandbreite & Sprache",
+                     "meldungen": "Hinweise & Meldungen", "alarme": "Alarme", "details": "Details"}
+
+
+def _tab(tabs: dict, default: str) -> str:
+    tab = request.args.get("tab", default)
+    if tab not in tabs:
+        abort(404)
+    return tab
+
+
 @bp.get("/sites/<int:site_id>")
 @login_required()
 def site(site_id: int):
+    tab = _tab(SITE_TABS, "probes")
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
@@ -511,7 +611,7 @@ def site(site_id: int):
     order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3, "rtp": 4}
     active = [p for p in probes if p["status"] == "active"]
     return render_template(
-        "site.html", site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
+        "site.html", tab=tab, tabs=SITE_TABS, site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
         recent_outages=_recent_outages(site_id, refine=live_ok), outage_causes=outages.CAUSES,
         kpi={"active": len(active), "online": sum(repo.probe_online(p) for p in active), "problems": problems,
              "reports": report_service.count("open", site_id=site_id)},
@@ -538,6 +638,7 @@ def _probe_check_or_404(probe: dict, check_id: int, types: tuple[str, ...]) -> d
 @bp.get("/probes/<int:probe_id>")
 @login_required()
 def probe(probe_id: int):
+    tab = _tab(PROBE_TABS_DETAIL, "messungen")
     p = _probe_or_404(probe_id)
     checks = repo.checks_for_probe(p)
     live, live_ok = _live()
@@ -577,7 +678,7 @@ def probe(probe_id: int):
             check_outages.setdefault(int(o.check_id), []).append(o)
     last_outage = {cid: (max(items, key=lambda o: o.start), len(items)) for cid, items in check_outages.items()}
     return render_template(
-        "probe.html", last_outage=last_outage, probe=p, rows=rows, paths=paths, bandwidth=bandwidth, voice=voice, cell_state=_cell_state,
+        "probe.html", tab=tab, tabs=PROBE_TABS_DETAIL, last_outage=last_outage, probe=p, rows=rows, paths=paths, bandwidth=bandwidth, voice=voice, cell_state=_cell_state,
         states=states, state_counts=checkstatus.counts(states), KIND_LABELS=checkstatus.KIND_LABELS,
         live_ok=live_ok, alerts=alerts, addresses=json.loads(p["addresses"] or "[]"),
         default_iperf_port=measure["probe_iperf_port"], default_rtp_port=measure["probe_rtp_port"],
@@ -639,7 +740,7 @@ def probe_settings(probe_id: int):
         repo.audit(current_user()["username"], "probe.settings", f"probe:{probe_id}",
                    f"Gegenstelle {'an' if enabled else 'aus'}, iperf3-Port {port}, Adresse {address or 'automatisch'}")
         flash(f"Einstellungen für {p['hostname']} gespeichert – die Probe übernimmt sie mit dem nächsten Heartbeat.", "ok")
-    return redirect(url_for("web.probe", probe_id=probe_id) + "#einstellungen")
+    return redirect(url_for("web.probe", probe_id=probe_id, tab="details") + "#einstellungen")
 
 
 @bp.post("/probes/<int:probe_id>/checks/<int:check_id>/run")
@@ -1201,7 +1302,9 @@ def admin_url(section: str) -> str:
 @login_required("admin")
 def admin():
     tab = request.args.get("tab", "ziele")
-    tab = tab if tab in ADMIN_TABS else "ziele"
+    tab = SECTION_TAB.get(tab, tab)   # alte Reiter-Namen (je Abschnitt) zeigen den passenden Bereich
+    if tab not in ADMIN_TABS:
+        abort(404)
     sites = q("SELECT * FROM sites ORDER BY name")
     probes = q("SELECT id, hostname, site_id FROM probes ORDER BY hostname")
     site_map = {s["id"]: s for s in sites}

@@ -4,11 +4,12 @@
 {% from "_timeline.html" import lane_svg, axis_row with context %}
 {% from "_quickadd.html" import quick_add with context %}
 {% block content %}
+{% include "_uebersicht_tabs.html" %}
 <div data-autorefresh="60" hidden></div>
-<div class="dash">
-  <div class="dash-head">
+<div class="board">
+  <div class="board-head">
     <h1>Übersicht{% if site_id and sites|length > 1 %} <span class="muted">· {% for s in sites if s.id == site_id %}<a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a>{% endfor %}</span>{% endif %}</h1>
-    <nav class="dash-ranges" aria-label="Zeitraum">
+    <nav class="board-ranges" aria-label="Zeitraum">
       {% for r in ranges %}<a class="button{{ ' active' if r == range_key }}" href="{{ url_for('web.overview', range=r, site=site_id) }}"{% if r == range_key %} aria-current="true"{% endif %}>{{ '24 Stunden' if r == '24h' else '7 Tage' }}</a>{% endfor %}
       {% if sites|length > 1 %}<a class="button" href="{{ url_for('web.overview', range=range_key) }}"{% if not site_id %} aria-current="true"{% endif %}>Alle Standorte</a>{% endif %}
       <a class="button" href="{{ url_for('web.day', site=site_id) }}">Tag ansehen</a>
@@ -17,7 +18,7 @@
   </div>
   {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Störungen aus den Alarmen werden trotzdem angezeigt.</div>{% endif %}
 
-  <section class="dash-kpis" aria-label="Kennzahlen">
+  <section class="board-kpis" aria-label="Kennzahlen">
     {% set now_bad = offline or problems|selectattr('1.state', 'equalto', 'down')|list %}
     <a class="card stat {{ 'bad' if now_bad else 'warn' if problems else 'good' }}" href="{{ url_for('web.zustand') }}">
       <span class="num">{% if now_bad or problems %}{{ problems|length + offline|length }}{% else %}OK{% endif %}</span>
@@ -29,7 +30,7 @@
     <a class="card stat {{ 'bad' if offline }}" href="{{ url_for('web.zustand') }}"><span class="num">{{ online|length }}/{{ active|length }}</span><span>Probes online</span></a>
   </section>
 
-  <section class="card dash-timeline" aria-labelledby="tl-h">
+  <section class="card board-timeline" aria-labelledby="tl-h">
     <div class="tl-head">
       <h2 id="tl-h">Verlauf {{ '24 Stunden' if range_key == '24h' else '7 Tage' }}</h2>
       <div class="legend small" aria-hidden="true">
@@ -51,7 +52,7 @@
     <p class="muted small tl-hint">Klick auf eine Marke oder einen Verlust zeigt alle Ziele in diesem Zeitraum sekundengenau.</p>
   </section>
 
-  <section class="card dash-list" aria-labelledby="inc-h">
+  <section class="card board-list" aria-labelledby="inc-h">
     <h2 id="inc-h">Letzte Störungen</h2>
     {% if incidents %}
     <ol class="inc-list">
@@ -69,7 +70,7 @@
     {% else %}<p class="muted">Keine Störungen im Zeitraum. Auch Ausfälle von wenigen Sekunden erscheinen hier, wenn sie längst vorbei sind.</p>{% endif %}
   </section>
 
-  <section class="card dash-now" aria-labelledby="now-h">
+  <section class="card board-now" aria-labelledby="now-h">
     <h2 id="now-h">Jetzt</h2>
     {% if offline or problems %}
     <ul class="now-list">

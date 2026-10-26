@@ -200,7 +200,7 @@ class SimplerUiTest(PagesTest):
                          ["Übersicht", "Verlauf", "Einstellungen"])
         self.assertNotIn(">Alarme<", nav)
         alerts = self.client.get("/alerts").get_data(as_text=True)
-        self.assertIn('href="/verlauf" class="active">Verlauf', alerts)
+        self.assertIn('href="/verlauf" class="active"><svg', alerts)
 
     def test_day_view(self):
         from datetime import datetime

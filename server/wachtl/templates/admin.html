@@ -5,10 +5,9 @@
 {% block content %}
 <h1>Einstellungen</h1>
 <nav class="tabs" aria-label="Bereiche der Einstellungen">
-  {% for key, (label, _sections) in admin_tabs.items() %}<a href="{{ url_for('web.admin', tab=key) }}"{% if key == tab %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  {%- for key, (text, _sections) in admin_tabs.items() %}<a href="{{ url_for('web.admin', tab=key) }}"{% if key == tab %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
   <a href="{{ url_for('web.audit') }}">Audit-Log</a>
 </nav>
-
 {% if tab == 'ziele' %}
 <section id="checks">
   <h2>Alle Ziele und Tests</h2>
@@ -38,6 +37,9 @@
     {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
+{% endif %}
+
+{% if tab == 'ziele' %}
 <section id="standardpaket">
   <h2>Standardpaket</h2>
   <p class="muted">Fertige Checks für einen neuen Kunden: anhaken, Zuweisung wählen, anlegen – fertig. Danach nur noch die Probes installieren.
@@ -86,9 +88,11 @@
   </form>
 </section>
 {% endif %}
+
 {% if tab == 'pcs' %}
 <p><a class="button primary" href="{{ url_for('web.setup_wizard') }}">Probes einrichten (geführt)</a>
   <span class="muted small">Standort, Messungen, Alarmierung und Setup für die PCs in vier Schritten – mit Standards vorbelegt.</span></p>
+
 <section id="standorte">
   <h2>Standorte</h2>
   <div class="scroll"><table>
@@ -110,6 +114,7 @@
     <button class="primary">Standort anlegen</button>
   </form>
 </section>
+
 <section id="enrollment">
   <h2>Probes registrieren</h2>
   <p class="muted">Standort wählen und <strong>Setup herunterladen</strong>: Die Datei enthält alle Adressen dieses Servers (Name und IP),
@@ -143,6 +148,7 @@
   </form>
 </section>
 {% endif %}
+
 {% if tab == 'alarme' %}
 <section id="alarme">
   <h2>Alarmregeln</h2>
@@ -165,6 +171,9 @@
     <button class="primary">Alarmregeln speichern</button>
   </form>
 </section>
+{% endif %}
+
+{% if tab == 'alarme' %}
 <section id="benachrichtigungen">
   <h2>Benachrichtigungen</h2>
   {% if not notify_enabled %}<div class="flash error">Alertmanager-Datei ist nicht konfiguriert (WACHTL_AM_CONFIG).</div>{% endif %}
@@ -190,6 +199,7 @@
   </form>
 </section>
 {% endif %}
+
 {% if tab == 'system' %}
 <section id="messung">
   <h2>Messung</h2>
@@ -214,6 +224,9 @@
     <button class="primary">Messeinstellungen speichern</button>
   </form>
 </section>
+{% endif %}
+
+{% if tab == 'system' %}
 <section id="benutzer">
   <h2>Benutzer</h2>
   <div class="scroll"><table>

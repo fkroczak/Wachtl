@@ -93,11 +93,12 @@ class CheckStatusTest(AppTestCase):
             self.assertIn("Zeitlimit erreicht", html)
             self.assertIn("noch kein Traceroute-Ergebnis", html)
             self.assertIn(f"/probes/{self.pid}/bandwidth/{self.wan}", html)
-            self.assertIn("Checks ok / auffällig / gestört / keine Daten", html)
+            self.assertIn("Checks ok / auffällig / gestört / keine Daten",
+                          self.client.get("/probes?tab=alle").get_data(as_text=True))
             probe_html = self.client.get(f"/probes/{self.pid}").get_data(as_text=True)
             self.assertIn("Alle Messungen", probe_html)
             self.assertIn("Zeitlimit erreicht", probe_html)
-            site_html = self.client.get("/sites/1").get_data(as_text=True)
+            site_html = self.client.get("/sites/1?tab=messungen").get_data(as_text=True)
             self.assertIn("Pfad", site_html)
             self.assertIn("WAN", site_html)
 
@@ -130,7 +131,7 @@ class StandardPackageTest(AppTestCase):
         n = q1("SELECT COUNT(*) AS n FROM checks")["n"]
         self.client.post("/admin/standard-package", data={"csrf_token": tok, "scope": "all", "items": keys})
         self.assertEqual(q1("SELECT COUNT(*) AS n FROM checks")["n"], n)
-        html = self.client.get("/admin").get_data(as_text=True)
+        html = self.client.get("/admin?tab=standardpaket").get_data(as_text=True)
         self.assertIn("schon vorhanden", html)
         # alle angelegten Checks sind gültig für die Probe-Konfiguration
         probe = self.enroll("PC-02")
@@ -174,7 +175,7 @@ class DeregisterTest(AppTestCase):
         self.client.post(f"/probes/{probe['probe_id']}/status", data={"csrf_token": self.session_csrf(),
                                                                        "action": "enable"})
         self.assertEqual(q1("SELECT status FROM probes WHERE id = ?", (probe["probe_id"],))["status"], "disabled")
-        html = self.client.get(f"/probes/{probe['probe_id']}").get_data(as_text=True)
+        html = self.client.get(f"/probes/{probe['probe_id']}?tab=details").get_data(as_text=True)
         self.assertIn("deinstalliert am", html)
         self.assertNotIn('value="enable"', html)   # kein Aktivieren-Knopf, der nur scheitern kann
         token = self.make_token(site, token="neu")
@@ -230,9 +231,41 @@ class RecentOutageTest(AppTestCase):
             self.assertIn("Ausfälle der letzten 24 Stunden", html)
             self.assertIn("185.87.179.244", html)
             self.assertIn(f"/probes/{pid}/checks/{cid}?at={now - 600}", html)
-            site_html = self.client.get("/sites/1").get_data(as_text=True)
+            site_html = self.client.get("/sites/1?tab=ereignisse").get_data(as_text=True)
             self.assertIn("Ausfälle der letzten 24 Stunden", site_html)
             self.assertIn("185.87.179.244", site_html)
             probe_html = self.client.get(f"/probes/{pid}").get_data(as_text=True)
             self.assertIn("1 Ausfall in 24 h", probe_html)
             self.assertIn("Ausfall vor", probe_html)
+
+
+class SiteHealthTest(AppTestCase):
+    """Verlauf je Standort (Übersicht): Abschnitte nach schlimmster Ursache, gestörte Zeit ohne Doppelzählung."""
+
+    def test_buckets_and_uptime(self):
+        from wachtl.services.outages import Outage, site_health
+
+        def outage(cause, start, end, site="1"):
+            return Outage(id=0, cause=cause, probe="1", probe_name="p", site=site, site_name="s", target="",
+                          check_id="", start=start, end=end, summary="")
+
+        since, until = 0, 4800                                   # 4 Abschnitte à 1200 s
+        items = [outage("wan", 100, 700), outage("probe", 500, 900),  # überlappend: 800 s gestört
+                 outage("target", 2500, 2600), outage("wan", 0, 4800, site="2")]
+        h = site_health(items, [{"id": 1, "created_at": 0}, {"id": 3, "created_at": 3000}], since, until, buckets=4)
+        self.assertEqual(h[1]["cells"], ["down", "ok", "warn", "ok"])
+        self.assertEqual(h[1]["down_s"], 800)
+        self.assertAlmostEqual(h[1]["up"], 100 * (1 - 800 / 4800))
+        self.assertEqual(h[3]["cells"], ["none", "none", "ok", "ok"])   # erst später angelegt
+        self.assertEqual(h[3]["up"], 100)
+
+    def test_overview_and_sidebar(self):
+        self.enroll("PC-1")
+        self.make_user()
+        self.login()
+        with mock.patch("wachtl.services.vm.live_status", return_value={}):
+            html = self.client.get("/zustand").get_data(as_text=True)
+        self.assertIn("Standorte – letzte 24 Stunden", html)
+        self.assertEqual(html.count('<span class="hb-'), 48)
+        self.assertIn('aria-label="Standorte"', html)                  # Standorte in der Seitenleiste
+        self.assertRegex(html, r'<nav class="side-sites"[\s\S]*href="/sites/1"')

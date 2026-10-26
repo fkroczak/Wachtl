@@ -91,9 +91,9 @@ try {
     $summary.Add("Check-Status: $($states.Count) Messungen ($($byType -join ', '))")
     $loopState = $states | Where-Object { $_.probe_id -eq $server.id -and $_.check_id -eq $loop }
     if ($loopState.state -ne 'ok') { throw "Loopback-Ping der Server-Probe nicht ok: $($loopState.state) $($loopState.detail)" }
-    $page = (Get-Page '/').Content
-    if ($page -notmatch 'Messungen mit Problemen') { throw 'Übersicht ohne Abschnitt „Messungen mit Problemen“' }
-    if ($page -notmatch 'Checks ok / auffällig / gestört / keine Daten') { throw 'Übersicht zählt nicht alle Check-Arten' }
+    $page = (Get-Page '/zustand').Content
+    if ($page -notmatch 'Messungen mit Problemen') { throw 'Seite „Zustand“ ohne Abschnitt „Messungen mit Problemen“' }
+    if ((Get-Page '/probes?tab=alle').Content -notmatch 'Checks ok / auffällig / gestört / keine Daten') { throw 'Seite „Probes“ zählt nicht alle Check-Arten' }
 
     $text = $summary -join "`n"
     Write-Host $text
