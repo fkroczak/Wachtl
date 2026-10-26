@@ -3,8 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
-## Neu (nächste Version)
+## Neu in 1.0.2
 
+- **Neues Logo**: Wachtel als Tropfen im Blau der Weboberfläche – im Web-UI, im Setup und als Symbol neben der Uhr (bisher braun).
+- **Tray auf dem Wachtl-Server: ein Hinweis statt fünf**: Fallen an einer Probe Gateway, Internet und Ziele gleichzeitig aus, erscheint ein Hinweis mit der wahrscheinlichen Ursache („Lokales Netz gestört“, „Internet ausgefallen“) statt einer Meldung je Ziel; er bleibt aktiv, bis alles wieder antwortet. Die Server-Probe überwacht jetzt wie die Probe auf den PCs die eigenen Netzwerkkarten (Geräte-Manager): **Netzwerkkarte deaktiviert**, **Netzwerkkabel getrennt** oder **Netzwerkkarte entfernt** erscheinen sofort im Tray (roter Punkt) und unter Alarme › Hinweise der PCs, danach „wieder aktiviert“ mit Dauer; Ausfälle des Servers aus dieser Zeit erscheinen nicht einzeln. Fehlt nur die Route ohne erkennbaren Grund, heißt der Hinweis **Keine Netzwerkverbindung**. Gleiche Einträge in einer Sammel-Sprechblase stehen einmal mit Anzahl („Ausfall: PC-01 (3×)“).
 - **IP-Info in den Werkzeugen** (aus Hop7): Netz, Anbieter, Herkunfts-AS, Land und Kontakte einer Adresse – direkt bei der zuständigen Registry (RDAP, ersatzweise WHOIS), ohne Dienst eines Dritten. Läuft auf dem Wachtl-Server. Details: [WERKZEUGE.md](WERKZEUGE.md#ip-info).
 - **Neue Menüpunkte Netzwerk, Topologie und Werkzeuge**: Netzwerk (alle Geräte und Clients aus dem Netzwerkscan) und Topologie stehen nicht mehr als Reiter in der Standort- bzw. Probes-Ansicht, sondern als eigene Menüpunkte links. Bei mehreren Standorten wählt man oben den Standort. Alte Links leiten weiter.
 - **Werkzeuge wie in Hop7**: Ping, MTU, Traceroute, DNS, Port, HTTP(S) und Zertifikat als Einzeltest – direkt von einer Probe aus, also vom Wachtl-Server oder von einem PC beim Kunden. Fortschrittsbalken mit aktuellem Schritt, vergangener und geschätzter Restzeit; Ergebnis mit Einschätzung, Kennzahlen, Tabelle und kompletter Ausgabe. Details: [WERKZEUGE.md](WERKZEUGE.md).

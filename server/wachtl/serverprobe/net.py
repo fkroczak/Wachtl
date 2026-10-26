@@ -62,6 +62,21 @@ def gateway() -> str | None:
         return gw
 
 
+def has_default_route() -> bool:
+    """Ohne Zwischenspeicher: Gibt es gerade eine Default-Route? Fehlt sie, ist die Netzwerkkarte aus oder das
+    Kabel getrennt (Windows entfernt die Route dann sofort). Ist die Routentabelle nicht lesbar: True –
+    lieber keinen Hinweis als einen falschen."""
+    try:
+        if os.name == "nt":
+            proc = subprocess.run(["route", "print", "-4", "0.0.0.0"], capture_output=True, text=True,
+                                  errors="replace", timeout=10)
+            return proc.returncode != 0 or parse_route_print(proc.stdout) is not None
+        with open("/proc/net/route", encoding="ascii") as f:
+            return parse_proc_route(f.read()) is not None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return True
+
+
 def local_addresses() -> list[str]:
     """Lokale IPv4-Adressen; die Adresse der Default-Route zuerst."""
     out: list[str] = []

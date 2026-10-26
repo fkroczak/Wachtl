@@ -320,8 +320,14 @@ namespace Wachtl.Tray.Core
         {
             var active = items.Where(f => f.IsActive).ToList();
             var icon = active.Any(f => f.Rank >= 2) ? BalloonIcon.Error : active.Any(f => f.Rank >= 1) ? BalloonIcon.Warning : BalloonIcon.Info;
-            var title = items.Count.ToString(CultureInfo.InvariantCulture) + " Netzwerk-Hinweise – Klicken für Details";
-            var text = string.Join("\n", items.Select(f => "• " + NonEmpty(f.Title, "Netzwerk-Hinweis")));
+            // gleiche Titel nur einmal mit Anzahl – sonst steht derselbe Ausfall mehrfach untereinander
+            var lines = items.GroupBy(f => NonEmpty(f.Title, "Netzwerk-Hinweis"))
+                .Select(g => "• " + g.Key + (g.Count() > 1 ? " (" + g.Count().ToString(CultureInfo.InvariantCulture) + "×)" : string.Empty))
+                .ToList();
+            var title = lines.Count == 1
+                ? NonEmpty(items[0].Title, "Netzwerk-Hinweis") + " (" + items.Count.ToString(CultureInfo.InvariantCulture) + "×)"
+                : lines.Count.ToString(CultureInfo.InvariantCulture) + " Netzwerk-Hinweise – Klicken für Details";
+            var text = lines.Count == 1 ? BalloonText(items[0]) : string.Join("\n", lines);
             return new Balloon(Truncate(title, MaxBalloonTitle), Truncate(text, MaxBalloonText), icon, items);
         }
 
