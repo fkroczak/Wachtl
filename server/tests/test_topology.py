@@ -340,3 +340,53 @@ class TopologyPagesLintTest(AppTestCase):
         self.login()
         for url in (f"/sites/{empty}/topologie", f"/sites/{empty}/topologie/switche", f"/sites/{empty}/topologie/probleme"):
             self.assertEqual(lint(self.client.get(url).get_data(as_text=True)), [], url)
+
+
+class AuditRegressionTest(AppTestCase):
+    """Befunde aus dem UI-Audit 2026-10-26 (Topologie)."""
+
+    def setUp(self):
+        super().setUp()
+        self.make_user()
+        self.login()
+        self.site = self.make_site("Hauptsitz")
+        ts = repo.now()
+        self.cand = {}
+        for name, ip, access in (("SW-Snmp", "192.168.10.30", "snmp"), ("SW-Easy", "192.168.10.31", "easysmart")):
+            self.cand[access] = ins(
+                "INSERT INTO net_switch_candidates (site_id, cand_key, ip, name, access, sources, confidence, first_seen, "
+                "last_seen) VALUES (?, ?, ?, ?, ?, '[]', 95, ?, ?)", (self.site, f"ip:{ip}", ip, name, access, ts, ts))
+        self.sw = ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, status, access, "
+                      "created_at, updated_at) VALUES (?, 'Core', '127.0.0.1', 161, '2c', ?, 'active', 'snmp', ?, ?)",
+                      (self.site, secretbox.seal({"community": "public"}), ts, ts))
+
+    def test_wizard_offers_other_switches_only_for_same_access(self):
+        html = self.client.get(f"/sites/{self.site}/topologie/switche/neu").get_data(as_text=True)
+        snmp_li = re.search(r'<li data-show-if="access:snmp">.*?</li>', html, re.S)
+        easy_li = re.search(r'<li data-show-if="access:easysmart" hidden>.*?</li>', html, re.S)
+        self.assertIsNotNone(snmp_li)
+        self.assertIsNotNone(easy_li)                     # SNMP gewählt → Easy-Smart-Fund ausgeblendet
+        self.assertIn("disabled", easy_li.group(0))       # … und wird nicht mitgeschickt
+        self.assertNotIn("disabled", snmp_li.group(0))
+        self.assertNotIn(">Switch hinzufügen</a>", html)  # kein Knopf auf die eigene Seite
+        # Speichern übernimmt nur Funde mit derselben Zugangsart, auch wenn beide angehakt wurden
+        from wachtl import web_topology
+
+        auch = f"{self.cand['snmp']},{self.cand['easysmart']}"
+        with mock.patch.object(web_topology, "_test", return_value=(None, "Keine Antwort.")) as test:
+            r = self.client.post(f"/sites/{self.site}/topologie/switche/{self.sw}/aktivieren",
+                                 data={"csrf_token": self.session_csrf(), "auch": auch})
+        self.assertEqual(test.call_count, 1)              # nur SW-Snmp getestet
+        page = self.client.get(r.headers["Location"]).get_data(as_text=True)
+        self.assertIn("Nicht übernommen (Zugangsdaten passen nicht oder keine Antwort): SW-Snmp", page)
+        self.assertNotIn("SW-Easy", page)
+
+    def test_poll_keeps_port_and_names_missing_server_probe(self):
+        r = self.client.post(f"/sites/{self.site}/topologie/switche/{self.sw}/abfragen",
+                             data={"csrf_token": self.session_csrf(), "port": "4", "verlauf": "7d"})
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("port=4", r.headers["Location"])
+        self.assertIn("verlauf=7d", r.headers["Location"])
+        page = self.client.get(r.headers["Location"]).get_data(as_text=True)
+        self.assertIn("Server-Probe ist nicht eingerichtet; die Abfrage läuft erst", page)
+        self.assertNotIn("gerade nicht erreichbar", page)

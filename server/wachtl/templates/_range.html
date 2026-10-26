@@ -1,0 +1,8 @@
+{#- Zeitraumwahl der Detailseiten: derselbe Umschalter wie auf der Übersicht, mit lesbaren Zeiträumen.
+    Optisch klar getrennt von Aktionen wie „Jetzt messen“ (gefüllter Knopf). -#}
+{% set RANGE_LABELS = {'1m': '1 min', '5m': '5 min', '15m': '15 min', '1h': '1 h', '6h': '6 h', '24h': '24 h',
+                       '7d': '7 Tage', '30d': '30 Tage', '90d': '90 Tage', '365d': '1 Jahr'} %}
+{% macro range_label(key) %}{{ RANGE_LABELS.get(key, key) }}{% endmacro %}
+{% macro range_seg(keys, current, param='range', label='Zeitraum') -%}
+<nav class="seg" aria-label="{{ label }}">{% for k in keys %}<a href="?{{ param }}={{ k }}"{% if k == current %} aria-current="page"{% endif %}>{{ RANGE_LABELS.get(k, k) }}</a>{% endfor %}</nav>
+{%- endmacro %}

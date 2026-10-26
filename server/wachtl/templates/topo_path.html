@@ -28,10 +28,11 @@
     <h2 id="h-path">{{ path.device.label }} → {{ path.hops[-1].label }}</h2>
     <p class="small muted">{{ path.hops|length - 2 }} Geräte dazwischen · Engstelle {{ speed_text(path.bottleneck) }}{% if path.problems %} · <span class="warn-t">{{ path.problems }} Auffälligkeit{{ 'en' if path.problems > 1 }}</span>{% endif %}</p>
   </div>
-  <ol class="topo-chain">
+  <ol class="topo-chain" tabindex="0" aria-label="Weg vom Gerät bis ins Internet">
     {% for h in path.hops %}
     <li class="topo-hop{{ ' topo-hop-warn' if h.problem }}">
-      <strong>{% if h.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=h.switch_id) }}">{{ h.label }}</a>{% else %}{{ h.label }}{% endif %}</strong>
+      {%- set hl = h.label|e|replace('.', '.<wbr>'|safe) %}
+      <strong>{% if h.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=h.switch_id) }}">{{ hl }}</a>{% else %}{{ hl }}{% endif %}</strong>
       <span class="small muted">{{ h.sub or '' }}</span>
       {% if h.switch_id %}<span class="small">{% if h['in'] %}rein Port {{ h['in'] }}{% endif %}{% if h['in'] and h.out %} · {% endif %}{% if h.out %}raus Port {{ h.out }}{% endif %}</span>{% endif %}
       {% if h.kind == 'device' and h.device.is_probe %}<span class="badge info">Wachtl-Probe</span>{% endif %}

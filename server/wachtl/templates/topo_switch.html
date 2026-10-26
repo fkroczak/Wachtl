@@ -25,7 +25,7 @@
     {% if sw.links.ssh %}<a class="button" href="{{ sw.links.ssh }}">SSH</a>{% endif %}
     {% if has_role(user, 'operator') %}
     <form method="post" action="{{ url_for('web.topology_poll', site_id=site.id, switch_id=row.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button>Jetzt abfragen</button></form>{% endif %}
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if port %}<input type="hidden" name="port" value="{{ port.index }}">{% endif %}{% if lanes.range != '24h' %}<input type="hidden" name="verlauf" value="{{ lanes.range }}">{% endif %}<button>Jetzt abfragen</button></form>{% endif %}
   </div>
 </section>
 
@@ -33,7 +33,7 @@
   <div class="page-head"><h2 id="h-face">Frontansicht</h2>{{ port_legend() }}</div>
   {% if sw.total %}
   <p class="small muted">{{ sw.used }} von {{ sw.total }} Ports belegt{% if sw.snap.poe and sw.snap.poe.power_w %} · PoE {{ sw.snap.poe.used_w or 0 }} von {{ sw.snap.poe.power_w }} W{% endif %}. Port antippen für Details.</p>
-  <div class="scroll">{{ faceplate(sw.ports, site, row.id, port.index if port else None) }}</div>
+  <div class="scroll">{{ faceplate(sw.ports, site, row.id, port.index if port else None, verlauf=lanes.range if lanes.range != '24h' else None) }}</div>
   {% else %}
   <p class="muted">Noch keine Ports bekannt – die erste Abfrage läuft mit dem nächsten Durchgang der Server-Probe oder über „Jetzt abfragen“.</p>
   {% endif %}

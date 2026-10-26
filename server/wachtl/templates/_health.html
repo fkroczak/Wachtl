@@ -22,7 +22,7 @@
   {#- Klick mit der Maus (app.js); per Tastatur führt der Link „Ausfälle“ daneben zur selben Liste -#}
   {%- for c in h.slots %}<span class="hb-{{ c.state }}" title="{{ slot_title(c) }}"{% if c.outages %} data-href="{{ slot_url(s, c) }}"{% endif %}></span>{% endfor -%}
 </span>
-<span class="sr-only">{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }} in {{ health_label }}{% if h.any_s %}, {{ h.any_s|duration }} gestört{% endif %}{% else %}keine Störungen in {{ health_label }}{% endif %}</span>
+<span class="sr-only">{{ s.name }}: {% if h.count %}{{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }} in {{ health_label }}{% if h.any_s %}, {{ h.any_s|duration }} gestört{% endif %}{% elif h.up is none %}nicht überwacht{% else %}keine Störungen in {{ health_label }}{% endif %}</span>
 {%- endmacro %}
 {% macro outages_link(s, h) -%}
 <a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="{{ s.name }}: {{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }} in {{ health_label }} ansehen">{{ h.count }} {{ 'Störung' if h.count == 1 else 'Störungen' }}</a>

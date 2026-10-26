@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Netzwerk{% if not single_site %} · {{ site.name }}{% endif %}{% endblock %}
 {% from "_tabs.html" import site_switch %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='netscan.css') }}">{% endblock %}
 {% block content %}
 {% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.network_index') }}">Netzwerk</a> / {{ site.name }}</nav>{% endif %}
 <h1>Netzwerk{% if not single_site %} · {{ site.name }}{% endif %}</h1>
@@ -26,17 +27,19 @@
 </section>
 
 <h2>Scans</h2>
-<div class="scroll"><table>
-  <thead><tr><th>Probe</th><th>Netze</th><th>Letzter Scan</th><th>Ergebnis</th><th><span class="sr-only">Aktion</span></th></tr></thead>
-  <tbody>{% for sc in scans %}
-    <tr>
-      <td><a href="{{ url_for('web.probe', probe_id=sc.probe.id) }}">{{ sc.probe.hostname }}</a></td>
-      <td>{{ sc.check.target }}{% if sc.last and sc.last.subnets %}<br><span class="muted small">{{ (sc.last.subnets|fromjson)|join(', ') }}</span>{% endif %}</td>
-      <td class="nowrap">{% if sc.last %}{{ sc.last.ts|dt }}{% else %}–{% endif %}</td>
-      <td>{% if not sc.last %}<span class="muted">noch kein Ergebnis</span>
+{#- Unter 700 px wird jede Zeile eine Karte (netscan.css); die role-Attribute halten die Tabellen-Semantik
+    für Screenreader, auch wenn die Zellen dann als Block dargestellt werden. -#}
+<div class="scroll"><table class="stack" role="table">
+  <thead role="rowgroup"><tr role="row"><th role="columnheader">Probe</th><th role="columnheader">Netze</th><th role="columnheader">Letzter Scan</th><th role="columnheader">Ergebnis</th><th role="columnheader"><span class="sr-only">Aktion</span></th></tr></thead>
+  <tbody role="rowgroup">{% for sc in scans %}
+    <tr role="row">
+      <td role="cell" class="st-head"><a href="{{ url_for('web.probe', probe_id=sc.probe.id) }}">{{ sc.probe.hostname }}</a></td>
+      <td role="cell" data-label="Netze">{{ sc.check.target }}{% if sc.last and sc.last.subnets %}<br><span class="muted small">{{ (sc.last.subnets|fromjson)|join(', ') }}</span>{% endif %}</td>
+      <td role="cell" class="nowrap" data-label="Letzter Scan">{% if sc.last %}{{ sc.last.ts|dt }}{% else %}–{% endif %}</td>
+      <td role="cell" data-label="Ergebnis">{% if not sc.last %}<span class="muted">noch kein Ergebnis</span>
         {% elif sc.last.error %}<span class="down-t">{{ sc.last.error }}</span>
         {% else %}{{ sc.last.hosts_found }} Geräte{% if sc.last.duration_s %} in {{ sc.last.duration_s|round|int }} s{% endif %}{% endif %}</td>
-      <td>{% if has_role(user, 'operator') %}{% if sc.pending %}<span class="muted">Scan beauftragt</span>{% else %}
+      <td role="cell" class="st-wide">{% if has_role(user, 'operator') %}{% if sc.pending %}<span class="muted">Scan beauftragt</span>{% else %}
         <form method="post" action="{{ url_for('web.check_run', probe_id=sc.probe.id, check_id=sc.check.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="next" value="{{ url_for('web.network', site_id=site.id) }}">
@@ -52,17 +55,17 @@
 <p class="muted">Auffällige Geräte stehen oben. Die Leiste zeigt, wann das Gerät bei den Scans im gewählten Zeitraum erreichbar war (grün = gesehen, gelb = nicht gesehen, grau = noch nicht gescannt).
   Unregelmäßig = mindestens 3-mal neu aufgetaucht in 24 Stunden. Die Links starten die Verbindung <strong>von diesem PC aus</strong> – sie funktionieren nur, wenn er das Gerät erreicht (gleiches Netz oder VPN).</p>
 {% if devices %}
-<div class="scroll"><table class="netscan">
-  <thead><tr><th>Gerät</th><th>MAC</th><th>Erreichbar ({{ ranges[rng][0] }})</th><th>Wieder&shy;kehrer</th><th>Dienste</th><th>Gesehen</th></tr></thead>
-  <tbody>{% for d in devices %}
-    <tr id="geraet-{{ d.id }}">
-      <td><span class="dot {{ 'ok' if d.online else 'off' }}" aria-hidden="true"></span><span class="sr-only">{{ 'erreichbar' if d.online else 'nicht erreichbar' }}: </span>
+<div class="scroll"><table class="netscan stack" role="table">
+  <thead role="rowgroup"><tr role="row"><th role="columnheader">Gerät</th><th role="columnheader">MAC</th><th role="columnheader">Erreichbar ({{ ranges[rng][0] }})</th><th role="columnheader">Wieder&shy;kehrer</th><th role="columnheader">Dienste</th><th role="columnheader">Gesehen</th></tr></thead>
+  <tbody role="rowgroup">{% for d in devices %}
+    <tr role="row" id="geraet-{{ d.id }}">
+      <td role="cell" class="st-head"><span class="dot {{ 'ok' if d.online else 'off' }}" aria-hidden="true"></span><span class="sr-only">{{ 'erreichbar' if d.online else 'nicht erreichbar' }}: </span>
         <strong>{{ d.label }}</strong>{% if d.is_probe %} <span class="badge info">Probe</span>{% endif %}
         {%- if gateway and d.ip == gateway.ip %} <a class="badge info" href="{{ url_for('web.topology', site_id=site.id, seite='gateway') }}">Gateway{% if gateway.vendor %} · {{ gateway.label }}{% endif %}</a>{% endif %}
         {% if d.label != d.ip %}<br><span class="muted">{{ d.ip }}{% if d.hostname and d.hostname != d.label %} · {{ d.hostname }}{% endif %}</span>{% endif %}
         {% for f in d.flags %}<span class="badge {{ 'critical' if f == 'ip_conflict' else 'warning' if f in ('irregular', 'new') else 'info' }}">{{ FLAG_LABELS[f] }}</span> {% endfor %}
         {% if has_role(user, 'operator') %}
-        <details class="note-edit"><summary>Bezeichnung</summary>
+        <details class="note-edit"><summary class="muted">{{ "Bezeichnung ändern" if d.note else "Bezeichnung vergeben" }}<span class="sr-only">: {{ d.ip }}</span></summary>
           <form method="post" action="{{ url_for('web.netscan_note', device_id=d.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="zeitraum" value="{{ rng }}">
             <label for="note-{{ d.id }}">Bezeichnung für {{ d.ip }}</label>
@@ -71,18 +74,18 @@
           </form>
         </details>{% endif %}
       </td>
-      <td class="nowrap mono">{{ d.mac or '–' }}</td>
-      <td><span class="healthbar" role="img" aria-label="{{ d.label }}: in {{ d.bar|select('equalto', 'on')|list|length }} von {{ d.bar|reject('equalto', 'none')|list|length }} gescannten Abschnitten erreichbar">
+      <td role="cell" class="nowrap" data-label="MAC"><span class="mono">{{ d.mac or '–' }}</span></td>
+      <td role="cell" class="st-wide" data-label="Erreichbar ({{ ranges[rng][0] }})"><span class="healthbar" role="img" aria-label="{{ d.label }}: in {{ d.bar|select('equalto', 'on')|list|length }} von {{ d.bar|reject('equalto', 'none')|list|length }} gescannten Abschnitten erreichbar">
         {%- for c in d.bar %}<span{% if c == 'off' %} class="hb-warn"{% elif c == 'none' %} class="hb-none"{% endif %}></span>{% endfor -%}</span></td>
-      <td class="{{ 'warn-t' if 'irregular' in d.flags }}">{{ d.returns }}</td>
-      <td>{% for sv in d.services %}{% set ln = sv.link %}
+      <td role="cell" class="{{ 'warn-t' if 'irregular' in d.flags }}" data-label="Wiederkehrer">{{ d.returns }}</td>
+      <td role="cell" class="st-wide" data-label="Dienste">{% for sv in d.services %}{% set ln = sv.link %}
         <div class="svc">{% if ln and ln.kind == 'url' %}<a href="{{ ln.url }}" target="_blank" rel="noopener noreferrer">{{ sv.label }}</a>
           {% elif ln and ln.kind == 'rdp' %}<a href="{{ url_for('web.netscan_rdp', device_id=d.id, port=sv.port) }}" download>{{ sv.label }}</a>
           {% elif ln and ln.kind == 'copy' %}{{ sv.label }} <code>{{ ln.text }}</code>
           {% else %}{{ sv.label }}{% endif %}
           <span class="muted small">{{ sv.port }}{% if sv.http_title %} · {{ sv.http_title }}{% elif sv.banner %} · {{ sv.banner[:60] }}{% elif sv.http_server %} · {{ sv.http_server }}{% endif %}{% if not sv.current %} · zuletzt {{ sv.last_seen|ago }}{% endif %}</span></div>
       {% else %}<span class="muted">–</span>{% endfor %}</td>
-      <td class="nowrap small">seit {{ d.first_seen|dt }}<br>zuletzt {{ d.last_seen|ago }}</td>
+      <td role="cell" class="nowrap small st-wide" data-label="Gesehen">seit {{ d.first_seen|dt }}<br>zuletzt {{ d.last_seen|ago }}</td>
     </tr>
   {% endfor %}</tbody>
 </table></div>
@@ -92,13 +95,13 @@
 
 <h2 id="auffaelligkeiten">Auffälligkeiten</h2>
 {% if events %}
-<div class="scroll"><table>
-  <thead><tr><th>Zeit</th><th>Art</th><th>Gerät</th><th>Details</th></tr></thead>
-  <tbody>{% for e in events %}
-    <tr><td class="nowrap">{{ e.ts|dt }}</td>
-      <td><span class="badge {{ 'critical' if e.kind == 'ip_conflict' else 'warning' if e.kind in ('ip_changed', 'new_device') else 'info' }}">{{ e.kind_label }}</span></td>
-      <td>{% if e.device_id %}<a href="#geraet-{{ e.device_id }}">{{ e.device_label }}</a>{% else %}{{ e.device_label }}{% endif %}{% if e.ip %} <span class="muted">{{ e.ip }}</span>{% endif %}</td>
-      <td>{{ e.detail }}</td></tr>
+<div class="scroll"><table class="stack" role="table">
+  <thead role="rowgroup"><tr role="row"><th role="columnheader">Zeit</th><th role="columnheader">Art</th><th role="columnheader">Gerät</th><th role="columnheader">Details</th></tr></thead>
+  <tbody role="rowgroup">{% for e in events %}
+    <tr role="row"><td role="cell" class="nowrap" data-label="Zeit">{{ e.ts|dt }}</td>
+      <td role="cell" data-label="Art"><span class="badge {{ 'critical' if e.kind == 'ip_conflict' else 'warning' if e.kind in ('ip_changed', 'new_device') else 'info' }}">{{ e.kind_label }}</span></td>
+      <td role="cell" data-label="Gerät">{% if e.device_id %}<a href="#geraet-{{ e.device_id }}">{{ e.device_label }}</a>{% else %}{{ e.device_label }}{% endif %}{% if e.ip %} <span class="muted">{{ e.ip }}</span>{% endif %}</td>
+      <td role="cell" class="st-wide" data-label="Details">{{ e.detail }}</td></tr>
   {% endfor %}</tbody>
 </table></div>
 {% else %}

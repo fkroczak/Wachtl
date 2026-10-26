@@ -7,7 +7,7 @@
 {% macro check_target(c) -%}
   {%- set p = c.params|fromjson if c.type in ('iperf', 'rtp') else {} -%}
   {%- if p.peer == 'probe' and p.peer_probe_id %}<a href="{{ url_for('web.probe', probe_id=p.peer_probe_id) }}">{{ c.target }}</a>
-  {%- else %}{{ c.target }}{% endif -%}
+  {%- else %}{{ c.target or '–' }}{% endif -%}
 {%- endmacro %}
 
 {#- Zustand einer Probe – überall dieselben Wörter und Farben (Übersicht, Standort-Matrix, Probe) -#}

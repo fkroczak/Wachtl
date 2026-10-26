@@ -34,7 +34,7 @@
   </form>
   {%- else %}
   <a class="pw-plus" href="{{ admin_url('enrollment') }}"><span aria-hidden="true">+</span><span class="sr-only">Probe hinzufügen</span></a>
-  <p class="muted small">{{ 'Zuerst einen Standort anlegen.' if not sites else 'Auf diesem Server liegt noch kein Setup.' }}</p>
+  <p class="muted small">Probe hinzufügen: {{ 'zuerst einen Standort anlegen.' if not sites else 'auf diesem Server liegt noch kein Setup – die Verwaltung zeigt, wie es dorthin kommt.' }}</p>
   {%- endif %}
 {%- endmacro %}
 

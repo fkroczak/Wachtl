@@ -45,7 +45,8 @@ test("Fokus ist auf jedem Bedienelement sichtbar", async ({ page }) => {
     await page.keyboard.press("Tab");
     const style = await page.evaluate(() => {
       const el = document.activeElement;
-      const cs = getComputedStyle(el);
+      // Feld mit Einheit: der Fokusring liegt am Rahmen um Feld und Einheit (.unit-input:focus-within)
+      const cs = getComputedStyle(el.closest(".unit-input") || el);
       return { tag: el.tagName, name: el.getAttribute("name") || el.textContent.trim().slice(0, 30),
                outline: cs.outlineStyle, width: parseFloat(cs.outlineWidth), shadow: cs.boxShadow };
     });
@@ -89,11 +90,11 @@ test("Abhängige Felder erscheinen beim Umschalten", async ({ page }) => {
 
 test("Zeitraum-Buttons melden ihren Zustand", async ({ page }) => {
   await page.goto(`/probes/${ids.probe}/checks/${ids.ping_check}`);
-  const day = page.getByRole("button", { name: "24h" });
+  const day = page.getByRole("button", { name: "24 h" });
   await expect(day).toHaveAttribute("aria-pressed", "false");
   await day.press("Enter");
   await expect(day).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("button", { name: "1h" })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "1 h" })).toHaveAttribute("aria-pressed", "false");
 });
 
 test("Graph: Werte je Messpunkt per Tastatur, Ansage für Screenreader", async ({ page }) => {

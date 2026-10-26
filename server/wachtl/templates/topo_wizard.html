@@ -116,12 +116,14 @@
     </div>
   </fieldset>
   {% if also %}
-  <fieldset>
+  {%- set also_kinds = also|map(attribute='access')|unique|list %}
+  <fieldset{% if also_kinds|length == 1 %} data-show-if="access:{{ also_kinds[0] }}"{% if also_kinds[0] != access %} hidden{% endif %}{% endif %}>
     <legend>Weitere gefundene Switches</legend>
     <p class="small muted">Gelten dieselben Zugangsdaten auch für diese Switches? Angehakte testet Wachtl nach dem Speichern und trägt sie ein, wenn die Anmeldung klappt.</p>
     <ul class="topo-also">
       {% for c in also %}
-      <li><label><input type="checkbox" name="auch" value="{{ c.id }}" {{ 'checked' if c.id|string in chosen }}> {{ c.label }}
+      {#- nur Switches mit der gewählten Zugangsart: SNMP-Zugangsdaten passen nicht zur Weboberfläche und umgekehrt #}
+      <li data-show-if="access:{{ c.access }}"{% if c.access != access %} hidden{% endif %}><label><input type="checkbox" name="auch" value="{{ c.id }}" {{ 'checked' if c.id|string in chosen }}{{ ' disabled' if c.access != access }}> {{ c.label }}
         <span class="muted small">{{ c.ip }} · {{ c.access_text }}</span></label></li>
       {% endfor %}
     </ul>

@@ -206,7 +206,8 @@
   function niceMax(v) {
     if (!(v > 0)) return 1;
     const p = Math.pow(10, Math.floor(Math.log10(v)));
-    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+    // glatt durch 4 Rasterlinien teilbar
+    for (const m of [1, 2, 4, 6, 8, 10]) if (m * p >= v) return m * p;
     return 10 * p;
   }
 
@@ -334,6 +335,11 @@
       run.pts.push(pt(i));
     }
     flushRun();
+    // Punkte ohne Nachbarn hätten keine Linie
+    for (let i = a; i <= b; i++) {
+      if (med[i] === null || (i > a && med[i - 1] !== null) || (i < b && med[i + 1] !== null)) continue;
+      el("circle", { cx: x(i).toFixed(1), cy: y(med[i]).toFixed(1), r: 3, class: "c-med-dot c-l" + (lossCls(loss[i]) || 0) }, svg);
+    }
 
     // Jitter: eigene Linie auf derselben ms-Achse, Lücken bleiben Lücken
     let jd = "";
@@ -461,7 +467,8 @@
       hide();
     };
 
-    sourceLabel.textContent = (data.source === "agg" ? "1-min-Aggregate" : "Rohdaten") + ", Auflösung " + step + " s" +
+    const res = step < 120 ? `${step} s` : step < 7200 ? `${Math.round(step / 60)} min` : `${Math.round(step / 3600)} h`;
+    sourceLabel.textContent = (data.source === "agg" ? "1-min-Aggregate" : "Rohdaten") + ", Auflösung " + res +
       (zoom ? " · Ausschnitt, Doppelklick zeigt alles" : "");
   }
 
@@ -513,17 +520,16 @@
     }
   }
 
-  let current = "1h";
+  // Vorauswahl aus ?range= setzt target.html; die Wahl kommt zurück in die Adresse (Neuladen, Link teilen)
+  let current = panel.querySelector('[aria-pressed="true"]')?.dataset.range || "1h";
   panel.querySelectorAll("[data-range]").forEach((btn) =>
     btn.addEventListener("click", () => {
-      panel.querySelectorAll("[data-range]").forEach((b) => {
-        b.classList.remove("active");
-        b.setAttribute("aria-pressed", "false");
-      });
-      btn.classList.add("active");
-      btn.setAttribute("aria-pressed", "true");
+      panel.querySelectorAll("[data-range]").forEach((b) => b.setAttribute("aria-pressed", b === btn));
       current = btn.dataset.range;
       zoom = null;
+      const url = new URL(location.href);
+      url.searchParams.set("range", current);
+      history.replaceState(null, "", url);
       loadSeries(current);
     })
   );
@@ -643,7 +649,7 @@ for (const d of document.querySelectorAll("details[id]")) {
   const box = document.querySelector("[data-notify]");
   if (!box) return;
   const list = box.querySelector("[data-toast-list]");
-  const enable = box.querySelector("[data-notify-enable]");
+  const ask = box.querySelector("[data-notify-ask]");
   const KEY = "wachtl:notify-cursor";
   const MAX = 5;
   const INTERVAL = 15000;
@@ -665,10 +671,18 @@ for (const d of document.querySelectorAll("details[id]")) {
     syncClear();
   });
   const desktopOk = () => "Notification" in window && Notification.permission === "granted";
-  if (enable && "Notification" in window && Notification.permission === "default" && window.isSecureContext) {
-    enable.hidden = false;
-    enable.addEventListener("click", () => {
-      Notification.requestPermission().then(() => { enable.hidden = true; });
+  // Frage nach Benachrichtigungen: „Nicht jetzt“ gilt dauerhaft je Browser
+  const LATER = "wachtl:notify-later";
+  let later = false;
+  try { later = localStorage.getItem(LATER) === "1"; } catch (e) { /* Speicher gesperrt */ }
+  if (ask && !later && "Notification" in window && Notification.permission === "default" && window.isSecureContext) {
+    ask.hidden = false;
+    ask.querySelector("[data-notify-enable]").addEventListener("click", () => {
+      Notification.requestPermission().then(() => { ask.hidden = true; });
+    });
+    ask.querySelector("[data-notify-later]").addEventListener("click", () => {
+      ask.hidden = true;
+      try { localStorage.setItem(LATER, "1"); } catch (e) { /* nur bis zum Neuladen */ }
     });
   }
 
@@ -716,7 +730,7 @@ for (const d of document.querySelectorAll("details[id]")) {
   function setCount(n) {
     const badge = document.querySelector("[data-alert-count]");
     const sr = document.querySelector("[data-alert-count-sr]");
-    if (badge) { badge.textContent = String(n); badge.hidden = !n; }
+    if (badge) { badge.textContent = String(n); badge.hidden = !n; badge.title = `${n} aktive Alarme`; }
     if (sr) sr.textContent = n ? ` (${n} aktiv)` : "";
   }
 

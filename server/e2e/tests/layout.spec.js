@@ -101,3 +101,20 @@ test.describe("Suche auf der Seite Standorte", () => {
     await expect(page.getByText("Kein Standort passt")).toBeVisible();
   });
 });
+
+// Netzwerk-Seite auf dem Handy: Zeilen werden Karten, nichts Bedienbares liegt rechts außerhalb (Audit 2026-10-26).
+// Der Reflow-Test oben lässt Tabellen in sich scrollen – hier darf auch die Tabelle nicht breiter sein.
+test.describe("Netzwerk-Tabellen 390px", () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  test("Links und Knöpfe sind ohne Wischen erreichbar", async ({ page }) => {
+    await page.goto(`/sites/${ids.site}/netzwerk`);
+    const outside = await page.evaluate(() => {
+      const vw = document.documentElement.clientWidth;
+      return [...document.querySelectorAll("table.stack a, table.stack button, table.stack summary")]
+        .filter((el) => el.getBoundingClientRect().right > vw + 1)
+        .map((el) => el.textContent.trim().slice(0, 30));
+    });
+    expect(outside, `außerhalb: ${outside.join(", ")}`).toEqual([]);
+    await expect(page.locator("table.netscan td[data-label='MAC']").first()).toBeVisible();
+  });
+});
