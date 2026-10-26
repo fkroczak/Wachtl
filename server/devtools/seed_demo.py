@@ -200,6 +200,8 @@ def _seed_topology(site: int, now: int) -> int:
     wlan = [mac(0x43, i) for i in range(9)]
     lager = [mac(0x44, i) for i in range(3)]
     ap = mac(0x45, 1)
+    es, ng = "50:C7:BF:12:34:56", "A0:40:A0:65:43:21"          # gefunden per Rundruf: TP-Link Easy Smart, Netgear Plus
+    lab = [mac(0x46, i) for i in range(2)]
     downstream_eg = [mac(2, 0), empfang, printer] + eg_pcs
     downstream_og = [mac(3, 0)] + og_pcs + desk
     core = snap("SW-Core-01", 1,
@@ -208,7 +210,8 @@ def _seed_topology(site: int, now: int) -> int:
                 + [(i, 1000, False, None) for i in range(7, 9)] + [(9, 100, True, "SW-Lager")]
                 + [(i, 1000, i < 15, None) for i in range(10, 25)] + [(i, 10000, i < 27, None) for i in range(25, 29)],
                 [(m, 1) for m in downstream_eg] + [(gw, 2)] + [(m, 3) for m in downstream_og] + [(srv, 4)]
-                + [(ap, 5)] + [(m, 5) for m in wlan] + [(nas, 6)] + [(m, 9) for m in [mac(4, 0)] + lager],
+                + [(ap, 5)] + [(m, 5) for m in wlan] + [(nas, 6)] + [(m, 9) for m in [mac(4, 0)] + lager]
+                + [(m, 10) for m in [es] + lab] + [(ng, 3)],
                 lldp=[nb(1, 2, "Port 25", "SW-EG-01", "192.168.1.3"),
                       {**nb(5, 0x45, "eth0", "AP-Empfang", "192.168.1.20"), "bridge": False, "ap": True}],
                 gateway="192.168.1.1", ips=["192.168.1.2"], arp=[("192.168.1.1", gw)])
@@ -221,7 +224,7 @@ def _seed_topology(site: int, now: int) -> int:
               ips=["192.168.1.3"])
     og = snap("SW-OG-01", 3, [(i, 1000, i in (1, 2, 3, 5, 6, 7, 9, 10, 12, 14, 15), None) for i in range(1, 17)],
               [(mac(1, 0), 15), (gw, 15), (mac(2, 0), 15)] + [(m, p) for m, p in zip(og_pcs, (1, 2, 3, 5, 6, 7))]
-              + [(m, 12) for m in desk], ips=["192.168.1.4"])
+              + [(m, 12) for m in desk + [ng]], ips=["192.168.1.4"])
     og["interfaces"][5]["speed_mbps"] = 100
     lag = snap("SW-Lager", 4, [(1, 1000, True, None), (2, 100, True, None), (3, 100, True, None), (4, 1000, False, None),
                                 (5, 1000, True, None), (6, 1000, False, None), (7, 1000, False, None),
@@ -246,6 +249,12 @@ def _seed_topology(site: int, now: int) -> int:
     for i in range(3):
         ins("INSERT INTO net_topo_events (site_id, switch_id, ts, kind, if_index, mac, detail) VALUES (?, ?, ?, "
             "'mac_moved', 3, ?, ?)", (site, ids[0], now - 3600 * (i + 1), og_pcs[0], f"{og_pcs[0]}: Port 3 → Port 7"))
+    from wachtl.services import switchfind
+
+    switchfind.store_discovery(site, [
+        {"proto": "easysmart", "mac": es, "ip": "192.168.1.30", "model": "TL-SG105PE", "name": "SW-Labor",
+         "firmware": "1.0.0 Build 20230218"},
+        {"proto": "nsdp", "mac": ng, "ip": "192.168.1.31", "model": "GS108Ev3", "name": None, "firmware": "2.06.10"}], now)
     topology.refresh_findings(site, now)
     return ids[1]
 

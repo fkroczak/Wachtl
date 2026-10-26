@@ -16,12 +16,21 @@
 <section class="card topo-result topo-result-bad" role="alert" aria-labelledby="h-res">
   <h3 id="h-res">Test fehlgeschlagen</h3>
   <p>{{ error }}</p>
+  {% if sw.access == 'easysmart' %}
+  <ul class="small">
+    <li>Stimmt die Adresse? Im Browser sollte unter <code>http://{{ sw.host }}/</code> die Anmeldeseite des Switches erscheinen.</li>
+    <li>Benutzer und Passwort sind dieselben wie beim Anmelden im Browser (ab Werk „admin“, beim ersten Anmelden geändert).</li>
+    <li>Lässt eine Firewall TCP-Port {{ sw.port }} vom Wachtl-Server zum Switch durch?</li>
+    <li>Ist der Switch gerade in vielen Browsern angemeldet, lehnt er weitere Anmeldungen ab – dort abmelden.</li>
+  </ul>
+  {% else %}
   <ul class="small">
     <li>Stimmt die Adresse, und ist SNMP am Switch eingeschaltet?</li>
     <li>Darf der Wachtl-Server zugreifen? Viele Switches erlauben SNMP nur von eingetragenen Adressen.</li>
     <li>Lässt eine Firewall UDP-Port {{ sw.port }} vom Wachtl-Server zum Switch durch?</li>
     <li>Bei SNMPv3: Benutzer, Verfahren und Passwörter müssen genau zur Einstellung am Switch passen.</li>
   </ul>
+  {% endif %}
   <div class="actions">
     <a class="button primary" href="{{ url_for('web.topology_edit', site_id=site.id, switch_id=sw.id) }}">Zugangsdaten ändern</a>
     <a class="button" href="{{ url_for('web.topology_check', site_id=site.id, switch_id=sw.id) }}">Erneut testen</a>
@@ -35,18 +44,26 @@
     <dt>Modell</dt><dd>{{ (result.descr or '–')|truncate(140, True, '…', 0) }}</dd>
     {% if result.uptime_s %}<dt>Laufzeit</dt><dd>{{ result.uptime_s|duration }}</dd>{% endif %}
     <dt>Ports</dt><dd>{{ result.ports }} ({{ result.ports_up }} mit Link)</dd>
+    {% if sw.access == 'easysmart' %}
+    <dt>MAC-Tabelle</dt><dd>liefert dieser Switch nicht <span class="muted small">– Wachtl ordnet ihn über die MAC-Tabelle des übergeordneten Switches ein</span></dd>
+    {% else %}
     <dt>MAC-Tabelle</dt><dd>{{ result.macs }} Einträge{% if not result.macs %} – <span class="warn-t">ohne MAC-Tabelle ist nicht erkennbar, welches Gerät an welchem Port hängt</span>{% endif %}</dd>
     <dt>Nachbarn (LLDP/CDP)</dt><dd>{{ result.neighbors }}{% if not result.neighbors %} <span class="muted small">– Verbindungen zu anderen Switches werden dann aus den MAC-Tabellen ermittelt</span>{% endif %}</dd>
+    {% endif %}
     <dt>PoE</dt><dd>{{ 'ja' if result.poe else 'nicht gemeldet' }}</dd>
     <dt>VLANs</dt><dd>{{ 'ja' if result.vlans else 'nicht gemeldet' }}</dd>
     {% if result.duration_s %}<dt>Dauer der Abfrage</dt><dd>{{ result.duration_s|round(1) }} s</dd>{% endif %}
   </dl>
   {% if sw.status == 'draft' %}
+  {% if also %}
+  <p class="small">Beim Speichern testet Wachtl dieselben Zugangsdaten auch für: {% for c in also %}<strong>{{ c.label }}</strong> ({{ c.ip }}){{ ', ' if not loop.last }}{% endfor %}.
+    Passen sie, werden diese Switches gleich mit eingetragen.</p>
+  {% endif %}
   <div class="actions">
     <form method="post" action="{{ url_for('web.topology_activate', site_id=site.id, switch_id=sw.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="primary">Speichern und überwachen</button></form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% if auch %}<input type="hidden" name="auch" value="{{ auch }}">{% endif %}<button class="primary">Speichern und überwachen</button></form>
     <form method="post" action="{{ url_for('web.topology_activate', site_id=site.id, switch_id=sw.id) }}" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="neu">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="next" value="neu">{% if auch %}<input type="hidden" name="auch" value="{{ auch }}">{% endif %}
       <button>Speichern und nächsten Switch einrichten</button></form>
   </div>
   {% else %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Topologie{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+<h1>Topologie</h1>
+<p class="muted">Switches und Verbindungen je Standort – vom Internet bis zum einzelnen Gerät. Standort wählen.</p>
+{% if not cards %}
+<p class="muted">Noch keine Standorte angelegt.</p>
+{% endif %}
+<div class="topo-cards">
+  {% for c in cards %}
+  <article class="card topo-card{{ ' topo-card-warn' if c.bad or c.problems }}" aria-labelledby="ts-{{ c.site.id }}">
+    <div class="topo-side-head">
+      <div>
+        <h2 id="ts-{{ c.site.id }}"><a href="{{ url_for('web.topology', site_id=c.site.id) }}">{{ c.site.name }}</a></h2>
+        {% if c.site.customer_no %}<p class="small muted">{{ c.site.customer_no }}</p>{% endif %}
+      </div>
+      {% if c.bad %}<span class="badge critical">{{ c.bad }} antwortet nicht</span>
+      {% elif c.problems %}<span class="badge warning">{{ c.problems }} {{ 'Problem' if c.problems == 1 else 'Probleme' }}</span>
+      {% elif c.switches %}<span class="badge on">in Ordnung</span>
+      {% else %}<span class="badge off">keine Switches</span>{% endif %}
+    </div>
+    <dl class="kvlist">
+      <dt>Switches</dt><dd>{{ c.switches or 'noch keine eingetragen' }}</dd>
+      <dt>Gefunden</dt><dd>{% if c.found %}{{ c.found }}{% if c.need %} · <span class="warn-t">{{ c.need }} {{ 'braucht' if c.need == 1 else 'brauchen' }} Zugangsdaten</span>{% endif %}{% else %}<span class="muted">keine neuen</span>{% endif %}</dd>
+      {% if c.last_ok %}<dt>Abgefragt</dt><dd>{{ c.last_ok|ago }}</dd>{% endif %}
+    </dl>
+    <div class="actions">
+      <a class="button primary" href="{{ url_for('web.topology', site_id=c.site.id) }}" aria-label="Topologie öffnen: {{ c.site.name }}">Topologie öffnen</a>
+      {% if c.found %}<a class="button" href="{{ url_for('web.topology_switches', site_id=c.site.id) }}#gefunden" aria-label="Gefundene Switches: {{ c.site.name }}">Gefundene Switches</a>{% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}
