@@ -655,7 +655,7 @@ def probe(probe_id: int):
         iperf_endpoint=repo.probe_iperf_endpoint(p, measure["probe_iperf_port"]),
         reports=report_service.search(probe_id=probe_id, limit=10),
         client_findings=finding_service.search(probe_id=probe_id, since=repo.now() - 30 * 86400, limit=20),
-        excluded_checks=repo.excluded_checks(p),
+        excluded_checks=repo.excluded_checks(p), sites=q("SELECT id, name FROM sites ORDER BY name"),
     )
 
 
@@ -1229,6 +1229,49 @@ def site_create():
         repo.audit(current_user()["username"], "site.create", name)
         flash(f"Standort {name} angelegt.", "ok")
     return redirect(admin_url("standorte"))
+
+
+@bp.post("/sites/<int:site_id>/edit")
+@login_required("admin")
+def site_edit(site_id: int):
+    s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
+    name = request.form.get("name", "").strip()[:100]
+    customer_no = request.form.get("customer_no", "").strip()[:20] or None
+    description = request.form.get("description", "").strip()[:200] or None
+    if not name:
+        flash("Name fehlt.", "error")
+    elif q1("SELECT id FROM sites WHERE name = ? AND id <> ?", (name, site_id)):
+        flash(f"Einen Standort „{name}“ gibt es schon.", "error")
+    elif (name, customer_no, description) == (s["name"], s["customer_no"], s["description"]):
+        flash("Keine Änderungen.", "ok")
+    else:
+        ex("UPDATE sites SET name = ?, customer_no = ?, description = ? WHERE id = ?",
+           (name, customer_no, description, site_id))
+        repo.audit(current_user()["username"], "site.update", f"site:{site_id}",
+                   f"{s['name']} → {name}" if name != s["name"] else name)
+        flash(f"Standort {name} gespeichert.", "ok")
+    return redirect(url_for("web.site", site_id=site_id))
+
+
+@bp.post("/probes/<int:probe_id>/site")
+@login_required("admin")
+def probe_move(probe_id: int):
+    p = _probe_or_404(probe_id)
+    target = q1("SELECT * FROM sites WHERE id = ?", (request.form.get("site_id", 0, type=int),))
+    if not target:
+        flash("Bitte einen Standort auswählen.", "error")
+    elif target["id"] == p["site_id"]:
+        flash("Die Probe ist bereits diesem Standort zugeordnet.", "ok")
+    elif q1("SELECT id FROM probes WHERE site_id = ? AND hostname = ?", (target["id"], p["hostname"])):
+        flash(f"Am Standort {target['name']} gibt es schon eine Probe {p['hostname']}.", "error")
+    else:
+        ex("UPDATE probes SET site_id = ? WHERE id = ?", (target["id"], probe_id))
+        repo.audit(current_user()["username"], "probe.move", f"probe:{probe_id}",
+                   f"{p['site_name']} → {target['name']}")
+        flash(f"{p['hostname']} gehört jetzt zum Standort {target['name']} – die Messungen des Standorts "
+              "übernimmt die Probe mit dem nächsten Heartbeat.", "ok")
+        _regen_rules()
+    return redirect(url_for("web.probe", probe_id=probe_id, tab="details") + "#standort")
 
 
 @bp.post("/admin/sites/<int:site_id>/delete")
