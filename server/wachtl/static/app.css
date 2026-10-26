@@ -265,6 +265,8 @@ section { margin-bottom: 1.5rem; }
 .login pre { white-space: pre-wrap; word-break: break-all; font-size: 0.82rem; }
 details.pw-reset { display: inline-block; margin-right: 0.8rem; }
 details.pw-reset summary { cursor: pointer; color: var(--accent); }
+details.site-edit { margin: 0 0 1rem; }
+details.site-edit > summary { cursor: pointer; color: var(--accent); margin: 0 0 0.6rem; }
 .wordmark-dark { display: none !important; }
 @media (prefers-color-scheme: dark) { .wordmark-light { display: none !important; } .wordmark-dark { display: block !important; } }
 

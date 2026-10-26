@@ -558,3 +558,47 @@ class SiteDashboardTest(AppTestCase):
         from wachtl.services import vm
         html = self.get(vm.VMError("weg"))
         self.assertIn("Kein Latenzverlauf der letzten Stunde.", html)
+
+
+class SiteEditTest(AppTestCase):
+    def setUp(self):
+        super().setUp()
+        p = mock.patch("wachtl.services.vm.live_status", return_value=LIVE)
+        p.start()
+        self.addCleanup(p.stop)
+        self.make_user()
+        self.login()
+        self.tok = self.session_csrf()
+
+    def test_admin_edits_site(self):
+        sid = self.make_site("Alt")
+        self.make_site("Belegt")
+        r = self.client.post(f"/sites/{sid}/edit", data={"name": "Neu", "customer_no": "K-1", "description": "Halle",
+                                                          "csrf_token": self.tok})
+        self.assertEqual(r.status_code, 302)
+        s = q1("SELECT * FROM sites WHERE id = ?", (sid,))
+        self.assertEqual((s["name"], s["customer_no"], s["description"]), ("Neu", "K-1", "Halle"))
+        self.client.post(f"/sites/{sid}/edit", data={"name": "Belegt", "csrf_token": self.tok})
+        self.assertEqual(q1("SELECT name FROM sites WHERE id = ?", (sid,))["name"], "Neu")
+        self.client.post(f"/sites/{sid}/edit", data={"name": " ", "csrf_token": self.tok})
+        self.assertEqual(q1("SELECT name FROM sites WHERE id = ?", (sid,))["name"], "Neu")
+        self.assertIn("Standort bearbeiten", self.client.get(f"/sites/{sid}").get_data(as_text=True))
+
+    def test_operator_cannot_edit_site(self):
+        sid = self.make_site("Alt")
+        self.make_user("op", "operator")
+        self.login("op")
+        r = self.client.post(f"/sites/{sid}/edit", data={"name": "Neu", "csrf_token": self.session_csrf()})
+        self.assertEqual(r.status_code, 403)
+        self.assertNotIn("Standort bearbeiten", self.client.get(f"/sites/{sid}").get_data(as_text=True))
+
+    def test_move_probe_to_other_site(self):
+        pid = self.enroll("PC-01")["probe_id"]
+        b = self.make_site("B")
+        self.assertIn("Standort dieser Probe",
+                      self.client.get(f"/probes/{pid}?tab=details").get_data(as_text=True))
+        r = self.client.post(f"/probes/{pid}/site", data={"site_id": b, "csrf_token": self.tok})
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(q1("SELECT site_id FROM probes WHERE id = ?", (pid,))["site_id"], b)
+        self.client.post(f"/probes/{pid}/site", data={"site_id": 9999, "csrf_token": self.tok})
+        self.assertEqual(q1("SELECT site_id FROM probes WHERE id = ?", (pid,))["site_id"], b)

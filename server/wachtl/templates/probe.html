@@ -237,6 +237,14 @@
   </fieldset>
   <button class="primary">Speichern</button>
 </form>
+
+<h2 id="standort">Standort dieser Probe</h2>
+<form method="post" action="{{ url_for('web.probe_move', probe_id=probe.id) }}" class="row">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Standort <select name="site_id">{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if s.id == probe.site_id }}>{{ s.name }}</option>{% endfor %}</select></label>
+  <button class="primary" data-confirm="Probe {{ probe.hostname }} dem gewählten Standort zuordnen? Sie misst danach die Messungen dieses Standorts.">Zuordnen</button>
+</form>
+<p class="muted small">Bisherige Messwerte und Meldungen bleiben beim alten Standort; neue Werte zählen zum neuen Standort.</p>
 {% endif %}
 
 {% endif %}
