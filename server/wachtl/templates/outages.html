@@ -15,6 +15,8 @@
   <button>Anzeigen</button>
 </form>
 
+{% if window %}<div class="flash" role="status">Zeitfenster aus dem Verlauf: {{ (window[0]|dt)[:16] }} – {{ (window[1]|dt)[:16] }}{% if site %} · {% for s in sites if s.id|string == site %}{{ s.name }}{% endfor %}{% endif %}.
+  <a href="{{ url_for('web.outages_view', site=site, range=range_key) }}">Ganzen Zeitraum zeigen</a></div>{% endif %}
 <section class="cards">
   <div class="card kv"><h2 class="card-title">Gesamt</h2><dl>
     <dt>Störungen</dt><dd><strong>{{ summary.total }}</strong></dd>

@@ -18,7 +18,11 @@ public sealed record EvaluatorOptions
     /// </summary>
     public TimeSpan LinkDownGrace { get; init; } = TimeSpan.FromSeconds(15);
 
-    /// <summary>Nach dem Erledigen derselbe Hinweis für dieselbe Karte frühestens nach dieser Zeit (außer er wird schwerer).</summary>
+    /// <summary>
+    /// Nach dem Erledigen derselbe Hinweis für dieselbe Karte frühestens nach dieser Zeit (außer er wird schwerer).
+    /// Gilt nicht für kritische Hinweise und nicht für Warnungen zum Verlust der Verbindung (WLAN, Karte deaktiviert):
+    /// die erscheinen jedes Mal als Sprechblase. Nur „info“ (kurzer Aussetzer, keine Sprechblase) bleibt gesperrt.
+    /// </summary>
     public TimeSpan Suppress { get; init; } = TimeSpan.FromMinutes(30);
 
     /// <summary>Liegen zwischen zwei Abfragen mehr als so viel, war der PC im Standby bzw. Ruhezustand.</summary>
@@ -62,9 +66,18 @@ public sealed class FindingEvaluator
         FindingKinds.LinkFlapping, FindingKinds.Apipa, FindingKinds.NicErrors,
     };
 
+    /// <summary>Verbindungsverlust wird jedes Mal gemeldet, auch kurz nach dem letzten Mal (siehe <see cref="EvaluatorOptions.Suppress"/>).</summary>
+    private static readonly HashSet<string> NeverSuppressed = new(StringComparer.Ordinal)
+    {
+        FindingKinds.CableUnplugged, FindingKinds.WifiDisconnected, FindingKinds.AdapterDisabled, FindingKinds.AdapterRemoved,
+    };
+
     private readonly EvaluatorOptions _o;
     private readonly Dictionary<string, Track> _tracks = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AdapterTrack> _adapters = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Karten, die verbunden waren und jetzt deaktiviert oder verschwunden sind.</summary>
+    private readonly Dictionary<string, GoneTrack> _gone = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Standby-Zeiträume (Beginn bis Ende der Schonfrist nach dem Aufwachen), für NDIS-Ereignisse.</summary>
     private readonly List<(DateTimeOffset From, DateTimeOffset To)> _sleeps = new();
@@ -98,9 +111,18 @@ public sealed class FindingEvaluator
         public FindingSeverity ResolvedSeverity;
     }
 
+    private sealed class GoneTrack
+    {
+        public string Name = string.Empty;
+        public string Description = string.Empty;
+        public DateTimeOffset Since;
+        public int Polls;
+    }
+
     private sealed class AdapterTrack
     {
         public string Name = string.Empty;
+        public string Description = string.Empty;
         public bool EverUp;
         public LinkStatus? LastStatus;
         public DateTimeOffset? DownSince;
@@ -122,6 +144,7 @@ public sealed class FindingEvaluator
     {
         _tracks.Clear();
         _adapters.Clear();
+        _gone.Clear();
         _sleeps.Clear();
         _lastAt = null;
         _graceUntil = DateTimeOffset.MinValue;
@@ -160,10 +183,15 @@ public sealed class FindingEvaluator
             EvaluateLink(adapter, linked, now, output);
         }
 
-        // Karten, die verschwunden oder deaktiviert sind: zugehörige Hinweise erledigen, nichts Neues melden
+        // Karten, die verschwunden oder deaktiviert sind: Hinweise zum Link erledigen, dafür „deaktiviert“/„entfernt“ melden
         var linkedIds = linked.Select(a => a.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var (id, track) in _adapters.Where(p => !linkedIds.Contains(p.Key)).ToList())
         {
+            if (track.EverUp && !_gone.ContainsKey(id))
+            {
+                _gone[id] = new GoneTrack { Name = track.Name, Description = track.Description, Since = now };
+            }
+
             foreach (var kind in LinkKinds)
             {
                 if (_tracks.TryGetValue(Key(kind, id), out var t))
@@ -181,6 +209,7 @@ public sealed class FindingEvaluator
             _adapters.Remove(id);
         }
 
+        EvaluateGone(snapshot, linked, linkedIds, now, output);
         EvaluateDrivers(physical, now, output);
         EvaluateGateway(snapshot, linked, now, output);
         EvaluateResets(snapshot, physical, now, output);
@@ -197,6 +226,7 @@ public sealed class FindingEvaluator
         }
 
         at.Name = a.Name;
+        at.Description = a.Description;
         var up = a.Status == LinkStatus.Up;
         if (up)
         {
@@ -254,6 +284,66 @@ public sealed class FindingEvaluator
             now, _o.DebouncePolls, 1, _ => FindingTexts.ApipaResolved(a.Name, a.Ipv4.FirstOrDefault(ip => !AdapterClassifier.IsApipa(ip))), output);
 
         EvaluateErrors(a, at, up, now, output);
+    }
+
+    /// <summary>
+    /// Karte deaktiviert (Windows, Geräte-Manager) oder verschwunden (USB-Adapter abgezogen, Dockingstation, Treiber):
+    /// deaktiviert sofort mit Sprechblase – kritisch ohne andere Verbindung, sonst Warnung. Entfernt wie „Kabel getrennt“:
+    /// läuft die Verbindung über eine andere Karte weiter (Abdocken, WLAN übernimmt), nur „info“, sonst nach
+    /// <see cref="EvaluatorOptions.LinkDownGrace"/> kritisch. Beide Arten teilen sich eine Spur je Karte, damit aus
+    /// „entfernt“ ohne neue Meldung „deaktiviert“ werden kann, sobald der Geräte-Manager das bestätigt.
+    /// </summary>
+    private void EvaluateGone(AdapterSnapshot snapshot, List<AdapterState> linked, HashSet<string> linkedIds, DateTimeOffset now,
+        List<ClientFinding> output)
+    {
+        var fallback = linked.FirstOrDefault(o => o.Status == LinkStatus.Up && o.HasRoutableIpv4 && o.HasGateway)?.Name;
+        foreach (var (id, g) in _gone.ToList())
+        {
+            var t = Get(FindingKinds.AdapterRemoved, id);
+            if (linkedIds.Contains(id))
+            {
+                // wieder aktiviert bzw. wieder angesteckt
+                _gone.Remove(id);
+                if (t.Active is { } old)
+                {
+                    var downtime = Since(old, now);
+                    Resolve(t, now, old.Kind == FindingKinds.AdapterDisabled
+                        ? FindingTexts.AdapterEnabled(g.Name, downtime)
+                        : FindingTexts.AdapterBack(g.Name, downtime), output);
+                }
+
+                t.Streak = 0;
+                continue;
+            }
+
+            g.Polls++;
+            var state = snapshot.Adapters.FirstOrDefault(a => string.Equals(a.Id, id, StringComparison.OrdinalIgnoreCase));
+            var disabled = state?.Status == LinkStatus.Disabled;
+            var kind = disabled ? FindingKinds.AdapterDisabled : FindingKinds.AdapterRemoved;
+            var severity = fallback is null && (disabled || now - g.Since >= _o.LinkDownGrace) ? FindingSeverity.Critical
+                : disabled ? FindingSeverity.Warning
+                : FindingSeverity.Info;
+            var text = disabled ? FindingTexts.AdapterDisabled(g.Name, g.Description, fallback) : FindingTexts.AdapterRemoved(g.Name, g.Description, fallback);
+            var details = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (fallback is not null)
+            {
+                details["fallback"] = fallback;
+            }
+
+            var c = new Candidate(severity, g.Name, g.Description, text, details);
+            if (t.Active is null)
+            {
+                // eine Abfrage abwarten: Treiberupdate und Neuaushandeln nach dem Aufwachen melden die Karte kurz ab
+                if (g.Polls >= _o.DebouncePolls && now - g.Since >= _o.DebounceMin)
+                {
+                    TryFire(t, kind, c, g.Since, now, output);
+                }
+            }
+            else if (t.Active.Kind != kind || severity > t.ActiveSeverity)
+            {
+                Update(t, c, output, kind);
+            }
+        }
     }
 
     private void EvaluateSpeed(AdapterState a, AdapterTrack at, bool up, DateTimeOffset now, List<ClientFinding> output)
@@ -543,7 +633,8 @@ public sealed class FindingEvaluator
 
     private ClientFinding? TryFire(Track t, string kind, Candidate c, DateTimeOffset detected, DateTimeOffset now, List<ClientFinding> output)
     {
-        if (t.ResolvedAt is { } resolvedAt && now - resolvedAt < _o.Suppress && c.Severity <= t.ResolvedSeverity)
+        if (t.ResolvedAt is { } resolvedAt && now - resolvedAt < _o.Suppress && c.Severity <= t.ResolvedSeverity
+            && (c.Severity == FindingSeverity.Info || (c.Severity < FindingSeverity.Critical && !NeverSuppressed.Contains(kind))))
         {
             return null; // eben erst erledigt – wiederholtes Kommen und Gehen meldet link_flapping
         }
@@ -569,13 +660,13 @@ public sealed class FindingEvaluator
         return finding;
     }
 
-    private static void Update(Track t, Candidate c, List<ClientFinding> output)
+    private static void Update(Track t, Candidate c, List<ClientFinding> output, string? kind = null)
     {
         var old = t.Active!;
         var finding = new ClientFinding
         {
             FindingId = old.FindingId,
-            Kind = old.Kind,
+            Kind = kind ?? old.Kind,
             Severity = ClientFinding.SeverityName(c.Severity),
             State = "active",
             Adapter = ClientFinding.Clamp(c.Adapter, 256),

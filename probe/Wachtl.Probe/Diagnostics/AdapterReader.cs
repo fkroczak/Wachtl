@@ -28,6 +28,7 @@ public sealed partial class AdapterReader
     private DateTimeOffset _resetsAt = DateTimeOffset.MinValue;
     private bool _eventsLogged;
     private bool _nicLogged;
+    private string _nicSignature = string.Empty;
 
     public AdapterReader(ILogger logger)
     {
@@ -39,19 +40,6 @@ public sealed partial class AdapterReader
     /// <param name="refreshDevices">nach einem Netzwerkereignis: Geräte-Manager sofort neu lesen</param>
     public AdapterSnapshot Read(DateTimeOffset now, bool refreshDevices)
     {
-        if (OperatingSystem.IsWindows() && (refreshDevices || now - _wmiAt >= WmiInterval))
-        {
-            _wmi = ReadWmi();
-            _wmiAt = now;
-        }
-
-        if (OperatingSystem.IsWindows() && now - _resetsAt >= EventInterval)
-        {
-            _resets = ReadResets(now);
-            _resetsAt = now;
-        }
-
-        var wmi = _wmi;
         var adapters = new List<AdapterState>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         NetworkInterface[] nics;
@@ -70,6 +58,24 @@ public sealed partial class AdapterReader
             nics = Array.Empty<NetworkInterface>();
         }
 
+        // Karte verschwunden, neu oder Link geändert: Geräte-Manager sofort neu lesen. Sonst stammt „deaktiviert“ aus
+        // einer bis zu 30 s alten Abfrage, und eine eben deaktivierte Karte sähe aus wie eine abgezogene.
+        var signature = Signature(nics);
+        var changed = signature != _nicSignature;
+        _nicSignature = signature;
+        if (OperatingSystem.IsWindows() && (refreshDevices || changed || now - _wmiAt >= WmiInterval))
+        {
+            _wmi = ReadWmi();
+            _wmiAt = now;
+        }
+
+        if (OperatingSystem.IsWindows() && now - _resetsAt >= EventInterval)
+        {
+            _resets = ReadResets(now);
+            _resetsAt = now;
+        }
+
+        var wmi = _wmi;
         foreach (var nic in nics)
         {
             if (nic.NetworkInterfaceType == NetworkInterfaceType.Loopback)
@@ -95,10 +101,11 @@ public sealed partial class AdapterReader
             adapters.Add(state);
         }
 
-        // Physische Geräte, die Windows nicht als Schnittstelle führt: Treiber startet nicht, deaktiviert …
+        // Geräte, die Windows nicht als Schnittstelle führt: Treiber startet nicht, deaktiviert … Deaktivierte auch dann, wenn
+        // WMI sie nicht als physisch führt – die Bewertung kennt die Karte von vorher und braucht nur den Zustand.
         if (wmi is not null)
         {
-            foreach (var w in wmi.Values.Where(w => w.Physical && !seen.Contains(w.Guid)))
+            foreach (var w in wmi.Values.Where(w => (w.Physical || w.ErrorCode == 22 || w.NetEnabled == false) && !seen.Contains(w.Guid)))
             {
                 adapters.Add(new AdapterState
                 {
@@ -106,7 +113,7 @@ public sealed partial class AdapterReader
                     Name = string.IsNullOrEmpty(w.ConnectionName) ? w.Name : w.ConnectionName,
                     Description = w.Name,
                     Type = GuessType(w.Name),
-                    WmiPhysical = true,
+                    WmiPhysical = w.Physical,
                     Status = w.ErrorCode == 22 || w.NetEnabled == false ? LinkStatus.Disabled : LinkStatus.NotPresent,
                     PnpErrorCode = w.ErrorCode,
                 });
@@ -114,6 +121,18 @@ public sealed partial class AdapterReader
         }
 
         return new AdapterSnapshot(now, adapters, _resets);
+    }
+
+    private static string Signature(NetworkInterface[] nics)
+    {
+        try
+        {
+            return string.Join(";", nics.Select(n => NormalizeGuid(n.Id) + "=" + n.OperationalStatus).OrderBy(x => x, StringComparer.Ordinal));
+        }
+        catch (NetworkInformationException)
+        {
+            return string.Empty;
+        }
     }
 
     private static AdapterState FromNic(NetworkInterface nic)

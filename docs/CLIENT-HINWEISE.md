@@ -8,7 +8,7 @@ Derselbe Hinweis geht an den Wachtl-Server und steht dort auf der Übersicht, be
 Netzwerkkarte, WMI, Ereignisprotokoll ──alle 5 s──▶ Wachtl-Dienst ──▶ Server (POST /api/probe/v1/findings)
                                                         │ lokal, 127.0.0.1
                                                         ▼
-                                              Tray-Symbol: Sprechblase alle ≤ 10 s
+                                              Tray-Symbol: Abfrage alle 5 s, Sprechblase
 ```
 
 ## Was erkannt wird
@@ -23,7 +23,9 @@ WAN-Miniport, Bluetooth, Npcap) werden ignoriert.
 | **Netzwerk langsamer** (Link-Geschwindigkeit gesunken) | Warnung | z. B. 1 Gbit/s → 100 Mbit/s. Typisch: Kabel mit fehlenden Adern, Switch-Port, Energiesparen |
 | **Langsame Netzwerkverbindung** | Info (100 Mbit/s, keine Sprechblase), unter 100 Mbit/s kritisch | LAN-Karte seit 30 s unter 1 Gbit/s verbunden. 100 Mbit/s ist an Telefonen und USB-Adaptern üblich, daher nur im Web-UI |
 | **Netzwerkverbindung bricht wiederholt ab** | Warnung | mindestens 3 Abbrüche in 10 min |
-| **Problem mit der Netzwerkkarte oder ihrem Treiber** | kritisch | Geräte-Manager meldet einen Fehlercode (z. B. 10, 28, 31, 43). „Deaktiviert“ zählt nicht |
+| **Netzwerkkarte deaktiviert** | kritisch, Warnung wenn eine andere Verbindung übernimmt | Eine Karte, die verbunden war, wird in Windows oder im Geräte-Manager deaktiviert |
+| **Netzwerkkarte entfernt** | wie „Kabel getrennt“ | Eine Karte, die verbunden war, ist verschwunden: USB-Adapter oder Dockingstation abgezogen, Treiber abgemeldet. Übernimmt eine andere Karte, nur Info |
+| **Problem mit der Netzwerkkarte oder ihrem Treiber** | kritisch | Geräte-Manager meldet einen Fehlercode (z. B. 10, 28, 31, 43). „Deaktiviert“ ist ein eigener Hinweis, kein Treiberfehler |
 | **Treiber setzt die Netzwerkkarte wiederholt zurück** | Warnung | mindestens 2 Ereignisse NDIS 10400 in 15 min |
 | **Keine IP-Adresse vom DHCP-Server** | kritisch | Karte verbunden, aber nur 169.254.x.x |
 | **Kein Standard-Gateway** | Warnung | IP-Adresse vorhanden, aber kein Gateway |
@@ -32,8 +34,10 @@ WAN-Miniport, Bluetooth, Npcap) werden ignoriert.
 Damit kurze Zustände keinen Fehlalarm auslösen, muss ein Zustand etwa 10 s bestehen. „Kabel getrennt“ geht sofort als
 Info an den Server und wird nach 15 s ohne andere Verbindung kritisch (Sprechblase). Nach Ruhezustand oder
 Standby zählen 60 s lang keine Abbrüche, Geschwindigkeitswechsel und Rücksetzungen – die Karte handelt den Link neu aus.
-Nach dem Beheben meldet Wachtl „wieder verbunden“ bzw. „wieder normal“ mit der Dauer der Störung. Derselbe Hinweis
-für dieselbe Karte erscheint frühestens nach 30 min erneut, außer er wird schlimmer.
+Nach dem Beheben meldet Wachtl „wieder verbunden“ bzw. „wieder normal“ mit der Dauer der Störung. Kritische Hinweise
+und Verbindungsverlust (Kabel, WLAN, Karte deaktiviert) erscheinen jedes Mal. Andere Warnungen und Info-Einträge für
+dieselbe Karte erscheinen frühestens nach 30 min erneut, außer sie werden schlimmer. Ändert sich eine Karte, liest die
+Probe den Geräte-Manager sofort neu.
 
 ## Sprechblase auf dem PC
 
@@ -76,7 +80,7 @@ Wachtl-Symbol (Setup ohne `/NoTray`).
 ```
 
 - `kind`: `cable_unplugged`, `wifi_disconnected`, `link_speed_changed`, `link_speed_low`, `link_flapping`,
-  `driver_error`, `nic_reset`, `apipa`, `no_gateway`, `nic_errors`. Unbekannte Arten nimmt der Server an.
+  `driver_error`, `nic_reset`, `apipa`, `no_gateway`, `nic_errors`, `adapter_disabled`, `adapter_removed`. Unbekannte Arten nimmt der Server an.
 - `finding_id` bleibt für ein Vorkommen gleich: aktiv senden, später behoben mit derselben ID. Der Server
   aktualisiert. Ein behobener Hinweis wird durch eine verspätete Nachlieferung nicht wieder aktiv.
 - Beim Beheben schickt die Probe den Entwarnungstext als `title`/`message` und das ursprüngliche Problem in
