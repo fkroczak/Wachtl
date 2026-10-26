@@ -10,7 +10,7 @@
 {% block content %}
 {% set editing = has_role(user, 'admin') and request.args.get('bearbeiten') %}
 {% if not editing %}<div data-autorefresh="30" hidden></div>{% endif %}
-{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>{% endif %}
+{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.sites_view') }}">Standorte</a> / Standort</nav>{% endif %}
 {% if editing %}
 <h1>Standort bearbeiten</h1>
 <form method="post" action="{{ url_for('web.site_edit', site_id=site.id) }}" class="row">
@@ -70,13 +70,13 @@
 {% if alerts %}
 <div class="scroll">
 <table>
-  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th></tr></thead>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th></tr></thead>
   <tbody>
   {% for a in alerts %}
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
       <td>{{ a.summary or a.alertname }}{% set refs = alert_links(a) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
-      <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
+      <td class="nowrap" title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
     </tr>
   {% endfor %}
   </tbody>
@@ -132,6 +132,7 @@
               {% if c.type == 'ping' %}{{ st.values.rtt|ms }}<br><span class="small">{{ st.values.loss|pct }}</span>
               {% elif c.type == 'path' %}{{ (st.values.hops ~ ' Hops') if st.values else '–' }}<br><span class="small">{{ st.label }}</span>
               {% elif c.type == 'rtp' %}{% set r = st.values.rtp %}MOS {{ (r.mos if r else None)|mos }}<br><span class="small">{{ (r.loss_pct if r else None)|pct }}</span>
+              {% elif c.type == 'netscan' %}{% set r = st.values.netscan %}{{ (r.hosts_found ~ ' Geräte') if r and not r.error else '–' }}
               {% else %}↓ {{ (st.values.down.mbps if st.values.down else None)|mbps }}<br><span class="small">↑ {{ (st.values.up.mbps if st.values.up else None)|mbps }}</span>{% endif %}
               {#- Zustand nicht nur über die Farbe (WCAG 1.4.1): Probleme als Wort, „ok“ nur für Screenreader #}
               {% if c.type != 'path' %}{% if st.state in ('warn', 'down', 'stale') %}<br><span class="small">{{ st.label }}</span>{% else %}<span class="sr-only">, {{ st.label }}</span>{% endif %}{% endif %}

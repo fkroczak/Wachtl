@@ -42,14 +42,22 @@
                   ('web.alerts', 'Alarme'), ('web.outages_view', 'Störungen'), ('web.report_view', 'Bericht')]
                  + ([('web.admin', 'Verwaltung')] if has_role(user, 'admin') else []) %}
     {#- Alarme, Störungsmeldungen und PC-Hinweise sind Reiter unter einem Menüpunkt #}
+    {#- Unterseiten markieren ihren Menüpunkt: Probe und ihre Messungen unter „Probes“, Standort unter „Standorte“ #}
     {% set nav_groups = {'web.alerts': ('web.alerts', 'web.reports_view', 'web.findings_view'),
-                         'web.network_index': ('web.network_index', 'web.network'), 'web.tools': ('web.tools',)} %}
+                         'web.network_index': ('web.network_index', 'web.network'), 'web.tools': ('web.tools',),
+                         'web.probes_view': ('web.probes_view', 'web.probe', 'web.target', 'web.path_view', 'web.hop_view',
+                                             'web.bandwidth_view', 'web.rtp_view'),
+                         'web.sites_view': ('web.sites_view', 'web.site')} %}
     {% for endpoint, label in nav %}
     {%- set here = request.endpoint in nav_groups.get(endpoint, (endpoint,)) or (single_site and endpoint == 'web.overview' and request.endpoint == 'web.site')
-                   or (endpoint == 'web.topology_index' and (request.endpoint or '').startswith('web.topology')) %}
+                   or (endpoint == 'web.topology_index' and (request.endpoint or '').startswith('web.topology'))
+                   or (endpoint == 'web.admin' and request.path.startswith('/admin')) %}
     <a href="{{ url_for(endpoint) }}"{% if here %} class="active" aria-current="page"{% endif %}><svg class="icon" viewBox="0 0 24 24" aria-hidden="true">{{ icons[endpoint]|safe }}</svg>{{ label }}
-      {%- if endpoint == 'web.alerts' and open_reports %} <span class="nav-count" aria-hidden="true">{{ open_reports }}</span><span class="sr-only"> ({{ open_reports }} {{ 'offene Meldung' if open_reports == 1 else 'offene Meldungen' }})</span>{% endif %}
-      {%- if endpoint == 'web.alerts' %} <span class="nav-count alarm" data-alert-count aria-hidden="true"{% if not active_alerts %} hidden{% endif %}>{{ active_alerts }}</span><span class="sr-only" data-alert-count-sr>{% if active_alerts %} ({{ active_alerts }} aktiv){% endif %}</span>{% endif %}</a>
+      {%- if endpoint == 'web.alerts' %}<span class="nav-counts">
+        {#- rot: aktive Alarme, blau: offene Störungsmeldungen von Benutzern; title erklärt die Zahl beim Zeigen -#}
+        <span class="nav-count alarm" data-alert-count aria-hidden="true" title="{{ active_alerts }} aktive Alarme"{% if not active_alerts %} hidden{% endif %}>{{ active_alerts }}</span><span class="sr-only" data-alert-count-sr>{% if active_alerts %} ({{ active_alerts }} aktiv){% endif %}</span>
+        {%- if open_reports %}<span class="nav-count" aria-hidden="true" title="{{ open_reports }} {{ 'offene Störungsmeldung' if open_reports == 1 else 'offene Störungsmeldungen' }}">{{ open_reports }}</span><span class="sr-only"> ({{ open_reports }} {{ 'offene Meldung' if open_reports == 1 else 'offene Meldungen' }})</span>{% endif -%}
+      </span>{% endif %}</a>
     {% endfor %}
   </nav>
   {% if nav_sites and nav_sites.total > 1 %}
@@ -94,7 +102,10 @@
 <section class="toasts" data-notify="{{ url_for('api_admin.notifications') }}" aria-label="Benachrichtigungen">
   <div class="toast-list" aria-live="polite" data-toast-list></div>
   <button type="button" class="toast-enable" data-toast-clear hidden>Alle Hinweise schließen</button>
-  <button type="button" class="toast-enable" data-notify-enable hidden>Desktop-Benachrichtigungen einschalten</button>
+  <div class="toast info toast-ask" data-notify-ask hidden>
+    <p>Neue Störungen auch als Benachrichtigung des Browsers zeigen, wenn Wachtl im Hintergrund ist?</p>
+    <div class="toast-actions"><button type="button" class="primary" data-notify-enable>Einschalten</button><button type="button" data-notify-later>Nicht jetzt</button></div>
+  </div>
 </section>{% endif %}
 {% block scripts %}{% endblock %}
 <script src="{{ url_for('static', filename='app.js') }}"></script>

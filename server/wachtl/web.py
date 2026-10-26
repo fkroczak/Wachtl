@@ -231,7 +231,7 @@ def _live() -> tuple[dict, bool]:
 
 def _cell_state(v: dict | None) -> str:
     if not v or v.get("up") is None:
-        return "unknown"
+        return "stale"      # gleiche Klasse und gleiches Wort wie im Reiter „Messungen“
     if v["up"] == 0:
         return "down"
     if (v.get("loss") or 0) > checkstatus.LOSS_WARN_PCT:
@@ -391,9 +391,11 @@ def _fleet() -> dict:
             for st in states[p["id"]]:
                 if st.problem:
                     problems.append((p, st))
+            site_stats[p["site_id"]]["problems"] += sum(1 for st in states[p["id"]] if st.problem)
         else:
+            # offline zählt als ein Problem (wie Übersicht und Standortseite), nicht jeder Check ohne Daten einzeln
             offline.append(p)
-        site_stats[p["site_id"]]["problems"] += sum(1 for st in states[p["id"]] if st.problem)
+            site_stats[p["site_id"]]["problems"] += 1
         bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.BANDWIDTH_TYPES]
         voice += [(p, st) for st in states[p["id"]] if st.kind == "rtp"]
     problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))

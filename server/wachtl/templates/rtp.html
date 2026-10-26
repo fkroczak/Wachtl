@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
 {% from "_links.html" import check_target with context %}
+{% from "_range.html" import range_seg, range_label %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Sprache</nav>
-<h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> ↔ {{ check_target(check) }}</span></h1>
+<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.sites_view') }}">Standorte</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Sprache</nav>
+<h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>{% set gegen = check_target(check)|trim %}{% if gegen %} ↔ {{ gegen }}{% endif %}</span></h1>
 <p class="muted">Sprachtest (RTP) · {{ summary }}{% if params.window_start != '00:00' or params.window_end != '23:59' %} · nur {{ params.window_start }}–{{ params.window_end }} Uhr{% endif %}</p>
 
 <div class="actions">
-  <span class="range-buttons">{% for r in ranges %}<a class="button {{ 'active' if r == range_key }}" href="?range={{ r }}"{% if r == range_key %} aria-current="true"{% endif %}>{{ r }}</a>{% endfor %}</span>
+  {{ range_seg(ranges, range_key) }}
   {% if has_role(user, 'operator') %}
     {% if pending %}<span class="muted">Test beauftragt – Ergebnis erscheint nach Abschluss (Seite neu laden).</span>
     {% else %}

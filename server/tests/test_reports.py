@@ -238,7 +238,8 @@ class ReportPagesTest(AppTestCase):
         self.assertIn(f"/probes/{self.pid}/checks/", html)       # Link zum Graph …
         self.assertIn(f"at={self.now - 300}", html)              # … um den Zeitpunkt
         # Navigation zeigt die offenen Meldungen barrierefrei
-        self.assertRegex(html, r'aria-current="page"><svg[^>]*>.*?</svg>Alarme <span class="nav-count" aria-hidden="true">1</span>'
+        self.assertRegex(html, r'aria-current="page"><svg[^>]*>.*?</svg>Alarme<span class="nav-counts">.*?'
+                               r'<span class="nav-count" aria-hidden="true" title="1 offene Störungsmeldung">1</span>'
                                r'<span class="sr-only"> \(1 offene Meldung\)</span>')
         # Alarme, Meldungen und PC-Hinweise teilen sich einen Menüpunkt mit Reitern
         self.assertRegex(html, r'aria-current="page">Störungsmeldungen <span class="tab-count"')

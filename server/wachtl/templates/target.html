@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ check.name }}{% if hop %} Hop {{ hop }}{% endif %} – {{ probe.hostname }}{% endblock %}
 {% from "_reports.html" import report_table with context %}
+{% from "_range.html" import range_seg, range_label %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
+<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.sites_view') }}">Standorte</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a>
   {% if hop %} / <a href="{{ url_for('web.path_view', probe_id=probe.id, check_id=check.id) }}">Pfad {{ check.target }}</a> / Hop {{ hop }}{% else %} / Ziel{% endif %}</nav>
 {% if hop %}
 <h1>Hop {{ hop }} <span class="muted">· {{ hop_ip or 'keine Antwort' }}</span></h1>
@@ -20,7 +21,7 @@
      data-stats-url="{{ url_for('api_admin.stats', probe_id=probe.id, check_id=check.id, **q) }}"
      data-reports-url="{{ url_for('api_reports.reports', probe_id=probe.id) }}"{% if at %} data-at="{{ at }}"{% endif %}>
   <div class="range-buttons">
-    {% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}" aria-pressed="{{ 'true' if r == '1h' else 'false' }}">{{ r }}</button>{% endfor %}
+    <span class="seg" role="group" aria-label="Zeitraum des Graphen">{% for r in ranges %}<button type="button" data-range="{{ r }}" class="{{ 'active' if r == '1h' }}" aria-pressed="{{ 'true' if r == '1h' else 'false' }}">{{ range_label(r) }}</button>{% endfor %}</span>
     <span id="chart-source" class="muted small"></span>
   </div>
   {% set lw, lb = thr.loss_warn_pct, thr.loss_bad_pct %}
@@ -45,7 +46,7 @@
   <thead><tr><th>Zeitraum</th><th>Min</th><th>Median</th><th>Durchschnitt</th><th>Max</th><th>Jitter</th><th>Verlust</th></tr></thead>
   <tbody>
   {% for w in windows %}
-    <tr data-window="{{ w }}"><th>{{ w }}</th><td data-k="min">…</td><td data-k="median">…</td><td data-k="avg">…</td><td data-k="max">…</td><td data-k="jitter">…</td><td data-k="loss">…</td></tr>
+    <tr data-window="{{ w }}"><th>{{ range_label(w) }}</th><td data-k="min">…</td><td data-k="median">…</td><td data-k="avg">…</td><td data-k="max">…</td><td data-k="jitter">…</td><td data-k="loss">…</td></tr>
   {% endfor %}
   </tbody>
 </table>
