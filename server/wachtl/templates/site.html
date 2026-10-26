@@ -6,20 +6,23 @@
 {% from "_outages.html" import outage_table with context %}
 {% from "_tabs.html" import tabs as tabnav %}
 {% block content %}
-<div data-autorefresh="30" hidden></div>
+{% set editing = has_role(user, 'admin') and request.args.get('bearbeiten') %}
+{% if not editing %}<div data-autorefresh="30" hidden></div>{% endif %}
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
-<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
+{% if editing %}
+<h1>Standort bearbeiten</h1>
+<form method="post" action="{{ url_for('web.site_edit', site_id=site.id) }}" class="row">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label>Name <input name="name" required maxlength="100" value="{{ site.name }}" autofocus></label>
+  <label>Kundennummer <input name="customer_no" maxlength="20" value="{{ site.customer_no or '' }}"></label>
+  <label class="grow">Beschreibung <input name="description" maxlength="200" value="{{ site.description or '' }}"></label>
+  <button class="primary">Speichern</button>
+  <a href="{{ url_for('web.site', site_id=site.id) }}">Abbrechen</a>
+</form>
+{% else %}
+<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}
+  {%- if has_role(user, 'admin') %} <a class="edit-pen" href="{{ url_for('web.site', site_id=site.id, bearbeiten=1) }}" aria-label="Standort {{ site.name }} bearbeiten" title="Bearbeiten"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4"/></svg></a>{% endif %}</h1>
 {% if site.description %}<p class="muted">{{ site.description }}</p>{% endif %}
-{% if has_role(user, 'admin') %}
-<details{{ ' open' if request.args.get('bearbeiten') }}><summary>Standort bearbeiten</summary>
-  <form method="post" action="{{ url_for('web.site_edit', site_id=site.id) }}" class="row">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Name <input name="name" required maxlength="100" value="{{ site.name }}"></label>
-    <label>Kundennummer <input name="customer_no" maxlength="20" value="{{ site.customer_no or '' }}"></label>
-    <label class="grow">Beschreibung <input name="description" maxlength="200" value="{{ site.description or '' }}"></label>
-    <button class="primary">Speichern</button>
-  </form>
-</details>
 {% endif %}
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar.</div>{% endif %}
 {% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}

@@ -607,7 +607,10 @@ class SiteEditTest(AppTestCase):
         self.assertEqual(q1("SELECT name FROM sites WHERE id = ?", (sid,))["name"], "Neu")
         self.client.post(f"/sites/{sid}/edit", data={"name": " ", "csrf_token": self.tok})
         self.assertEqual(q1("SELECT name FROM sites WHERE id = ?", (sid,))["name"], "Neu")
-        self.assertIn("Standort bearbeiten", self.client.get(f"/sites/{sid}").get_data(as_text=True))
+        self.assertIn('class="edit-pen"', self.client.get(f"/sites/{sid}").get_data(as_text=True))
+        form = self.client.get(f"/sites/{sid}?bearbeiten=1").get_data(as_text=True)
+        self.assertIn(f'action="/sites/{sid}/edit"', form)
+        self.assertIn('value="Neu"', form)
 
     def test_operator_cannot_edit_site(self):
         sid = self.make_site("Alt")
@@ -615,7 +618,8 @@ class SiteEditTest(AppTestCase):
         self.login("op")
         r = self.client.post(f"/sites/{sid}/edit", data={"name": "Neu", "csrf_token": self.session_csrf()})
         self.assertEqual(r.status_code, 403)
-        self.assertNotIn("Standort bearbeiten", self.client.get(f"/sites/{sid}").get_data(as_text=True))
+        self.assertNotIn('class="edit-pen"', self.client.get(f"/sites/{sid}").get_data(as_text=True))
+        self.assertNotIn(f'/sites/{sid}/edit', self.client.get(f"/sites/{sid}?bearbeiten=1").get_data(as_text=True))
 
     def test_move_probe_to_other_site(self):
         pid = self.enroll("PC-01")["probe_id"]
