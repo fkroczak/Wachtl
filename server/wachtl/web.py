@@ -259,12 +259,13 @@ def password_forgot():
 
 
 def _server_certificate():
-    """Server-Zertifikat aus WACHTL_CERT_FILE (Windows: Datenordner, Linux: ./certs per Docker eingebunden)."""
+    """Zertifikat für den Stammspeicher: die Wachtl-CA, das letzte der Kette in WACHTL_CERT_FILE
+    (Windows: Datenordner, Linux: ./certs/public per Docker eingebunden). Alte Installationen: das selbstsignierte."""
     from cryptography import x509
 
     path = current_app.config.get("CERT_FILE") or ""
     try:
-        return x509.load_pem_x509_certificate(Path(path).read_bytes()) if path else None
+        return x509.load_pem_x509_certificates(Path(path).read_bytes())[-1] if path else None
     except (OSError, ValueError) as exc:
         log.warning("Zertifikat %s nicht lesbar: %s", path, exc)
         return None
@@ -277,7 +278,9 @@ def certificate_help():
 
     cert = _server_certificate()
     fingerprint = ":".join(f"{b:02X}" for b in cert.fingerprint(hashes.SHA256())) if cert else None
-    return render_template("certificate.html", cert=cert, fingerprint=fingerprint)
+    from cryptography.x509.oid import NameOID
+
+    return render_template("certificate.html", cert=cert, fingerprint=fingerprint, cn_oid=NameOID.COMMON_NAME)
 
 
 @bp.get("/zertifikat/wachtl.crt")

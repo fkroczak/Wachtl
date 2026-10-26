@@ -1,4 +1,5 @@
 :root {
+  --topbar-h: 56px;
   /* Wachtl-Palette im Stil von UniFi: helles Grau, weiße Karten, kräftiges Blau als einziger Akzent.
      light-dark(hell, dunkel) folgt color-scheme: System oder Design-Auswahl (data-theme) */
   --bg: light-dark(#f4f5f7, #111214);
@@ -151,16 +152,34 @@ h2 { font-size: 1.07rem; font-weight: 600; margin: 2rem 0 0.7rem; }
 .usermenu-panel :focus-visible { outline-offset: -3px; }
 .usermenu-logout { margin: 0.3rem 0 0; }
 /* schmal: Seitenleiste wird zur Kopfzeile, Navigation als umbrechende Zeile, Standorte stehen in der Übersicht */
+/* Hamburger-Menü nur schmal */
+.side-drawer { display: contents; }
+.menu-toggle, .menu-backdrop { display: none; }
+/* schmal: Kopfzeile mit Marke links und Menüknopf rechts; Menü fährt von rechts herein (mit dem Daumen erreichbar) */
 @media (max-width: 900px) {
   .shell { flex-direction: column; }
-  .sidebar { flex: none; position: static; height: auto; overflow: visible; padding: 0.5rem 0.75rem;
-    border-right: 0; border-bottom: 1px solid var(--border); }
-  .side-head { padding: 0 0 0.3rem 0.2rem; }
-  .side-nav { flex-direction: row; flex-wrap: wrap; gap: 2px 4px; }
-  .side-nav a { padding: 0.4rem 0.6rem; }
-  .side-sites { display: none; }
-  .side-user { margin-top: 0.3rem; padding-top: 0.3rem; }
-  .side-user .usermenu-panel { top: calc(100% + 0.3rem); bottom: auto; right: auto; min-width: 13rem; }
+  .sidebar { flex: none; position: sticky; top: 0; z-index: 30; align-self: stretch; height: var(--topbar-h); overflow: visible;
+    flex-direction: row; align-items: center; padding: 0 0.5rem 0 0.9rem; border-right: 0;
+    border-bottom: 1px solid var(--border); }
+  .side-head { flex: 1; justify-content: space-between; padding: 0; }
+  .menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px;
+    padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--bar-text); }
+  .menu-toggle:hover { background: var(--surface-2); }
+  .menu-toggle .icon { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  .menu-toggle .i-close, .menu-toggle[aria-expanded="true"] .i-open { display: none; }
+  .menu-toggle[aria-expanded="true"] .i-close { display: inline; }
+  .side-drawer { position: fixed; top: var(--topbar-h); right: 0; bottom: 0; z-index: 30; width: min(19rem, 86vw);
+    display: flex; flex-direction: column; gap: 0.2rem; padding: 0.7rem; overflow-y: auto; background: var(--bar-bg);
+    border-left: 1px solid var(--border); transform: translateX(100%); visibility: hidden;
+    transition: transform 0.2s ease, visibility 0s linear 0.2s; }
+  .side-drawer.open { transform: none; visibility: visible; transition: transform 0.2s ease; }
+  .side-nav a, .side-sites a { min-height: 44px; }
+  .menu-backdrop:not([hidden]) { display: block; position: fixed; inset: var(--topbar-h) 0 0 0; z-index: 29;
+    background: rgb(0 0 0 / 0.45); }
+  html.menu-open { overflow: hidden; }
+}
+@media (max-width: 900px) and (prefers-reduced-motion: reduce) {
+  .side-drawer, .side-drawer.open { transition: none; }
 }
 main { max-width: 1360px; margin: 0 auto; padding: 1.5rem; }
 .crumbs { font-size: 0.85rem; color: var(--text-muted); margin: 0; }

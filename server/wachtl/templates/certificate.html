@@ -3,8 +3,10 @@
 {% block content %}
 <div class="login wide">
   <h1>Zertifikat installieren</h1>
-  <p>Wachtl nutzt ein eigenes Zertifikat. Ist es auf dem Gerät als vertrauenswürdig hinterlegt, öffnet der
-    Browser Wachtl ohne Sicherheitswarnung. Das Zertifikat gilt nur für die Adressen dieses Wachtl-Servers.</p>
+  <p>Wachtl stellt sich sein Zertifikat mit einer eigenen Zertifizierungsstelle aus, der <strong>Wachtl-CA</strong>.
+    Ist sie auf dem Gerät als vertrauenswürdig hinterlegt, öffnet der Browser Wachtl ohne Sicherheitswarnung – auch
+    nach jeder automatischen Erneuerung des Server-Zertifikats. Die Wachtl-CA gilt nur für die Adressen dieses
+    Servers.</p>
 
   {% if cert %}
   <p><a class="button primary" href="{{ url_for('web.certificate_download') }}" download>Zertifikat herunterladen</a></p>
@@ -27,7 +29,7 @@
 
   <h2>macOS</h2>
   <p>Datei öffnen, Schlüsselbund <em>System</em> wählen. Danach in der Schlüsselbundverwaltung doppelt auf
-    „{{ cert.subject.rfc4514_string() if cert else 'Wachtl' }}“ klicken › <em>Vertrauen</em> ›
+    „{{ (cert.subject.get_attributes_for_oid(cn_oid)[0].value) if cert else 'Wachtl CA' }}“ klicken › <em>Vertrauen</em> ›
     <em>Bei Verwendung dieses Zertifikats: Immer vertrauen</em>. Oder im Terminal:</p>
   <pre>sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain wachtl.crt</pre>
 

@@ -186,6 +186,7 @@ Anmeldung:      admin (Passwort wie im Setup festgelegt)
 Passwort vergessen: Startmenü > Wachtl > Admin-Passwort zurücksetzen
 SPKI-Pin:       {layout.env['WACHTL_SPKI_PIN']}
 Zertifikat:     {layout.cert_file}
+Wachtl-CA:      {certs.ca_paths(layout.cert_file)[1]}
 Datenordner:    {layout.data_dir}
 Programmordner: {layout.install_dir}
 
@@ -218,7 +219,7 @@ def system_setup(layout: Layout, run: winsys.Runner) -> None:
     winsys.configure_firewall(layout, run)
     winsys.schedule_backup(layout, run)
     # Browser auf dem Server vertrauen Wachtl ohne Warnung; die PCs erledigt das Probe-Setup
-    winsys.trust_certificate(layout.cert_file, run)
+    winsys.trust_certificate(certs.ca_paths(layout.cert_file)[1], run)
 
 
 # -- Befehle --------------------------------------------------------------------------------
@@ -252,7 +253,7 @@ def install(data: dict, run: winsys.Runner, start: bool = True) -> dict:
 def upgrade(data_dir: str | None, run: winsys.Runner, start: bool = True) -> dict:
     layout = Layout.load(data_dir)
     log.info("Update: Programm %s, Daten %s", layout.install_dir, layout.data_dir)
-    # ältere Zertifikate ohne Namensbeschränkung vor dem Ablegen als Stammzertifikat neu ausstellen (Pin bleibt)
+    # ältere Installationen bekommen die Wachtl-CA, bevor sie im Stammspeicher landet (Pin bleibt)
     pin, reason = certs.ensure_certificate(layout.hostnames, layout.key_file, layout.cert_file)
     if reason:
         log.info("Zertifikat neu ausgestellt (%s)", reason)

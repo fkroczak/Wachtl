@@ -45,48 +45,106 @@ class TempDirTest(unittest.TestCase):
 
 
 class CertTest(TempDirTest):
-    def test_pin_matches_openssl_and_survives_renewal(self):
-        key, crt = self.data / "k.pem", self.data / "c.pem"
-        pin, reason = certs.ensure_certificate(["wachtl.kunde.local", "10.0.0.5"], key, crt)
-        self.assertEqual(reason, "kein Zertifikat vorhanden")
+    NAMES = ["wachtl.kunde.local", "10.0.0.5"]
+
+    def files(self):
+        key, crt = self.data / "wachtl.key", self.data / "wachtl.crt"
+        return key, crt, *certs.ca_paths(crt)
+
+    def openssl(self, *args):
+        return subprocess.run(["openssl", *args], capture_output=True, text=True)
+
+    def test_ca_issues_short_lived_server_certificate(self):
+        key, crt, ca_key, ca_crt = self.files()
+        pin, reason = certs.ensure_certificate(self.NAMES, key, crt)
+        self.assertEqual(reason, "keine Wachtl-CA vorhanden")
         cmd = f"openssl x509 -in '{crt}' -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64"
         self.assertEqual(pin, subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout.strip())
-        self.assertIsNone(certs.needs_renewal(crt, ["wachtl.kunde.local", "10.0.0.5"]))
-        # neuer Name -> neues Zertifikat, gleicher Schlüssel -> gleicher Pin
-        pin2, reason2 = certs.ensure_certificate(["wachtl.kunde.local", "10.0.0.6"], key, crt)
-        self.assertEqual(reason2, "Servernamen haben sich geändert")
-        self.assertEqual(pin, pin2)
-        san = subprocess.run(["openssl", "x509", "-in", str(crt), "-noout", "-ext", "subjectAltName"],
-                             capture_output=True, text=True).stdout
-        self.assertIn("DNS:wachtl.kunde.local", san)
-        self.assertIn("IP Address:10.0.0.6", san)
+        chain = certs.load_chain(crt)
+        server, ca = chain
+        self.assertEqual(ca, x509.load_pem_x509_certificate(ca_crt.read_bytes()))
+        self.assertEqual(certs.root_certificate(crt), ca)
+        # Server: kein CA-Zertifikat, höchstens 397 Tage (Apple, Browser), von der CA signiert
+        self.assertFalse(server.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+        self.assertLessEqual((server.not_valid_after_utc - server.not_valid_before_utc).days, 398)
+        server.verify_directly_issued_by(ca)
+        self.assertTrue(ca.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+        self.assertGreater((ca.not_valid_after_utc - ca.not_valid_before_utc).days, 3000)
+        self.assertEqual(oct(ca_key.stat().st_mode & 0o777), "0o600")
+        # OpenSSL bestätigt die Kette mit der CA als einziger Vertrauensbasis, für Name und IP
+        for host in ("-verify_hostname", "wachtl.kunde.local"), ("-verify_ip", "10.0.0.5"):
+            r = self.openssl("verify", "-CAfile", str(ca_crt), *host, str(crt))
+            self.assertIn(": OK", r.stdout, r.stderr)
+        self.assertIsNone(certs.needs_renewal(crt, self.NAMES))
 
-    def test_name_constraints_limit_certificate_to_server(self):
-        key, crt = self.data / "k.pem", self.data / "c.pem"
-        certs.create_certificate(["wachtl.kunde.local", "10.0.0.5"], key, crt)
-        nc = certs.load_certificate(crt).extensions.get_extension_for_class(x509.NameConstraints)
+    def test_name_constraints_keep_ca_to_the_server(self):
+        key, crt, ca_key, ca_crt = self.files()
+        certs.ensure_certificate(self.NAMES, key, crt)
+        nc = x509.load_pem_x509_certificate(ca_crt.read_bytes()).extensions.get_extension_for_class(x509.NameConstraints)
         self.assertTrue(nc.critical)
         self.assertEqual({str(n.value) for n in nc.value.permitted_subtrees}, {"wachtl.kunde.local", "10.0.0.5/32"})
-        self.assertIsNone(nc.value.excluded_subtrees)
+        # ein mit dem CA-Schlüssel ausgestelltes Zertifikat für eine fremde Seite lehnt OpenSSL ab
+        foreign_key, foreign_crt = self.data / "f.key", self.data / "f.crt"
+        ca = (certs.load_or_create_key(ca_key), x509.load_pem_x509_certificate(ca_crt.read_bytes()))
+        certs.create_certificate(["bank.example"], foreign_key, foreign_crt, ca=ca)
+        r = self.openssl("verify", "-CAfile", str(ca_crt), "-verify_hostname", "bank.example", str(foreign_crt))
+        self.assertNotIn(": OK", r.stdout)
+        self.assertIn("permitted subtree violation", r.stdout + r.stderr)
 
-    def test_certificate_without_name_constraints_is_reissued_with_same_pin(self):
-        key, crt = self.data / "k.pem", self.data / "c.pem"
+    def test_renewal_keeps_ca_and_pin(self):
+        key, crt, _, ca_crt = self.files()
+        pin, _ = certs.ensure_certificate(self.NAMES, key, crt)
+        ca_before = ca_crt.read_bytes()
+        certs.create_certificate(self.NAMES, key, crt, days=10)
+        self.assertIn("läuft in", certs.needs_renewal(crt, self.NAMES))
+        pin2, reason = certs.ensure_certificate(self.NAMES, key, crt)
+        self.assertIn("läuft in", reason)
+        self.assertEqual(pin, pin2)
+        self.assertEqual(ca_crt.read_bytes(), ca_before)          # PCs müssen nichts neu ablegen
+        self.assertIsNone(certs.needs_renewal(crt, self.NAMES))
+
+    def test_new_names_reissue_ca_with_same_key(self):
+        key, crt, ca_key, ca_crt = self.files()
+        pin, _ = certs.ensure_certificate(self.NAMES, key, crt)
+        ca_key_before = ca_key.read_bytes()
+        pin2, reason = certs.ensure_certificate(["wachtl.kunde.local", "10.0.0.6"], key, crt)
+        self.assertEqual(reason, "Servernamen der Wachtl-CA haben sich geändert")
+        self.assertEqual(pin, pin2)
+        self.assertEqual(ca_key.read_bytes(), ca_key_before)
+        san = self.openssl("x509", "-in", str(crt), "-noout", "-ext", "subjectAltName").stdout
+        self.assertIn("IP Address:10.0.0.6", san)
+        self.assertIsNone(certs.needs_renewal(crt, ["wachtl.kunde.local", "10.0.0.6"]))
+
+    def test_old_self_signed_certificate_moves_to_ca_with_same_pin(self):
+        key, crt, _, ca_crt = self.files()
         certs.load_or_create_key(key)
-        # Zertifikat wie vor 0.9.3: ohne Namensbeschränkung
+        # Zertifikat wie bis 0.9.3: selbstsigniert, 10 Jahre
         subprocess.run(["openssl", "req", "-new", "-x509", "-key", str(key), "-out", str(crt), "-days", "3650",
                         "-subj", "/CN=a.local/O=Wachtl", "-addext", "subjectAltName=DNS:a.local"],
                        check=True, capture_output=True)
         pin = certs.spki_pin(crt)
-        self.assertIn("Namensbeschränkung", certs.needs_renewal(crt, ["a.local"]))
+        self.assertEqual(certs.root_certificate(crt), certs.load_certificate(crt))
         pin2, reason = certs.ensure_certificate(["a.local"], key, crt)
-        self.assertIsNotNone(reason)
+        self.assertEqual(reason, "keine Wachtl-CA vorhanden")
         self.assertEqual(pin, pin2)
+        self.assertTrue(ca_crt.exists())
         self.assertIsNone(certs.needs_renewal(crt, ["a.local"]))
 
-    def test_short_validity_triggers_renewal(self):
-        key, crt = self.data / "k.pem", self.data / "c.pem"
-        certs.create_certificate(["a.local"], key, crt, days=10)
-        self.assertIn("läuft in", certs.needs_renewal(crt, ["a.local"]))
+    def test_certificate_from_other_ca_is_replaced(self):
+        key, crt, ca_key, ca_crt = self.files()
+        certs.ensure_certificate(["a.local"], key, crt)
+        ca_crt.unlink()
+        ca_key.unlink()
+        certs.create_ca(["a.local"], ca_key, ca_crt)               # neue CA, neuer Schlüssel
+        self.assertEqual(certs.needs_renewal(crt, ["a.local"]), "nicht von der Wachtl-CA ausgestellt")
+
+    def test_command_for_linux_server(self):
+        with mock.patch("sys.stdout") as out:
+            self.assertEqual(certs.main(["ensure", "--dir", str(self.data), "--names", "wachtl.kunde.local"]), 0)
+        text = "".join(c.args[0] for c in out.write.call_args_list)
+        self.assertIn("renewed=1", text)
+        self.assertIn(f"pin={certs.spki_pin(self.data / 'wachtl.crt')}", text)
+        self.assertTrue((self.data / "wachtl-ca.key").exists())
 
 
 class EnvLayoutTest(TempDirTest):
@@ -157,7 +215,7 @@ class InstallerTest(InstallBase):
         # Zertifikat unter „Vertrauenswürdige Stammzertifizierungsstellen“ (Computer)
         trust = [c for c in run.calls if c[0] == "powershell.exe" and "X509Store('Root','LocalMachine')" in c[-1]]
         self.assertEqual(len(trust), 1)
-        self.assertIn(str(layout.cert_file), trust[0][-1])
+        self.assertIn(str(certs.ca_paths(layout.cert_file)[1]), trust[0][-1])
         self.assertIn("$s.Add($c)", trust[0][-1])
 
     def test_reinstall_keeps_secrets_and_pin_and_resets_password(self):
@@ -269,6 +327,50 @@ class ServeTest(unittest.TestCase):
         self.assertTrue(self.call(internal, "/api/internal/alertmanager")[0].startswith("200"))
         self.assertTrue(self.call(internal, "/admin")[0].startswith("404"))
         self.assertIn("Strict-Transport-Security", self.call(serve.with_security_headers(app))[1])
+
+    def test_renewed_certificate_is_served_without_restart(self):
+        import ssl as _ssl
+
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            key, crt = tmp / "wachtl.key", tmp / "wachtl.crt"
+            certs.ensure_certificate(["localhost"], key, crt)
+            ca_file = certs.ca_paths(crt)[1]
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+
+            def app(environ, start_response):
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"ok"]
+
+            servers = serve.build_servers(app, "127.0.0.1", port, 0, 0, str(crt), str(key), dev=True)
+            servers.servers = servers.servers[:1]                  # nur HTTPS
+            servers.threads = servers.threads[:1]
+            servers.start()
+            try:
+                def served_serial():
+                    ctx = _ssl.create_default_context(cafile=str(ca_file))  # wie ein PC mit der Wachtl-CA
+                    for _ in range(50):
+                        try:
+                            with socket.create_connection(("127.0.0.1", port), timeout=2) as raw, \
+                                    ctx.wrap_socket(raw, server_hostname="localhost") as tls:
+                                return x509.load_der_x509_certificate(tls.getpeercert(True)).serial_number
+                        except ConnectionRefusedError:
+                            time.sleep(0.1)
+                    raise AssertionError("HTTPS-Server antwortet nicht")
+
+                first = served_serial()
+                self.assertFalse(servers.reload_certificate_if_changed())
+                new = certs.create_certificate(["localhost"], key, crt)
+                os.utime(crt, (time.time() + 5, time.time() + 5))
+                self.assertTrue(servers.reload_certificate_if_changed())
+                self.assertNotEqual(first, served_serial())
+                self.assertEqual(new.serial_number, served_serial())
+            finally:
+                servers.stop()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 class SupervisorTest(unittest.TestCase):

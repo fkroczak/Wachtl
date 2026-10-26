@@ -26,6 +26,45 @@ public class RootTrustTests
         Assert.False(RootTrust.IsSelfSigned(leaf));
     }
 
+    private static X509Certificate2 IssuedBy(X509Certificate2 ca, string dnsName)
+    {
+        var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var request = new CertificateRequest("CN=" + dnsName, key, HashAlgorithmName.SHA256);
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddDnsName(dnsName);
+        request.CertificateExtensions.Add(san.Build());
+        request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
+        var serial = RandomNumberGenerator.GetBytes(8);
+        using var withoutKey = request.Create(ca, DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(90), serial);
+        return withoutKey.CopyWithPrivateKey(key);
+    }
+
+    [Fact]
+    public void SelectRootPrefersWachtlCaThatIssuedTheServerCertificate()
+    {
+        using var ca = SelfSigned("CN=Wachtl CA wachtl.test");
+        using var server = IssuedBy(ca, "wachtl.test");
+        using var root = RootTrust.SelectRoot(server, ca);
+        Assert.Equal(ca.Thumbprint, root!.Thumbprint);
+    }
+
+    [Fact]
+    public void SelectRootRejectsCaThatDidNotIssueTheServerCertificate()
+    {
+        using var ca = SelfSigned("CN=Wachtl CA wachtl.test");
+        using var other = SelfSigned("CN=Untergeschoben");
+        using var server = IssuedBy(ca, "wachtl.test");
+        Assert.Null(RootTrust.SelectRoot(server, other));
+        Assert.Null(RootTrust.SelectRoot(server, null));
+    }
+
+    [Fact]
+    public void SelectRootFallsBackToSelfSignedServerCertificateOfOlderServers()
+    {
+        using var selfSigned = SelfSigned();
+        Assert.Equal(selfSigned.Thumbprint, RootTrust.SelectRoot(selfSigned, null)!.Thumbprint);
+    }
+
     [Fact]
     public void PlanAddsMissingCertificateAndReplacesOlderWachtlCertificate()
     {
