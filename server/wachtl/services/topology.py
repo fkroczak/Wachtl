@@ -32,7 +32,6 @@ AUTH_CHOICES = (("sha", "SHA-1"), ("sha256", "SHA-256"), ("sha512", "SHA-512"), 
                 ("sha384", "SHA-384"), ("md5", "MD5 (veraltet)"))
 PRIV_CHOICES = (("aes", "AES-128"), ("aes256", "AES-256"), ("aes192", "AES-192"), ("aes256c", "AES-256 (Cisco)"),
                 ("aes192c", "AES-192 (Cisco)"), ("des", "DES (veraltet)"))
-POLL_MIN = 15                    # regelmäßige Abfrage alle 15 Minuten
 ERRORS_WARN = 50                 # neue Eingangsfehler in 24 h, ab denen ein Port auffällt
 ERRORS_CRIT = 1000
 UNMANAGED_MIN_MACS = 3           # so viele Geräte an einem Port ohne Nachbarn → nicht verwalteter Switch vermutet
@@ -132,22 +131,41 @@ def credential_hint(creds: dict) -> str:
 
 
 # -- Aufträge für die Server-Probe ------------------------------------------------------
-def jobs(ts: int | None = None, limit: int = 20) -> list[dict]:
-    """Fällige Switches (regelmäßig oder „Jetzt abfragen“) mit entschlüsselten Zugangsdaten."""
+def intervals() -> tuple[int, int]:
+    """(vollständige Abfrage in s, schnelle Abfrage in s; 0 = aus) aus Verwaltung › Messung."""
+    from . import settings as settings_service
+
+    v = settings_service.get()
+    return int(v["topo_full_min"]) * 60, int(v["topo_quick_s"])
+
+
+def jobs(ts: int | None = None, limit: int = 40) -> list[dict]:
+    """Fällige Abfragen mit entschlüsselten Zugangsdaten: vollständig (Intervall, „Jetzt abfragen“, erste Abfrage)
+    oder schnell (nur Port-Status). Nicht erreichbare Switches nur im Takt der vollständigen Abfrage."""
     from ..secretbox import SecretError, unseal
 
     ts = ts or repo.now()
-    due = q("SELECT * FROM net_switches WHERE status = 'active' AND (last_poll IS NULL OR last_poll <= ? "
-            "OR (poll_requested IS NOT NULL AND poll_requested >= last_poll)) "
-            "ORDER BY CASE WHEN poll_requested IS NULL THEN 1 ELSE 0 END, COALESCE(last_poll, 0) LIMIT ?", (ts - POLL_MIN * 60, limit))
+    full_s, quick_s = intervals()
     out = []
-    for sw in due:
+    for sw in q("SELECT id, host, port, secret, last_full, last_poll, last_error, poll_requested, "
+                "CASE WHEN snapshot IS NULL THEN 0 ELSE 1 END AS has_snapshot FROM net_switches WHERE status = 'active' "
+                "ORDER BY CASE WHEN poll_requested IS NULL THEN 1 ELSE 0 END, COALESCE(last_poll, 0)"):
+        full = (not sw["last_full"] or sw["last_full"] <= ts - full_s or not sw["has_snapshot"]
+                or (sw["poll_requested"] and sw["poll_requested"] >= (sw["last_poll"] or 0)))
+        quick = (quick_s and not sw["last_error"] and sw["has_snapshot"]
+                 and (sw["last_poll"] or 0) <= ts - quick_s + 5)
+        if not full and not quick:
+            continue
         try:
             creds = unseal(sw["secret"])
         except SecretError as exc:
-            ex("UPDATE net_switches SET last_poll = ?, last_error = ? WHERE id = ?", (ts, str(exc), sw["id"]))
+            ex("UPDATE net_switches SET last_poll = ?, last_full = ?, last_error = ? WHERE id = ?",
+               (ts, ts, str(exc), sw["id"]))
             continue
-        out.append({"switch_id": sw["id"], "host": sw["host"], "port": sw["port"], "credentials": creds})
+        out.append({"switch_id": sw["id"], "host": sw["host"], "port": sw["port"], "credentials": creds,
+                    "kind": "full" if full else "quick"})
+        if len(out) >= limit:
+            break
     return out
 
 
@@ -183,6 +201,35 @@ def _ip(v) -> str | None:
         return None
 
 
+def clean_quick(data) -> dict:
+    """Schnelle Abfrage prüfen: Laufzeit und je Port Status, Geschwindigkeit, Fehler, letzte Änderung."""
+    if not isinstance(data, dict) or not isinstance(data.get("interfaces"), list):
+        raise ValueError("Momentaufnahme fehlt")
+    out = []
+    for i in data["interfaces"][:1024]:
+        if isinstance(i, dict) and (idx := _int(i.get("index"), 1, 2 ** 31)) is not None:
+            out.append({"index": idx, "admin_up": bool(i.get("admin_up")), "oper_up": bool(i.get("oper_up")),
+                        "speed_mbps": _int(i.get("speed_mbps"), 0, 10 ** 7), "in_errors": _int(i.get("in_errors")),
+                        "last_change_s": _int(i.get("last_change_s"))})
+    sysd = data.get("system") if isinstance(data.get("system"), dict) else {}
+    return {"quick": True, "system": {"uptime_s": _int(sysd.get("uptime_s"))}, "interfaces": out}
+
+
+def merge_quick(old: dict, quick: dict) -> dict:
+    """Schnelle Abfrage in die letzte vollständige einarbeiten (MAC-Tabelle und Nachbarn bleiben)."""
+    new = json.loads(json.dumps(old))
+    by_idx = {i["index"]: i for i in quick["interfaces"]}
+    for i in new.get("interfaces") or []:
+        qi = by_idx.get(i["index"])
+        if qi:
+            for k in ("admin_up", "oper_up", "in_errors", "last_change_s"):
+                i[k] = qi[k]
+            if qi["oper_up"] and qi["speed_mbps"]:
+                i["speed_mbps"] = qi["speed_mbps"]
+    new.setdefault("system", {})["uptime_s"] = quick["system"]["uptime_s"]
+    return new
+
+
 def clean_snapshot(data) -> dict:
     """Momentaufnahme der Probe prüfen und kürzen – nur bekannte Felder mit passenden Typen."""
     if not isinstance(data, dict):
@@ -203,6 +250,7 @@ def clean_snapshot(data) -> dict:
             "in_errors": _int(i.get("in_errors")), "out_errors": _int(i.get("out_errors")),
             "fcs_errors": _int(i.get("fcs_errors")),
             "duplex": i.get("duplex") if i.get("duplex") in ("half", "full") else None,
+            "last_change_s": _int(i.get("last_change_s")),
         })
     ids = {i["index"] for i in interfaces}
     fdb = []
@@ -241,61 +289,90 @@ def clean_snapshot(data) -> dict:
     }
 
 
-def store_result(sw: dict, snapshot: dict | None, error: str | None, ts: int) -> None:
-    """Abfrage speichern: Fehler oder Momentaufnahme; neue Port-Fehler und Wechsel als Verlauf; Befunde neu."""
+def store_result(sw: dict, snapshot: dict | None, error: str | None, ts: int, kind: str = "full") -> None:
+    """Abfrage speichern: Fehler oder Momentaufnahme; Änderungen als Verlauf; Befunde neu.
+
+    kind = quick: nur Port-Status, wird in die letzte vollständige Abfrage eingearbeitet."""
+    from . import topo_history
+
+    full = kind != "quick"
     if error or snapshot is None:
-        ex("UPDATE net_switches SET last_poll = ?, last_error = ?, poll_requested = NULL WHERE id = ?",
-           (ts, (_text(error) or "Abfrage fehlgeschlagen"), sw["id"]))
+        if not sw.get("last_error") and sw.get("last_ok"):
+            topo_history.event(sw, ts, "switch_down", "critical", None, None,
+                               f"Antwortet nicht mehr: {_text(error) or 'Abfrage fehlgeschlagen'}")
+        ex("UPDATE net_switches SET last_poll = ?, last_full = ?, last_error = ?, poll_requested = NULL WHERE id = ?",
+           (ts, ts if full else sw.get("last_full"), (_text(error) or "Abfrage fehlgeschlagen"), sw["id"]))
         refresh_findings(sw["site_id"], ts)
         return
     old = json.loads(sw["snapshot"]) if sw.get("snapshot") else None
-    if old:
-        _history(sw, old, snapshot, ts)
+    if not full:
+        if not old:
+            ex("UPDATE net_switches SET last_poll = ? WHERE id = ?", (ts, sw["id"]))
+            return
+        snapshot = merge_quick(old, snapshot)
+    changes = 0
+    if sw.get("last_error") and sw.get("last_ok"):
+        topo_history.event(sw, ts, "switch_up", "info", None, None,
+                           f"Wieder erreichbar (nicht erreichbar seit {_ago(sw.get('last_poll'))})")
+        changes += 1
+    if old or full:
+        if full:                     # vollständige Abfrage: Switch-MACs neu lesen (neuer Switch, neue Ports)
+            from flask import current_app
+
+            _SITE_MACS.pop((current_app.config["DATABASE_URL"], sw["site_id"]), None)
+        macs, labels = _site_macs(sw["site_id"])
+        # erste Abfrage: gegen einen leeren Stand vergleichen – merkt sich die Geräte, ohne sie als neu zu melden
+        base = old or {"system": {}, "interfaces": [], "fdb": None, "lldp": None}
+        changes += topo_history.record(sw, base, snapshot, ts, full, macs, labels)
+    topo_history.store_snapshot(sw["id"], snapshot, ts)
     s = snapshot["system"]
-    ex("UPDATE net_switches SET last_poll = ?, last_ok = ?, last_error = NULL, poll_requested = NULL, sys_name = ?, "
-       "sys_descr = ?, sys_object_id = ?, sys_location = ?, uptime_s = ?, base_mac = ?, snapshot = ?, updated_at = ? "
-       "WHERE id = ?", (ts, ts, s["name"], s["descr"], s["object_id"], s["location"], s["uptime_s"],
-                        snapshot.get("base_mac"), json.dumps(snapshot, separators=(",", ":")), ts, sw["id"]))
-    refresh_findings(sw["site_id"], ts)
+    if full:
+        ex("UPDATE net_switches SET last_poll = ?, last_full = ?, last_ok = ?, last_error = NULL, poll_requested = NULL, "
+           "sys_name = ?, sys_descr = ?, sys_object_id = ?, sys_location = ?, uptime_s = ?, base_mac = ?, snapshot = ?, "
+           "updated_at = ? WHERE id = ?",
+           (ts, ts, ts, s["name"], s["descr"], s["object_id"], s["location"], s["uptime_s"],
+            snapshot.get("base_mac"), json.dumps(snapshot, separators=(",", ":")), ts, sw["id"]))
+    else:
+        ex("UPDATE net_switches SET last_poll = ?, last_ok = ?, last_error = NULL, uptime_s = ?, snapshot = ?, "
+           "updated_at = ? WHERE id = ?",
+           (ts, ts, s.get("uptime_s"), json.dumps(snapshot, separators=(",", ":")), ts, sw["id"]))
+    if full or changes or sw.get("last_error"):
+        refresh_findings(sw["site_id"], ts)
 
 
-def _history(sw: dict, old: dict, new: dict, ts: int) -> None:
-    restarted = (new["system"].get("uptime_s") or 0) < (old["system"].get("uptime_s") or 0)
-    before = {i["index"]: i for i in old.get("interfaces") or []}
-    for i in new["interfaces"]:
-        o = before.get(i["index"])
-        if not o:
-            continue
-        if not restarted:
-            delta = sum(max(0, (i.get(k) or 0) - (o.get(k) or 0)) for k in ("in_errors",)
-                        if i.get(k) is not None and o.get(k) is not None)
-            if delta:
-                ins("INSERT INTO net_port_errors (switch_id, if_index, ts, errors) VALUES (?, ?, ?, ?)",
-                    (sw["id"], i["index"], ts, delta))
-        if i["oper_up"] and o.get("oper_up") and i["speed_mbps"] and o.get("speed_mbps") and \
-                i["speed_mbps"] != o["speed_mbps"]:
-            _event(sw, ts, "speed_changed", i["index"], None,
-                   f"{i['name']}: {speed_text(o['speed_mbps'])} → {speed_text(i['speed_mbps'])}")
-    # MAC an anderem Port als zuvor (nur Zugangs-Ports; Uplinks tragen ohnehin viele MACs)
-    old_ports = {(e["mac"], e.get("vlan")): e["if_index"] for e in old.get("fdb") or []}
-    names = {i["index"]: i["name"] for i in new["interfaces"]}
-    counts: dict[int, int] = {}
-    for e in new["fdb"]:
-        counts[e["if_index"]] = counts.get(e["if_index"], 0) + 1
-    for e in new["fdb"]:
-        prev = old_ports.get((e["mac"], e.get("vlan")))
-        if prev and prev != e["if_index"] and counts.get(e["if_index"], 0) <= 2 and \
-                sum(1 for x in old.get("fdb") or [] if x["if_index"] == prev) <= 2:
-            _event(sw, ts, "mac_moved", e["if_index"], e["mac"],
-                   f"{e['mac']}: {names.get(prev, prev)} → {names.get(e['if_index'], e['if_index'])}")
+_SITE_MACS: dict[tuple[str, int], tuple[float, set[str]]] = {}
 
 
-def _event(sw: dict, ts: int, kind: str, if_index: int | None, mac: str | None, detail: str) -> None:
-    ins("INSERT INTO net_topo_events (site_id, switch_id, ts, kind, if_index, mac, detail) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (sw["site_id"], sw["id"], ts, kind, if_index, mac, detail[:300]))
+def _site_macs(site_id: int) -> tuple[set[str], dict[str, str]]:
+    """MAC-Adressen der Switches eines Standorts (zählen nicht als Geräte) und Namen der Geräte aus dem Netzwerkscan.
+
+    Die Switch-MACs sind fünf Minuten zwischengespeichert – die schnelle Abfrage läuft jede Minute für jeden Switch."""
+    import time
+
+    from flask import current_app
+
+    key = (current_app.config["DATABASE_URL"], site_id)
+    hit = _SITE_MACS.get(key)
+    if hit and time.monotonic() - hit[0] < 300:
+        macs = hit[1]
+    else:
+        macs = set()
+        for r in q("SELECT base_mac, snapshot FROM net_switches WHERE site_id = ?", (site_id,)):
+            if r["base_mac"]:
+                macs.add(r["base_mac"])
+            snap = json.loads(r["snapshot"]) if r["snapshot"] else {}
+            macs |= {i["mac"] for i in snap.get("interfaces") or [] if i.get("mac")}
+        _SITE_MACS[key] = (time.monotonic(), macs)
+    labels = {d["mac"]: d["note"] or d["hostname"] or d["ip"] or d["mac"]
+              for d in q("SELECT mac, ip, hostname, note FROM net_devices WHERE site_id = ? AND mac IS NOT NULL",
+                         (site_id,))}
+    return macs, labels
 
 
 def prune(ts: int | None = None) -> None:
+    from . import topo_history
+
+    topo_history.prune(ts, KEEP_DAYS)
     limit = (ts or repo.now()) - KEEP_DAYS * 86400
     ex("DELETE FROM net_port_errors WHERE ts < ?", (limit,))
     ex("DELETE FROM net_topo_events WHERE ts < ?", (limit,))
@@ -418,10 +495,13 @@ def switch_label(sw: dict) -> str:
     return sw.get("name") or sw.get("sys_name") or sw.get("host") or f"Switch {sw.get('id')}"
 
 
-def build(site_id: int, ts: int | None = None) -> Topology:
-    """Baum eines Standorts aus den gespeicherten Abfragen und dem Netzwerkscan."""
-    ts = ts or repo.now()
-    rows = q("SELECT * FROM net_switches WHERE site_id = ? AND status <> 'draft' ORDER BY id", (site_id,))
+def build(site_id: int, ts: int | None = None, at: int | None = None) -> Topology:
+    """Baum eines Standorts aus den gespeicherten Abfragen und dem Netzwerkscan; mit ``at`` im Stand von damals."""
+    from . import topo_history
+
+    ts = at or ts or repo.now()
+    rows = topo_history.rows_at(site_id, at) if at else \
+        q("SELECT * FROM net_switches WHERE site_id = ? AND status <> 'draft' ORDER BY id", (site_id,))
     errs: dict[tuple[int, int], int] = {}
     if rows:
         marks = ",".join("?" * len(rows))

@@ -1,11 +1,21 @@
 {% extends "base.html" %}
-{% from "_topology.html" import head, tree, tree_list, faceplate, legend with context %}
+{% from "_topology.html" import head, tree, tree_list, faceplate, legend, timeline with context %}
 {% block title %}Topologie · {{ site.name }}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
 {% block content %}
 {{ head(site, tabs, view, views, problem_count, poller, drafts) }}
 
-{% if not lay %}
+{% if at %}
+<div class="topo-banner" role="status">
+  <p><strong>Stand {{ at|dt }}</strong>{% if ev %} · {{ ev.switch_label }}: {{ ev.detail }}{% endif %}</p>
+  <a class="button" href="{{ url_for('web.topology', site_id=site.id, seite='verlauf') }}">Zurück zu Jetzt</a>
+</div>
+{% endif %}
+
+{% if not lay and at %}
+<section class="card"><h2>Zu diesem Zeitpunkt gibt es noch keinen gespeicherten Stand</h2>
+  <p class="muted">Stände werden ab der ersten Abfrage eines Switches gespeichert.</p></section>
+{% elif not lay %}
 <section class="card">
   <h2>Noch kein Switch eingetragen</h2>
   <p>Wachtl fragt die Switches per SNMP ab: welche Switches miteinander verbunden sind, welche Ports belegt sind und
@@ -18,7 +28,7 @@
 <div class="topo-layout">
   <section class="card topo-main" aria-labelledby="h-baum">
     <div class="page-head">
-      <h2 id="h-baum">Baum</h2>
+      <h2 id="h-baum">{{ 'Baum am ' ~ (at|dt) if at else 'Baum' }}</h2>
       <div class="topo-tools">
         {{ legend() }}
         <a class="small" href="{{ url_for('web.topology', site_id=site.id, switch=selected.row.id if selected else None, geraete='0' if show_devices else '1') }}">{{ 'Geräte ausblenden' if show_devices else 'Geräte zeigen' }}</a>
@@ -28,15 +38,27 @@
       <h3>Baum als Liste</h3>
       <ul>{% for r in topo.roots %}{{ tree_list(topo, site, r) }}{% endfor %}</ul>
     </div>
-    {{ tree(lay, site, selected.row.id if selected else None, 'select') }}
+    {{ tree(lay, site, selected.row.id if selected and side == 'switch' else None, 'select', highlight=highlight,
+             caption=('Topologie-Baum im Stand vom ' ~ (at|dt) ~ '. Das betroffene Gerät ist hervorgehoben. Dieselben Angaben stehen in der Liste unter dem Baum.') if at else '') }}
     <details class="topo-list">
       <summary>Baum als Liste</summary>
       <ul>{% for r in topo.roots %}{{ tree_list(topo, site, r) }}{% endfor %}</ul>
     </details>
   </section>
 
-  {% if selected %}{% set s = selected %}
-  <aside class="card topo-side" aria-labelledby="h-sel">
+  <div class="topo-side">
+  <nav class="seg topo-sidenav" aria-label="Seitenbereich">
+    <a href="{{ url_for('web.topology', site_id=site.id, switch=selected.row.id if selected else None) }}"{% if side == 'switch' %} aria-current="page"{% endif %}>Switch</a>
+    <a href="{{ url_for('web.topology', site_id=site.id, seite='verlauf') }}"{% if side == 'verlauf' %} aria-current="page"{% endif %}>Zeitleiste</a>
+  </nav>
+  {% if side == 'verlauf' %}
+  <aside class="card" aria-labelledby="h-tl">
+    <h2 id="h-tl">Zeitleiste</h2>
+    <p class="small muted">Punkt = Änderung (rot Störung, orange Warnung, blau Info). Antippen zeigt den Baum zu diesem Zeitpunkt.</p>
+    {{ timeline(tl_data, site, ev, at) }}
+  </aside>
+  {% elif selected %}{% set s = selected %}
+  <aside class="card" aria-labelledby="h-sel">
     <div class="topo-side-head">
       <h2 id="h-sel"><a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=s.row.id) }}">{{ s.node.label }}</a></h2>
       {% if s.node.status == 'bad' %}<span class="badge critical">antwortet nicht</span>
@@ -71,6 +93,7 @@
     <p class="small muted">Weboberfläche und SSH öffnen sich <strong>von diesem PC aus</strong> – das klappt nur, wenn er den Switch erreicht (gleiches Netz oder VPN).</p>
   </aside>
   {% endif %}
+  </div>
 </div>
 {% endif %}
 {% endblock %}
