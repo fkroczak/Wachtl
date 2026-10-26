@@ -24,7 +24,7 @@
   <ul>{% for f in analysis.findings %}<li class="finding-{{ f.level }}">{{ f.text }}</li>{% endfor %}</ul>
 </div>
 
-<table class="hops">
+<div class="scroll"><table class="hops">
   <thead><tr><th>Hop</th><th>Adresse</th><th>Bereich</th><th>Verlust</th><th>Letzte</th><th>Ø</th><th>Min</th><th>Max</th><th>Jitter</th><th>Pings</th><th>Bewertung</th></tr></thead>
   <tbody>
   {% for r in rows %}
@@ -50,7 +50,7 @@
     <tr><td colspan="11" class="muted">Noch kein Pfad ermittelt. Die Probe meldet das erste Ergebnis kurz nach dem Start des Checks.</td></tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 <p class="muted small">Verlust und Latenz aus den Dauerpings der letzten {{ window }}. „Pings“ = gesendete Pings im Zeitraum. Ein Klick auf die Adresse zeigt den Verlauf des Hops.</p>
 
 <h2>Pfadverlauf</h2>
