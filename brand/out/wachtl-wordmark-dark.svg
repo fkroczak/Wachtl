@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 128">
   <title>Wachtl</title>
   <g fill="#4689f0" transform="translate(4 10) scale(1.75)"><path d="M30 14 C46 14 58 26 60 40 C50 52 40 56 30 56 C18 56 8 47 8 35 C8 23 18 14 30 14Z M18 29a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0 -5.6 0Z"/><path d="M8.6 30 L2 33.5 L8.4 37Z"/><path d="M27 14.5 C26 8.5 22 5 16 5 C19 8 21 11 22 15.5Z"/><circle cx="16" cy="6" r="2.6"/></g>
-  <text x="128" y="86" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="58" font-weight="700" letter-spacing="-1" fill="#f1f3f5">Wachtl</text>
+  <text x="128" y="86" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="58" font-weight="700" letter-spacing="-1" fill="#f1f3f5">wachtl</text>
 </svg>

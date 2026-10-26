@@ -61,7 +61,7 @@ def wordmark(dark: bool = False) -> str:
     ink, accent = (INK_DARK, BLUE_DARK) if dark else (INK, BLUE)
     return svg("0 0 420 128", mark(accent, 4, 10, 1.75) + "\n  "
                f'<text x="128" y="86" font-family="Inter, \'Segoe UI\', Arial, sans-serif" font-size="58" '
-               f'font-weight="700" letter-spacing="-1" fill="{ink}">Wachtl</text>')
+               f'font-weight="700" letter-spacing="-1" fill="{ink}">wachtl</text>')
 
 
 def wizard_page(w: int, h: int) -> str:
@@ -74,7 +74,7 @@ def wizard_page(w: int, h: int) -> str:
   .sub{{color:{BLUE_SOFT};font-weight:600;font-size:{w*0.058}px;text-transform:uppercase;letter-spacing:.1em}}
 </style></head><body><div class="wrap">
 <svg viewBox="0 0 64 64">{mark(WHITE)}</svg>
-<div class="name">Wachtl</div><div class="sub">Netzwerk&#8209;Monitoring</div></div></body></html>'''
+<div class="name">wachtl</div><div class="sub">Netzwerk&#8209;Monitoring</div></div></body></html>'''
 
 
 def render(page, html: str, w: int, h: int, scale: float = 1) -> Image.Image:
