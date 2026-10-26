@@ -24,6 +24,12 @@ namespace Wachtl.Tray.Core
         [DataMember(Name = "detected_at")] public long DetectedAt { get; set; }
         [DataMember(Name = "resolved_at")] public long? ResolvedAt { get; set; }
 
+        /// <summary>Einmaliges Ereignis (Paketverlust, Netzwerkwechsel, Störung am Server): nur Sprechblase, nicht in der Liste.</summary>
+        [DataMember(Name = "event")] public bool Event { get; set; }
+
+        /// <summary>Keine Sprechblase, nur in der Liste (Sprechblasen dieser Art abgeschaltet).</summary>
+        [DataMember(Name = "quiet")] public bool Quiet { get; set; }
+
         public bool IsActive => State == "active";
 
         /// <summary>0 = info, 1 = warning, 2 = critical.</summary>
@@ -107,9 +113,9 @@ namespace Wachtl.Tray.Core
     }
 
     /// <summary>
-    /// Entscheidet, welche Client-Hinweise als Sprechblase erscheinen: Stand (seq) merken, nur Warnungen und
-    /// kritische Hinweise zeigen, „erledigt“ nur für vorher gezeigte, höchstens eine Sprechblase je 15 s,
-    /// mehr als 3 wartende zu einer zusammenfassen. Ohne WinForms, damit testbar.
+    /// Entscheidet, welche Client-Hinweise als Sprechblase erscheinen: Stand (seq) merken, jeden neuen Hinweis und jedes
+    /// Ereignis zeigen (beim Start nur frische Warnungen), „erledigt“ nur für vorher gezeigte, höchstens eine
+    /// Sprechblase je 15 s, mehr als 3 wartende zu einer zusammenfassen. Ohne WinForms, damit testbar.
     /// </summary>
     public sealed class FindingNotifier
     {
@@ -117,6 +123,21 @@ namespace Wachtl.Tray.Core
         public const int MaxBalloonText = 255;
         public const int CombineAbove = 3;
         public const string Caption = "Wachtl – Netzwerk-Hinweise";
+
+        /// <summary>Probe-Hinweis aus dem Menü „Test-Hinweis anzeigen“: prüft, ob Hinweise auf diesem PC sichtbar sind.</summary>
+        public static Balloon TestBalloon() => new Balloon(
+            "Wachtl – Test-Hinweis",
+            "So erscheinen Hinweise, wenn das Netzwerk gestört ist: Ausfall, Paketverlust oder Netzwerkwechsel.",
+            BalloonIcon.Warning,
+            new List<TrayFinding>
+            {
+                new TrayFinding
+                {
+                    FindingId = "test", Severity = "warning", State = "active", Event = true, Title = "Test-Hinweis",
+                    Message = "Dieser Hinweis wurde über das Menü des Wachtl-Symbols ausgelöst. Echte Hinweise erscheinen genauso.",
+                    DetectedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
+                },
+            });
         public const string NoFindings = "Zurzeit gibt es keine Netzwerk-Hinweise für diesen PC.";
 
         public static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(15);
@@ -129,6 +150,9 @@ namespace Wachtl.Tray.Core
         private readonly List<TrayFinding> _queue = new List<TrayFinding>();
         private long? _cursor;
         private DateTime? _lastBalloon;
+
+        /// <summary>Schwerster aktiver Hinweis: -1 keiner, 0 Info, 1 Warnung, 2 kritisch – für die Farbe des Symbols.</summary>
+        public int WorstActiveRank => _active.Count == 0 ? -1 : _active.Values.Max(f => f.Rank);
 
         /// <summary>Wert für ?since= der nächsten Abfrage.</summary>
         public long Cursor => _cursor ?? 0;
@@ -163,6 +187,17 @@ namespace Wachtl.Tray.Core
             foreach (var f in (response.Findings ?? new List<TrayFinding>()).Where(f => !string.IsNullOrEmpty(f.FindingId)).OrderBy(f => f.Seq))
             {
                 max = Math.Max(max, f.Seq);
+                if (f.Event)
+                {
+                    // einmalig: beim Start nicht nachholen, sonst sofort zeigen – auch Info (Netzwerkwechsel)
+                    if (response.Notify && !f.Quiet && !first)
+                    {
+                        Enqueue(f);
+                    }
+
+                    continue;
+                }
+
                 if (f.IsActive)
                 {
                     _active[f.Id] = f;
@@ -172,8 +207,15 @@ namespace Wachtl.Tray.Core
                     _active.Remove(f.Id);
                 }
 
-                if (!response.Notify)
+                if (!response.Notify || f.Quiet)
                 {
+                    if (!f.IsActive)
+                    {
+                        // still erledigt (z. B. in einer größeren Störung aufgegangen): nicht mehr nachträglich zeigen
+                        _queue.RemoveAll(q => q.Id == f.Id);
+                        _shown.Remove(f.Id);
+                    }
+
                     continue;
                 }
 
@@ -204,7 +246,8 @@ namespace Wachtl.Tray.Core
             var shown = _shown.TryGetValue(f.Id, out shownRank);
             if (f.IsActive)
             {
-                if (f.Rank >= 1 && (!shown || f.Rank > shownRank))
+                // jeder neue Hinweis erscheint, auch „Info“ (z. B. Kabel getrennt, WLAN übernimmt) – nichts unter den Tisch kehren
+                if (!shown || f.Rank > shownRank)
                 {
                     Enqueue(f);
                 }
@@ -247,6 +290,11 @@ namespace Wachtl.Tray.Core
 
             foreach (var f in items)
             {
+                if (f.Event)
+                {
+                    continue;
+                }
+
                 if (f.IsActive)
                 {
                     _shown[f.Id] = f.Rank;
@@ -263,7 +311,7 @@ namespace Wachtl.Tray.Core
 
         private static Balloon Single(TrayFinding f)
         {
-            var icon = !f.IsActive ? BalloonIcon.Info : f.Rank >= 2 ? BalloonIcon.Error : BalloonIcon.Warning;
+            var icon = !f.IsActive || f.Rank == 0 ? BalloonIcon.Info : f.Rank >= 2 ? BalloonIcon.Error : BalloonIcon.Warning;
             var title = Truncate(NonEmpty(f.Title, "Netzwerk-Hinweis"), MaxBalloonTitle);
             return new Balloon(title, BalloonText(f), icon, new List<TrayFinding> { f });
         }
@@ -308,7 +356,7 @@ namespace Wachtl.Tray.Core
                 sb.Append(NonEmpty(f.Title, "Netzwerk-Hinweis"));
                 var when = DateTimeOffset.FromUnixTimeSeconds(f.IsActive || !f.ResolvedAt.HasValue ? f.DetectedAt : f.ResolvedAt.Value)
                     .ToLocalTime().ToString("dd.MM.yyyy HH:mm", CultureInfo.InvariantCulture);
-                sb.Append(" (").Append(f.IsActive ? "seit " : "erledigt ").Append(when).Append(')');
+                sb.Append(" (").Append(f.Event ? "um " : f.IsActive ? "seit " : "erledigt ").Append(when).Append(')');
                 if (!string.IsNullOrWhiteSpace(f.Message))
                 {
                     sb.Append('\n').Append(f.Message!.Trim());

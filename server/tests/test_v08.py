@@ -114,13 +114,17 @@ class ClientFindingApiTest(AppTestCase):
 
     def test_config_switch(self):
         r = self.client.get("/api/probe/v1/config", headers=self.auth)
-        self.assertEqual(r.get_json()["client_findings"], {"enabled": True, "notify": True})
+        self.assertEqual(r.get_json()["client_findings"], {"enabled": True, "notify": True, "connectivity": True})
         settings_service.save({"client_findings_notify": False})
         r = self.client.get("/api/probe/v1/config", headers=self.auth)
-        self.assertEqual(r.get_json()["client_findings"], {"enabled": True, "notify": False})
+        self.assertEqual(r.get_json()["client_findings"], {"enabled": True, "notify": False, "connectivity": True})
         settings_service.save({"client_findings_notify": True, "client_findings_enabled": False})
         r = self.client.get("/api/probe/v1/config", headers=self.auth)
-        self.assertEqual(r.get_json()["client_findings"], {"enabled": False, "notify": False})
+        self.assertEqual(r.get_json()["client_findings"], {"enabled": False, "notify": False, "connectivity": True})
+        # Ausfälle und Paketverlust auf dem PC lassen sich getrennt abschalten
+        settings_service.save({"client_connectivity_notify": False})
+        r = self.client.get("/api/probe/v1/config", headers=self.auth)
+        self.assertFalse(r.get_json()["client_findings"]["connectivity"])
 
     def test_pages_and_admin_api(self):
         self.post(self.item(), self.item(kind="link_speed_changed", severity="warning",

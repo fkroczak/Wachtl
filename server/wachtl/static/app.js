@@ -635,3 +635,116 @@ for (const d of document.querySelectorAll("details[id]")) {
     try { d.open ? sessionStorage.setItem(key, "1") : sessionStorage.removeItem(key); } catch (e) { /* egal */ }
   });
 }
+
+// Live-Benachrichtigungen: alle 15 s nach neuen Störungen, Alarmen und Hinweisen von PCs fragen und sie unten rechts
+// zeigen – auf jeder Seite, ohne Neuladen. Mit Erlaubnis zusätzlich als Desktop-Benachrichtigung des Browsers.
+(function () {
+  "use strict";
+  const box = document.querySelector("[data-notify]");
+  if (!box) return;
+  const list = box.querySelector("[data-toast-list]");
+  const enable = box.querySelector("[data-notify-enable]");
+  const KEY = "wachtl:notify-cursor";
+  const MAX = 5;
+  const INTERVAL = 15000;
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch (e) { return null; } },
+    set(v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* Speicher gesperrt */ } },
+  };
+  // Angezeigte Hinweise überleben das automatische Neuladen der Seite, bis man sie schließt (je Tab)
+  const SHOWN = "wachtl:toasts";
+  const shown = {
+    get() { try { return JSON.parse(sessionStorage.getItem(SHOWN) || "[]"); } catch (e) { return []; } },
+    set(v) { try { sessionStorage.setItem(SHOWN, JSON.stringify(v.slice(-MAX))); } catch (e) { /* egal */ } },
+  };
+  const clearAll = box.querySelector("[data-toast-clear]");
+  const syncClear = () => { if (clearAll) clearAll.hidden = list.children.length < 2; };
+  clearAll?.addEventListener("click", () => {
+    list.replaceChildren();
+    shown.set([]);
+    syncClear();
+  });
+  const desktopOk = () => "Notification" in window && Notification.permission === "granted";
+  if (enable && "Notification" in window && Notification.permission === "default" && window.isSecureContext) {
+    enable.hidden = false;
+    enable.addEventListener("click", () => {
+      Notification.requestPermission().then(() => { enable.hidden = true; });
+    });
+  }
+
+  const fmt = (ts) => (ts ? new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "");
+  const sevClass = (it) => (it.state === "resolved" && it.source === "finding" ? "ok"
+    : it.severity === "critical" ? "bad" : it.severity === "warning" ? "warn" : "info");
+
+  function toast(it, restored) {
+    if (!restored) shown.set(shown.get().filter((x) => x.key !== it.key).concat([it]));
+    const el = document.createElement("div");
+    el.className = "toast " + sevClass(it);
+    const a = document.createElement("a");
+    a.href = it.url || "#";
+    const strong = document.createElement("strong");
+    strong.textContent = it.title;
+    const text = document.createElement("span");
+    text.textContent = it.text;
+    const when = document.createElement("span");
+    when.className = "small muted";
+    when.textContent = fmt(it.ts) + (it.state === "resolved" && it.source === "alert" ? " · beendet" : "");
+    a.append(strong, text, when);
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "toast-close";
+    close.setAttribute("aria-label", "Benachrichtigung schließen");
+    close.textContent = "✕";
+    close.addEventListener("click", () => {
+      el.remove();
+      shown.set(shown.get().filter((x) => x.key !== it.key));
+      syncClear();
+    });
+    el.append(a, close);
+    list.prepend(el);
+    while (list.children.length > MAX) list.lastElementChild.remove();
+    syncClear();
+    if (!restored && desktopOk() && document.hidden) {
+      try {
+        const n = new Notification(it.title, { body: it.text, tag: it.key, icon: "/static/wachtl-icon-180.png" });
+        n.onclick = () => { window.focus(); if (it.url) location.href = it.url; };
+      } catch (e) { /* manche Browser erlauben Benachrichtigungen nur über einen Service Worker */ }
+    }
+  }
+
+  function setCount(n) {
+    const badge = document.querySelector("[data-alert-count]");
+    const sr = document.querySelector("[data-alert-count-sr]");
+    if (badge) { badge.textContent = String(n); badge.hidden = !n; }
+    if (sr) sr.textContent = n ? ` (${n} aktiv)` : "";
+  }
+
+  let busy = false;
+  async function poll() {
+    if (busy) return;
+    busy = true;
+    try {
+      const url = new URL(box.dataset.notify, location.href);
+      const cur = store.get();
+      if (cur) { url.searchParams.set("a", cur.a); url.searchParams.set("f", cur.f); }
+      const r = await fetch(url, { credentials: "same-origin" });
+      if (!r.ok) return;
+      const data = await r.json();
+      // ein anderer Tab war schneller: dessen Stand gilt, sonst kämen die Hinweise doppelt
+      const now = store.get();
+      if (cur && now && (now.a > cur.a || now.f > cur.f)) return;
+      store.set(data.cursor);
+      for (const it of data.items || []) toast(it);
+      setCount(data.active || 0);
+    } catch (e) {
+      /* Server kurz nicht erreichbar: beim nächsten Mal */
+    } finally {
+      busy = false;
+    }
+  }
+  for (const it of shown.get()) toast(it, true);
+  poll();
+  setInterval(poll, INTERVAL);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+})();

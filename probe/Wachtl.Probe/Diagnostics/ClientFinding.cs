@@ -69,6 +69,14 @@ public sealed class ClientFinding
     /// <summary>Unix-Sekunden, null solange aktiv.</summary>
     public long? ResolvedAt { get; init; }
 
+    /// <summary>Einmaliges Ereignis (Paketverlust, Netzwerkwechsel): nur Sprechblase, kein aktiver Hinweis; nur lokal.</summary>
+    [JsonIgnore]
+    public bool Event { get; init; }
+
+    /// <summary>Ohne Sprechblase, nur für die Liste im Tray; nur lokal.</summary>
+    [JsonIgnore]
+    public bool Quiet { get; init; }
+
     [JsonIgnore]
     public bool IsActive => State == "active";
 

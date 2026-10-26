@@ -120,19 +120,23 @@ Firewall-, Proxy- und NAT-Szenarien: Probes bauen jede Verbindung selbst auf, NA
 | WachtlProbeOffline | 120 s kein Heartbeat | kritisch | alle anderen Alarme dieser Probe |
 | WachtlTargetDown | 5 s ohne Antwort (bei 1-s-Ping 5 Pings in Folge, bei längerem Intervall mindestens 2) | kritisch | bei Rolle Gateway: Internet- und Zielalarme dieser Probe |
 | WachtlWanDown | alle Internet-Referenzen zugleich 5 s ohne Antwort | kritisch | Einzelalarme der Referenzen |
+| WachtlPacketLossAny | **jeder** verlorene Ping, der kein Ausfall ist; endet nach 60 s ohne Verlust | Warnung | – |
 | WachtlPacketLoss | > 2 % über 5 min, 1 min anhaltend | Warnung | – |
 | WachtlPacketLossCritical | > 10 % über 5 min, 1 min anhaltend | kritisch | die Warnung |
 | WachtlLatencyHigh | Durchschnitt > 100 ms über 5 min, 1 min anhaltend | Warnung | – |
 
-Ausfälle werden ab der eingestellten Dauer zuverlässig erkannt, auch wenn sie kürzer sind als der
-15-s-Auswertetakt von vmalert: Die Regel prüft jede Sekunde der letzten 20 s. In der Ausfallübersicht stehen
-Beginn und Dauer sekundengenau, nachgerechnet aus den 1-s-Messwerten. Der Alarm selbst kommt bis zu 45 s nach dem
-Ausfall (Auswertetakt plus 30 s Wartezeit auf spät hochgeladene Messwerte).
+Ausfälle (WachtlTargetDown, WachtlWanDown) und jeder Paketverlust (WachtlPacketLossAny) erkennt der Server selbst,
+sobald die Messwerte ankommen – Sekunde für Sekunde aus den Rohdaten. Das gilt auch für **nachgelieferte** Werte:
+Hat ein PC selbst kein Netz (Kabel gezogen, Switch aus, WLAN weg), puffert die Probe ihre Messwerte und schickt sie
+später. Der Ausfall wird dann nachträglich erkannt, steht sekundengenau in der Übersicht und geht per E-Mail/Teams
+raus (mit „nachträglich erkannt“). Bis 0.9.5 hat vmalert solche Ausfälle übersehen, weil die Werte zu spät kamen.
+Details: [BENACHRICHTIGUNGEN.md](BENACHRICHTIGUNGEN.md).
 
 Schwellwerte, Dauer und Stufe sind unter **Verwaltung › Alarmregeln** änderbar. Empfehlungen:
 
 - Pro Standort mindestens zwei Probes, damit „nur dieser PC“ und „ganzer Standort“ unterscheidbar sind.
 - Für Telefonie-Standorte die Latenz-Warnung auf 50 ms und den Paketverlust auf 1 % senken.
+- Zu viele E-Mails wegen einzelner verlorener Pings: bei „Jeder Paketverlust“ den Schwellwert erhöhen (z. B. 3 = erst ab 3 verlorenen Pings in einer Störung) oder die Regel abschalten. Angezeigt wird jeder Verlust trotzdem.
 - WLAN-Clients als Probe nur gezielt einsetzen – sie erzeugen naturgemäß mehr Jitter und Verlust.
 - Bestätigen schaltet einen Alarm für 1 h bis 3 Tage stumm; danach meldet er sich erneut, falls er noch besteht.
 - Empfänger (E-Mail, Teams) unter **Verwaltung › Benachrichtigungen**; die Testnachricht kommt nach etwa 30 Sekunden an.

@@ -31,9 +31,9 @@ module.exports = {
         "largest-contentful-paint": ["error", { maxNumericValue: 2000, aggregationMethod: "median" }],
         "cumulative-layout-shift": ["error", { maxNumericValue: 0.05, aggregationMethod: "median" }],
         "total-blocking-time": ["error", { maxNumericValue: 200, aggregationMethod: "median" }],
-        "total-byte-weight": ["error", { maxNumericValue: 170 * 1024, aggregationMethod: "median" }],  // 0.10: Graph-Seite ~161 KB (+8 KB CSS)
-        "resource-summary:script:size": ["error", { maxNumericValue: 30 * 1024 }],
-        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 38 * 1024 }],  // 0.10: UniFi-Design, Seitenleiste, Reiter, Hamburger-Menü (~36 KB)
+        "total-byte-weight": ["error", { maxNumericValue: 180 * 1024, aggregationMethod: "median" }],  // 1.0: Graph-Seite ~173 KB (+6 KB Live-Benachrichtigungen); 0.10: ~161 KB
+        "resource-summary:script:size": ["error", { maxNumericValue: 36 * 1024 }],  // 1.0: Live-Benachrichtigungen (~34 KB)
+        "resource-summary:stylesheet:size": ["error", { maxNumericValue: 40 * 1024 }],  // 1.0: Hinweise unten rechts (~38 KB); 0.10: UniFi-Design, Seitenleiste, Reiter, Hamburger-Menü
         "resource-summary:third-party:count": ["error", { maxNumericValue: 0 }],
         // nur Warnung
         "first-contentful-paint": ["warn", { maxNumericValue: 1500, aggregationMethod: "median" }],
