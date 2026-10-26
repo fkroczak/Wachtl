@@ -45,7 +45,8 @@ test("Fokus ist auf jedem Bedienelement sichtbar", async ({ page }) => {
     await page.keyboard.press("Tab");
     const style = await page.evaluate(() => {
       const el = document.activeElement;
-      const cs = getComputedStyle(el);
+      // Feld mit Einheit: der Fokusring liegt am Rahmen um Feld und Einheit (.unit-input:focus-within)
+      const cs = getComputedStyle(el.closest(".unit-input") || el);
       return { tag: el.tagName, name: el.getAttribute("name") || el.textContent.trim().slice(0, 30),
                outline: cs.outlineStyle, width: parseFloat(cs.outlineWidth), shadow: cs.boxShadow };
     });
