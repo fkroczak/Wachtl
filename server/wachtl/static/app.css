@@ -132,11 +132,17 @@ h2 { font-size: 1.07rem; font-weight: 600; margin: 2rem 0 0.7rem; }
 .usermenu { position: relative; }
 .usermenu > summary { list-style: none; cursor: pointer; display: flex; border-radius: 50%; }
 .side-user { margin-top: auto; padding-top: 0.7rem; border-top: 1px solid var(--border); }
-.side-user > summary { align-items: center; gap: 0.65rem; padding: 0.4rem 0.5rem; border-radius: var(--radius-sm); }
+.side-user > summary { margin: 0; align-items: center; gap: 0.65rem; padding: 0.4rem 0.5rem; border-radius: var(--radius-sm); }
 .side-user > summary:hover, .side-user[open] > summary { background: var(--surface-2); }
 .side-user-name { display: grid; min-width: 0; font-weight: 600; color: var(--bar-text); overflow-wrap: anywhere; }
 .side-user-name .small { font-weight: 400; color: var(--bar-muted); }
-.side-user .usermenu-panel { top: auto; bottom: calc(100% + 0.3rem); left: 0; right: 0; min-width: 0; }
+/* Aufgeklappt bilden Menü und Benutzerzeile eine durchgehende Fläche: das Menü wächst nach oben aus der Zeile heraus */
+.side-user[open] > summary { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.side-user .usermenu-panel { top: auto; bottom: calc(100% - 0.7rem); left: 0; right: 0; min-width: 0; padding: 0.35rem 0 0;
+  background: var(--surface-2); border: 0; border-radius: var(--radius-sm) var(--radius-sm) 0 0; overflow: hidden;
+  box-shadow: 0 -10px 18px -8px rgb(0 0 0 / 0.18); }
+.side-user .usermenu-panel ul { border: 0; padding: 0; }
+.side-user .usermenu-logout { margin: 0; }
 .usermenu > summary::-webkit-details-marker { display: none; }
 .avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%;
   background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 0.8rem; }
