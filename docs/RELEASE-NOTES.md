@@ -11,6 +11,7 @@
 - **Wahrscheinliche Knotenpunkte**: Hängen an einem Port mehrere Geräte ohne LLDP-Nachbarn, zeigt der Baum einen nicht verwalteten Switch – ab 3 Geräten „wahrscheinlich“, bei 2 „möglich“. Virtuelle Maschinen eines Hosts zählen nicht mit.
 - **Menüpunkt Topologie** in der Seitenleiste: bei einem Standort direkt der Baum, bei mehreren zuerst je Standort eine Kachel mit Zahl der Switches, Problemen und gefundenen Switches, die noch Zugangsdaten brauchen.
 - Windows-Server: neue Firewall-Regel „Wachtl Server Switch-Suche“ (UDP 29809, 63321, 63323, nur aus dem eigenen Netz) für die Antworten auf den Rundruf.
+- **Alarme, Meldungen und Hinweise unter einem Menüpunkt**: Die Seitenleiste ist kürzer. „Alarme“ führt zu Reitern für Alarme, Störungsmeldungen der Benutzer und Hinweise der PCs; die Zahl offener Meldungen steht am Menüpunkt.
 
 ## Neu in 0.9.6
 

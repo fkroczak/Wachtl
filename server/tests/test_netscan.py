@@ -136,7 +136,9 @@ class NetscanServerTest(AppTestCase):
         self.assertIn("new_device", kinds)
         self.assertEqual(kinds.count("device_back"), 3)  # 2 + der Wiederkehrer aus dem Nachtest
 
-        section = netscan.report_section(self.site, self.now - 86400, self.now)
+        # bis now+1800: die beiden Nachtest-Scans liegen über now+300 und bekommen die Empfangszeit,
+        # die eine Sekunde nach self.now liegen kann
+        section = netscan.report_section(self.site, self.now - 86400, self.now + 1800)
         self.assertEqual(section["runs"], 9)
         self.assertEqual(len(section["devices"]), 4)
         self.assertTrue(all("services" in d and "label" in d for d in section["devices"]))
