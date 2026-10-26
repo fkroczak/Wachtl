@@ -129,6 +129,16 @@ def fmt_dt(ts):
     return datetime.fromtimestamp(ts).strftime("%d.%m.%Y %H:%M:%S") if ts else "–"
 
 
+@bp.app_template_filter("hm")
+def fmt_hm(ts):
+    return datetime.fromtimestamp(ts).strftime("%H:%M") if ts else "–"
+
+
+@bp.app_template_filter("dm")
+def fmt_dm(ts):
+    return datetime.fromtimestamp(ts).strftime("%d.%m.") if ts else "–"
+
+
 @bp.app_template_filter("ago")
 def fmt_ago(ts):
     if not ts:
@@ -903,6 +913,7 @@ def outages_view():
         "outages.html", items=items, summary=outages.summarize(items), causes=outages.CAUSES,
         sites=q("SELECT * FROM sites ORDER BY name"), range_key=range_key, ranges=list(OUTAGE_RANGES),
         site=site, cause=cause, show_all=show_all, min_s=min_s, window=window,
+        switch_sites={str(r["site_id"]) for r in q("SELECT DISTINCT site_id FROM net_switches WHERE status = 'active'")},
     )
 
 

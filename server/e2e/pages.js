@@ -25,6 +25,8 @@ const PAGES = [
   ["Topologie: Probleme", `/sites/${ids.site}/topologie/probleme`],
   ["Topologie: Pfad", `/sites/${ids.site}/topologie/pfad?geraet=pc-empfang`],
   ["Topologie: Assistent", `/sites/${ids.site}/topologie/switche/neu`],
+  ["Topologie: Zeitleiste", `/sites/${ids.site}/topologie?seite=verlauf&alle=1`],
+  ["Topologie: Chronik", `/sites/${ids.site}/topologie/verlauf`],
   ["Probe: Details", `/probes/${ids.probe}?tab=details`],
   ["Verwaltung: Checks", "/admin?tab=checks"],
   ["Verwaltung: Messung", "/admin?tab=messung"],

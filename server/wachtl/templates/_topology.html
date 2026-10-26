@@ -9,7 +9,7 @@
 <div class="page-head topo-head">
   <nav class="seg" aria-label="Ansicht der Topologie">
     {%- for key, text in views.items() %}
-    {%- set ep = {'baum': 'web.topology', 'switche': 'web.topology_switches', 'probleme': 'web.topology_problems', 'pfad': 'web.topology_path'}[key] %}
+    {%- set ep = {'baum': 'web.topology', 'switche': 'web.topology_switches', 'probleme': 'web.topology_problems', 'verlauf': 'web.topology_history', 'pfad': 'web.topology_path'}[key] %}
     <a href="{{ url_for(ep, site_id=site.id) }}"{% if key == view %} aria-current="page"{% endif %}>{{ text }}{% if key == 'probleme' and problem_count %} <span class="tab-count">{{ problem_count }}</span>{% endif %}</a>
     {%- endfor %}
   </nav>
@@ -38,7 +38,7 @@
 {% set STATUS_TEXT = {'bad': 'antwortet nicht', 'off': 'noch keine Daten', 'warn': '', 'ok': ''} %}
 
 {#- Baum als SVG. mode: select (Klick wählt Switch für den Seitenbereich) | detail (Klick öffnet Switch) -#}
-{% macro tree(lay, site, selected=None, mode='select', caption='') -%}
+{% macro tree(lay, site, selected=None, mode='select', caption='', highlight=None, link_args=None) -%}
 <figure class="topo-figure">
 <figcaption id="topo-cap" class="sr-only">{{ caption or 'Topologie-Baum des Standorts. Dieselben Angaben stehen in der Liste unter dem Baum.' }}</figcaption>
 <div class="scroll topo-scroll">
@@ -50,10 +50,10 @@
   {%- for b in lay.boxes %}{% set n = b.node %}
   {%- set sub = STATUS_TEXT[n.status] or n.sub or n.ip or '' %}
   {%- set label = KIND_TEXT[n.kind] ~ ' ' ~ n.label ~ (', ' ~ sub if sub else '') ~ (', ' ~ b.chip if b.chip else '') %}
-  {%- set href = (url_for('web.topology', site_id=site.id, switch=n.switch_id) if mode == 'select' else url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id)) if n.switch_id
+  {%- set href = (url_for('web.topology', site_id=site.id, switch=n.switch_id, **(link_args or {})) if mode == 'select' else url_for('web.topology_switch', site_id=site.id, switch_id=n.switch_id)) if n.switch_id
        else (url_for('web.topology_new', site_id=site.id, host=n.ip, name=n.label) if n.kind == 'neighbor' and n.ip and has_role(user, 'admin') else None) %}
   {%- if href %}<a href="{{ href }}" aria-label="{{ label }}{{ ' (ausgewählt)' if selected and n.switch_id == selected }}{{ ' – Zugangsdaten eintragen' if n.kind == 'neighbor' }}">{% endif %}
-  <g class="tn tn-{{ n.kind }} st-{{ n.status }}{{ ' tn-sel' if selected and n.switch_id == selected }}"{% if not href %} role="img" aria-label="{{ label }}"{% endif %}>
+  <g class="tn tn-{{ n.kind }} st-{{ n.status }}{{ ' tn-sel' if selected and n.switch_id == selected }}{{ ' tn-hl' if highlight and n.id in highlight }}"{% if not href %} role="img" aria-label="{{ label }}"{% endif %}>
     <rect class="tn-box" x="{{ b.x }}" y="{{ b.y }}" width="{{ lay.node_w }}" height="56" rx="10"/>
     <rect class="tn-ic" x="{{ b.x + 10 }}" y="{{ b.y + 12 }}" width="32" height="32" rx="8"/>
     <path class="tn-glyph" transform="translate({{ b.x + 17 }} {{ b.y + 19 }}) scale(0.75)" d="{{ GLYPHS[n.kind] }}"/>
@@ -125,5 +125,41 @@
   <li><span class="sq pt-err" aria-hidden="true"></span>Fehler</li>
   <li><span class="sq pt-free" aria-hidden="true"></span>frei</li>
   <li>↑ Uplink · ⚡ PoE</li>
+</ul>
+{%- endmacro %}
+
+{#- Zeitleiste rechts am Baum: Ereignisse nach Tagen, Klick zeigt den Stand von damals -#}
+{% macro timeline(tl, site, ev=None, at=None) -%}
+<div class="tl-tools">
+  {% if tl.all %}<a href="{{ url_for('web.topology', site_id=site.id, seite='verlauf') }}">Nur Störungen und Warnungen</a>
+  {% else %}<a href="{{ url_for('web.topology', site_id=site.id, seite='verlauf', alle='1') }}">Alle Änderungen zeigen</a>{% endif %}
+</div>
+{% if at %}<a class="tl-now" href="{{ url_for('web.topology', site_id=site.id, seite='verlauf', alle='1' if tl.all else None) }}">Jetzt</a>{% endif %}
+{% for day, rows in tl.days %}
+<h3 class="tl-day">{{ day }}</h3>
+<ol class="tl-list">
+  {% for e in rows %}
+  <li><a class="tl-item{{ ' tl-on' if ev and ev.id == e.id }}" href="{{ url_for('web.topology', site_id=site.id, ereignis=e.id, alle='1' if tl.all else None) }}"{% if ev and ev.id == e.id %} aria-current="true"{% endif %}>
+    <span class="tl-dot sev-{{ e.severity }}" aria-hidden="true"></span>
+    <time>{{ e.ts|hm }}</time>
+    <span class="tl-text"><strong>{{ e.switch_label }}</strong> {{ e.detail }}<span class="sr-only"> ({{ e.severity_text }})</span></span></a></li>
+  {% endfor %}
+</ol>
+{% else %}
+<p class="muted small">Noch keine {{ 'Änderungen' if tl.all else 'Störungen oder Warnungen' }} gespeichert. Die Zeitleiste füllt sich mit jeder Abfrage.</p>
+{% endfor %}
+<div class="actions">
+  {% if tl.older %}<a class="button" href="{{ url_for('web.topology', site_id=site.id, ereignis=tl.older.id, alle='1' if tl.all else None) }}">↑ Früher</a>{% endif %}
+  {% if tl.newer %}<a class="button" href="{{ url_for('web.topology', site_id=site.id, ereignis=tl.newer.id, alle='1' if tl.all else None) }}">↓ Später</a>{% endif %}
+  <a class="button" href="{{ url_for('web.topology_history', site_id=site.id) }}">Chronik</a>
+</div>
+{%- endmacro %}
+
+{#- Port-Verlauf: je Port eine Zeile, je Abschnitt eine Farbe -#}
+{% macro lanes_legend() -%}
+<ul class="topo-legend" aria-label="Legende des Verlaufs">
+  <li><span class="sq ln-10" aria-hidden="true"></span>10 Gbit/s</li><li><span class="sq ln-1" aria-hidden="true"></span>1 Gbit/s</li>
+  <li><span class="sq ln-100" aria-hidden="true"></span>100 Mbit/s</li><li><span class="sq ln-flap" aria-hidden="true"></span>Aussetzer</li>
+  <li><span class="sq ln-err" aria-hidden="true"></span>Fehler</li><li><span class="sq ln-down" aria-hidden="true"></span>kein Link</li>
 </ul>
 {%- endmacro %}

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% from "_topology.html" import head, tree with context %}
+{% block title %}Verlauf · Topologie · {{ site.name }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='topology.css') }}">{% endblock %}
+{% block content %}
+{{ head(site, tabs, view, views, problem_count, poller) }}
+<form method="get" action="{{ url_for('web.topology_history', site_id=site.id) }}" class="topo-filter">
+  <nav class="seg" aria-label="Art der Änderung">
+    {% for key, text in filters.items() %}<a href="{{ url_for('web.topology_history', site_id=site.id, art=key, switch=switch_id) }}"{% if key == art %} aria-current="page"{% endif %}>{{ text }}</a>{% endfor %}
+  </nav>
+  <input type="hidden" name="art" value="{{ art }}">
+  <div class="field">
+    <label for="f-switch">Switch</label>
+    <select id="f-switch" name="switch">
+      <option value="">alle</option>
+      {% for sw in switches %}<option value="{{ sw.id }}" {{ 'selected' if sw.id == switch_id }}>{{ sw.name or sw.sys_name or sw.host }}</option>{% endfor %}
+    </select>
+  </div>
+  <button>Anzeigen</button>
+</form>
+
+<div class="topo-layout">
+  <section class="card topo-chron" aria-labelledby="h-chron">
+    <h2 id="h-chron">Chronik</h2>
+    {% for day, rows in days %}
+    <h3 class="tl-day">{{ day }}</h3>
+    <ol class="tl-list">
+      {% for e in rows %}
+      <li><a class="tl-item{{ ' tl-on' if detail and detail.ev.id == e.id }}" href="{{ url_for('web.topology_history', site_id=site.id, art=art, switch=switch_id, bis=before, ereignis=e.id) }}#ereignis"{% if detail and detail.ev.id == e.id %} aria-current="true"{% endif %}>
+        <span class="tl-dot sev-{{ e.severity }}" aria-hidden="true"></span>
+        <time>{{ e.ts|hm }}</time>
+        <span class="tl-text"><strong>{{ e.kind_label }}</strong> · {{ e.switch_label }}{% if e.port %} · Port {{ e.port }}{% endif %}<br><span class="muted small">{{ e.detail }}</span><span class="sr-only"> ({{ e.severity_text }})</span></span></a></li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="muted">Keine Änderungen{{ ' dieser Art' if art != 'alle' }} gespeichert. Der Verlauf füllt sich mit jeder Abfrage der Switches.</p>
+    {% endfor %}
+    {% if more %}<p><a class="button" href="{{ url_for('web.topology_history', site_id=site.id, art=art, switch=switch_id, bis=more) }}">Ältere Änderungen</a></p>{% endif %}
+    {% if before %}<p><a href="{{ url_for('web.topology_history', site_id=site.id, art=art, switch=switch_id) }}">Zu den neuesten Änderungen</a></p>{% endif %}
+  </section>
+
+  {% if detail %}{% set e = detail.ev %}
+  <section class="card topo-main" id="ereignis" aria-labelledby="h-ev">
+    <div class="topo-side-head"><h2 id="h-ev">{{ e.kind_label }} · {{ e.ts|dt }}</h2><span class="badge {{ e.severity }}">{{ e.severity_text }}</span></div>
+    <dl class="kvlist">
+      <dt>Was</dt><dd>{{ e.detail }}</dd>
+      <dt>Wo</dt><dd>{% if e.switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=e.switch_id, port=e.if_index) }}{{ '#port' if e.if_index }}">{{ e.switch_label }}{% if e.port %} · Port {{ e.port }}{% endif %}</a>{% else %}{{ e.switch_label }}{% endif %}</dd>
+      {% if e.data_obj.get('from') is not none and e.data_obj.get('to') is not none and e.kind != 'mac_moved' %}<dt>Vorher → nachher</dt><dd>{{ e.data_obj['from'] }} → {{ e.data_obj['to'] }}</dd>{% endif %}
+      <dt>Erkannt über</dt><dd>{{ e.via }}</dd>
+    </dl>
+    <div class="actions">
+      <a class="button primary" href="{{ url_for('web.topology', site_id=site.id, ereignis=e.id) }}">Baum zu diesem Zeitpunkt</a>
+      <a class="button" href="{{ url_for('web.topology_context', site_id=site.id, von=e.ts - 300, bis=e.ts + 300, probe=detail.measure.probe.id if detail.measure else None) }}">Was passierte gleichzeitig</a>
+    </div>
+    {% if detail.lay %}
+    <h3>Stand nach der Änderung</h3>
+    {{ tree(detail.lay, site, None, 'detail', 'Topologie-Baum kurz nach der Änderung. Das betroffene Gerät ist hervorgehoben.', highlight=detail.highlight) }}
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
