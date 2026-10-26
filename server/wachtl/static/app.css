@@ -439,8 +439,11 @@ form.report-action input { width: 9rem; }
 .pw h3 { font-size: 1rem; overflow-wrap: anywhere; }
 .pw h3 a::after { content: ""; position: absolute; inset: 0; }
 .pw:hover { border-color: var(--accent); }
-.pw.bad { border: 2px solid var(--bad); border-left-width: 6px; }
-.pw.warn { border: 2px solid var(--warn); border-left-width: 6px; }
+.pw.bad { border: 2px solid var(--bad); border-left-width: 6px; background: color-mix(in srgb, var(--bad) 3%, var(--surface)); }
+.pw.warn { border: 2px solid var(--warn); border-left-width: 6px; background: color-mix(in srgb, var(--warn) 3%, var(--surface)); }
+.pw.ok { border-left: 6px solid var(--ok); }
+.pw-meta { margin-top: auto; }
+.pw-meta a { position: relative; z-index: 1; }
 .pw.inactive { color: var(--text-muted); }
 .pw-issues { padding-left: 1.1rem; font-size: 0.9rem; overflow-wrap: anywhere; }
 .pw-kv { display: grid; grid-template-columns: auto 1fr; gap: 0.1rem 0.7rem; font-size: 0.9rem; }

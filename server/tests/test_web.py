@@ -645,10 +645,24 @@ class SingleSiteTest(AppTestCase):
         self.make_user()
         self.login()
 
+    def test_add_probe_tile_asks_for_site_only_with_two(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "WachtlSetup-1.0.0.exe").write_bytes(b"MZ")
+            self.app.config["PROBE_DIR"] = d
+            tile = self.client.get("/probes").get_data(as_text=True).split('class="card pw pw-add"')[1]
+            self.assertIn('value="setup"', tile)                   # Plus lädt das Setup direkt
+            self.assertNotIn('<select name="site_id"', tile)      # ein Standort: keine Auswahl
+            self.make_site("Filiale")
+            tile = self.client.get("/probes").get_data(as_text=True).split('class="card pw pw-add"')[1]
+            self.assertIn('<select name="site_id"', tile)
+
     def pages(self):
         return {url: self.client.get(url, follow_redirects=True).get_data(as_text=True)
                 for url in ("/", "/outages", "/meldungen", "/admin", f"/probes/{self.pid}?tab=details",
-                            "/probes?tab=alle", "/admin/checks/new/ping", "/bericht")}
+                            "/probes", "/admin/checks/new/ping", "/bericht")}
 
     def test_hidden_with_one_site_and_back_with_two(self):
         sid = q1("SELECT id FROM sites")["id"]
@@ -666,7 +680,8 @@ class SingleSiteTest(AppTestCase):
         self.assertNotIn('name="site"', html["/bericht"])
         self.assertIn(f'<input type="hidden" name="site_id" value="{sid}">', html["/admin"])
         self.assertNotIn("Standort dieser Probe", html[f"/probes/{self.pid}?tab=details"])
-        self.assertNotIn("<th>Standort</th>", html["/probes?tab=alle"])
+        self.assertNotIn('class="pw-meta muted small"><a href="/sites/', html["/probes"])
+        self.assertIn('class="card pw pw-add"', html["/probes"])  # Kachel „Probe hinzufügen“ für Admins
         self.assertNotIn("Ein Standort</option>", html["/admin/checks/new/ping"])
 
         self.make_site("Filiale")
@@ -678,5 +693,5 @@ class SingleSiteTest(AppTestCase):
         self.assertIn('name="site"', html["/meldungen"])
         self.assertIn('name="site"', html["/bericht"])
         self.assertIn("Standort dieser Probe", html[f"/probes/{self.pid}?tab=details"])
-        self.assertIn("<th>Standort</th>", html["/probes?tab=alle"])
+        self.assertIn('class="pw-meta muted small"><a href="/sites/', html["/probes"])
         self.assertIn("Ein Standort</option>", html["/admin/checks/new/ping"])
