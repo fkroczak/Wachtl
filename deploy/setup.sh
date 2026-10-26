@@ -46,14 +46,26 @@ if [[ ! -f certs/wachtl.key ]]; then
   say "Erzeuge Schlüssel und selbstsigniertes Zertifikat für ${WACHTL_HOST}"
   openssl ecparam -name prime256v1 -genkey -noout -out certs/wachtl.key
 fi
-if [[ ! -f certs/wachtl.crt ]] || ! openssl x509 -checkend $((30*86400)) -noout -in certs/wachtl.crt >/dev/null; then
-  if [[ "$WACHTL_HOST" =~ ^[0-9.]+$ ]]; then SAN="IP:${WACHTL_HOST}"; else SAN="DNS:${WACHTL_HOST}"; fi
+# Die Namensbeschränkung lässt das Zertifikat – auf PCs als Stammzertifikat abgelegt – nur für diesen Server gelten.
+# Ältere Zertifikate ohne sie werden einmal neu ausgestellt (gleicher Schlüssel, Pin bleibt).
+if [[ ! -f certs/wachtl.crt ]] || ! openssl x509 -checkend $((30*86400)) -noout -in certs/wachtl.crt >/dev/null \
+   || ! openssl x509 -noout -text -in certs/wachtl.crt | grep -q "Name Constraints"; then
+  if [[ "$WACHTL_HOST" =~ ^[0-9.]+$ ]]; then
+    SAN="IP:${WACHTL_HOST}"; NC="IP:${WACHTL_HOST}/255.255.255.255"
+  else
+    SAN="DNS:${WACHTL_HOST}"; NC="DNS:${WACHTL_HOST}"
+  fi
   openssl req -new -x509 -key certs/wachtl.key -out certs/wachtl.crt -days 3650 \
     -subj "/CN=${WACHTL_HOST}/O=Wachtl" -addext "subjectAltName=${SAN}" \
-    -addext "keyUsage=digitalSignature" -addext "extendedKeyUsage=serverAuth"
+    -addext "basicConstraints=critical,CA:TRUE,pathlen:0" -addext "keyUsage=critical,digitalSignature,keyCertSign" \
+    -addext "extendedKeyUsage=serverAuth" -addext "nameConstraints=critical,permitted;${NC}"
   say "Zertifikat erstellt"
 fi
 chmod 600 certs/wachtl.key
+# öffentlicher Teil für die Download-Seite /zertifikat (ohne Schlüssel in den App-Container)
+mkdir -p certs/public
+cp certs/wachtl.crt certs/public/wachtl.crt
+chmod 644 certs/public/wachtl.crt
 PIN="$(openssl x509 -in certs/wachtl.crt -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64)"
 setvar WACHTL_SPKI_PIN "$PIN"
 
@@ -78,4 +90,4 @@ if [[ $FIRST_RUN -eq 1 ]]; then
   echo "    Bitte das Passwort nach der ersten Anmeldung ändern und sicher ablegen."
 fi
 echo "    Passwort vergessen: sudo $(pwd)/passwort.sh"
-echo "    Zertifikat für Browser: $(pwd)/certs/wachtl.crt"
+echo "    Zertifikat für Browser: ${WACHTL_PUBLIC_URL}/zertifikat (Windows-PCs mit Probe: automatisch)"

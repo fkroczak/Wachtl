@@ -51,11 +51,13 @@ services:
       WACHTL_RTP_PORT: ${RTP_PORT:-5004}
       WACHTL_SERVER_PROBE: ${SERVER_PROBE:-1}
       WACHTL_SERVER_PROBE_DIR: /serverprobe
+      WACHTL_CERT_FILE: /servercert/wachtl.crt
     volumes:
       - rules:/rules
       - amconfig:/amconfig
       - serverprobe:/serverprobe
       - ./probe:/probe:ro   # WachtlSetup-*.exe hier ablegen -> vorbelegtes Setup im Web-UI
+      - ./certs/public:/servercert:ro   # nur das Zertifikat (ohne Schlüssel) für /zertifikat
     depends_on:
       postgres:
         condition: service_healthy

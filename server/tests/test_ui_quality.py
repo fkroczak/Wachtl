@@ -227,7 +227,7 @@ class PageSemanticsTest(AppTestCase):
             if problems:
                 failures[url] = problems
         self.client.post("/logout", data={"csrf_token": self.session_csrf()})
-        for url in ("/login", "/passwort-vergessen"):
+        for url in ("/login", "/passwort-vergessen", "/zertifikat"):
             if problems := lint(self.client.get(url).get_data(as_text=True)):
                 failures[url] = problems
         self.assertEqual(failures, {}, json.dumps(failures, indent=1, ensure_ascii=False))

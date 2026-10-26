@@ -25,6 +25,8 @@ FW_HTTP = "Wachtl Server HTTP"
 FW_IPERF = "Wachtl Server iperf3"
 FW_RTP = "Wachtl Server RTP"
 TASK_BACKUP = "Wachtl Server Backup"
+# Anzeigename im Zertifikatspeicher; daran erkennt das Server-Setup „sein“ Stammzertifikat (Probe: „Wachtl Server (Probe)“)
+CERT_FRIENDLY_NAME = "Wachtl Server"
 
 
 class SystemError_(RuntimeError):
@@ -186,6 +188,49 @@ def remove_backup_task(run: Runner) -> None:
 
 def backup_task_exists(run: Runner) -> bool:
     return run(["schtasks", "/Query", "/TN", TASK_BACKUP], check=False).returncode == 0
+
+
+# -- Stammzertifikat -----------------------------------------------------------
+def _powershell(script: str) -> list[str]:
+    return ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]
+
+
+def _ps_quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
+
+
+_OPEN_ROOT = ("$s = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine'); "
+              "$s.Open('ReadWrite'); ")
+
+
+def trust_certificate(cert_file: Path, run: Runner) -> None:
+    """Server-Zertifikat unter „Vertrauenswürdige Stammzertifizierungsstellen“ (Computer) ablegen.
+
+    Damit öffnen Browser auf dem Server Wachtl ohne Warnung. Ein älteres Wachtl-Zertifikat (anderer
+    Fingerabdruck, gleicher Anzeigename) wird dabei ersetzt.
+    """
+    script = (
+        "$c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2("
+        f"{_ps_quote(str(cert_file))}); " + _OPEN_ROOT +
+        f"foreach ($o in @($s.Certificates | Where-Object {{ $_.FriendlyName -eq {_ps_quote(CERT_FRIENDLY_NAME)} "
+        "-and $_.Thumbprint -ne $c.Thumbprint })) { $s.Remove($o) }; "
+        f"$c.FriendlyName = {_ps_quote(CERT_FRIENDLY_NAME)}; $s.Add($c); $s.Close()"
+    )
+    run(_powershell(script))
+
+
+def untrust_certificate(run: Runner) -> None:
+    script = (_OPEN_ROOT +
+              f"foreach ($o in @($s.Certificates | Where-Object {{ $_.FriendlyName -eq {_ps_quote(CERT_FRIENDLY_NAME)} }})) "
+              "{ $s.Remove($o) }; $s.Close()")
+    run(_powershell(script), check=False)
+
+
+def certificate_trusted(run: Runner) -> bool:
+    script = ("@(Get-ChildItem Cert:\\LocalMachine\\Root | Where-Object { $_.FriendlyName -eq "
+              f"{_ps_quote(CERT_FRIENDLY_NAME)} }}).Count")
+    out = run(_powershell(script), check=False).stdout.strip()
+    return out not in ("", "0")
 
 
 # -- Hilfen -----------------------------------------------------------------------------

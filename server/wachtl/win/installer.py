@@ -193,10 +193,12 @@ Probes installieren:
   Im Web-UI unter Verwaltung > Probes registrieren einen Token erzeugen.
   Der fertige Befehl für die PCs steht dort.
 
-Browser-Warnung abstellen:
-  Zertifikat per Gruppenrichtlinie als vertrauenswürdige Stammzertifizierungsstelle verteilen
-  (Computerkonfiguration > Richtlinien > Windows-Einstellungen > Sicherheitseinstellungen >
-   Richtlinien für öffentliche Schlüssel > Vertrauenswürdige Stammzertifizierungsstellen).
+Browser-Warnung:
+  Das Zertifikat liegt auf diesem Server und auf jedem PC mit Wachtl-Probe automatisch unter
+  „Vertrauenswürdige Stammzertifizierungsstellen“ – dort öffnet Wachtl ohne Warnung.
+  Andere Geräte (Mac, iPhone, Android, PCs ohne Probe): {layout.env['WACHTL_PUBLIC_URL']}/zertifikat
+  Alternativ per Gruppenrichtlinie verteilen (Computerkonfiguration > Richtlinien > Windows-Einstellungen >
+  Sicherheitseinstellungen > Richtlinien für öffentliche Schlüssel > Vertrauenswürdige Stammzertifizierungsstellen).
 
 Verwaltung (PowerShell als Administrator):
   & "{layout.install_dir}\\wachtl-server.cmd" status
@@ -215,6 +217,8 @@ def system_setup(layout: Layout, run: winsys.Runner) -> None:
     winsys.secure_data_dir(layout, run)
     winsys.configure_firewall(layout, run)
     winsys.schedule_backup(layout, run)
+    # Browser auf dem Server vertrauen Wachtl ohne Warnung; die PCs erledigt das Probe-Setup
+    winsys.trust_certificate(layout.cert_file, run)
 
 
 # -- Befehle --------------------------------------------------------------------------------
@@ -248,6 +252,13 @@ def install(data: dict, run: winsys.Runner, start: bool = True) -> dict:
 def upgrade(data_dir: str | None, run: winsys.Runner, start: bool = True) -> dict:
     layout = Layout.load(data_dir)
     log.info("Update: Programm %s, Daten %s", layout.install_dir, layout.data_dir)
+    # ältere Zertifikate ohne Namensbeschränkung vor dem Ablegen als Stammzertifikat neu ausstellen (Pin bleibt)
+    pin, reason = certs.ensure_certificate(layout.hostnames, layout.key_file, layout.cert_file)
+    if reason:
+        log.info("Zertifikat neu ausgestellt (%s)", reason)
+        if pin != layout.env["WACHTL_SPKI_PIN"]:
+            layout.env["WACHTL_SPKI_PIN"] = pin
+            write_env(layout.env_file, layout.env)
     if IS_WINDOWS or run.dry_run:
         system_setup(layout, run)
     write_setup_info(layout)
@@ -276,6 +287,7 @@ def uninstall(run: winsys.Runner, remove_data: bool = False) -> dict:
                                                          ("victoria-metrics", "vmalert", "alertmanager")]
     winsys.remove_firewall(run, programs)
     winsys.remove_backup_task(run)
+    winsys.untrust_certificate(run)
     if remove_data and layout is not None and layout.data_dir.exists():
         shutil.rmtree(layout.data_dir, ignore_errors=True)
     leftovers = [] if run.dry_run else check_removed(layout, run)
@@ -294,6 +306,8 @@ def check_removed(layout: Layout | None, run: winsys.Runner) -> list[str]:
             left.append(f"Firewall-Regel „{name}“")
     if winsys.backup_task_exists(run):
         left.append(f"Geplante Aufgabe „{winsys.TASK_BACKUP}“")
+    if winsys.certificate_trusted(run):
+        left.append(f"Stammzertifikat „{winsys.CERT_FRIENDLY_NAME}“")
     if layout is not None:
         ports = {layout.https_port, layout.http_port, layout.port("IPERF")} - {0}   # TCP; RTP (UDP) endet mit dem Dienst
         for port in sorted(ports):

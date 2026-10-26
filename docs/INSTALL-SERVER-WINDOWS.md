@@ -27,7 +27,11 @@ Windows-Dienst **Wachtl Server**. Funktionen und Web-UI sind identisch mit der L
 Das Setup erledigt anschließend:
 
 - Dateien kopieren (Python 3.12, VictoriaMetrics, Alertmanager, WinSW, Wachtl)
-- Schlüssel und selbstsigniertes Zertifikat (10 Jahre) für alle angegebenen Namen erzeugen, SPKI-Pin berechnen
+- Schlüssel und selbstsigniertes Zertifikat (10 Jahre) für alle angegebenen Namen erzeugen, SPKI-Pin berechnen;
+  das Zertifikat gilt per Namensbeschränkung nur für diese Namen und IP-Adressen
+- Zertifikat unter **Vertrauenswürdige Stammzertifizierungsstellen** (Computer, Anzeigename „Wachtl Server“)
+  ablegen – Browser auf dem Server öffnen Wachtl ohne Warnung. Die PCs mit Probe erledigt das Probe-Setup,
+  alle übrigen Geräte: [Zertifikat auf anderen Geräten](BETRIEB.md#zertifikat-im-browser)
 - Datenbank anlegen, Standard-Checks (Gateway, 8.8.8.8, 1.1.1.1) und Standard-Alarme einrichten, Admin anlegen
 - Dienst „Wachtl Server“ unter dem virtuellen Konto `NT SERVICE\WachtlServer` (verzögerter Autostart, Neustart nach Absturz)
 - Datenordner auf SYSTEM, Administratoren und das Dienstkonto beschränken
@@ -97,7 +101,7 @@ Details: [STOERUNGSMELDUNGEN.md](STOERUNGSMELDUNGEN.md).
 | --- | --- |
 | `C:\Program Files\Wachtl Server\` | Programm (python, app, bin, service), `wachtl-server.cmd` |
 | `<Daten>\config\wachtl.env` | Ports, Aufbewahrung, Geheimnisse |
-| `<Daten>\certs\` | `wachtl.key`, `wachtl.crt` (für die GPO-Verteilung an Browser) |
+| `<Daten>\certs\` | `wachtl.key`, `wachtl.crt` (auch zum Herunterladen unter `https://<Server>/zertifikat`) |
 | `<Daten>\data\wachtl.db` | SQLite-Datenbank (Standorte, Probes, Checks, Benutzer, Alarme, Audit) |
 | `<Daten>\vm-raw\`, `<Daten>\vm-agg\` | Messwerte: 1-s-Rohdaten und 1-min-Verlauf |
 | `<Daten>\logs\` | `supervisor.log`, `web.log`, `serverprobe.log`, `vm-raw.log`, `vm-agg.log`, `vmalert.log`, `alertmanager.log`, `setup.log`, `backup.log` |

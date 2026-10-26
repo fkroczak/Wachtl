@@ -21,7 +21,7 @@ public static class Cli
     public const int ExitOk = 0, ExitUsage = 2, ExitPinMismatch = 3, ExitUnreachable = 4, ExitRejected = 5, ExitNotEnrolled = 6,
         ExitDeferred = 7;
 
-    private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "deregister", "--version", "help", "--help" };
+    private static readonly string[] Commands = { "enroll", "check", "configure", "show-pin", "status", "deregister", "trust", "--version", "help", "--help" };
 
     public static bool IsCommand(string[] args) => args.Length > 0 && Commands.Contains(args[0]);
 
@@ -50,6 +50,7 @@ public static class Cli
                 "show-pin" => await ShowPinAsync(options),
                 "status" => Status(),
                 "deregister" => await DeregisterAsync(result),
+                "trust" => await TrustAsync(options, result),
                 "--version" => PrintVersion(),
                 _ => Help(),
             };
@@ -160,6 +161,143 @@ public static class Cli
             {
                 File.Delete(path);
             }
+        }
+    }
+
+    // -- trust: Server-Zertifikat als Stammzertifikat ablegen (Setup, als Administrator) ------------
+    /// <summary>
+    /// Holt das Zertifikat vom Server – nur wenn es zum Pin passt – und legt es unter „Vertrauenswürdige
+    /// Stammzertifizierungsstellen“ ab. Server, Pin und Proxy kommen aus dem Zustand der Probe (oder der
+    /// nachzuholenden Registrierung) bzw. aus --server/--pin/--proxy. Mit --remove 1: wieder entfernen.
+    /// </summary>
+    private static async Task<int> TrustAsync(Dictionary<string, string> options, CliResult result)
+    {
+        if (Optional(options, "remove") is "1" or "true")
+        {
+            var removed = RootTrust.RemoveAll();
+            result.Set("removed", removed.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Console.WriteLine(removed > 0 ? "Wachtl-Zertifikat aus den Stammzertifizierungsstellen entfernt." : "Kein Wachtl-Zertifikat abgelegt.");
+            return ExitOk;
+        }
+
+        IReadOnlyList<Uri> servers;
+        string pin;
+        string? proxy;
+        if (Optional(options, "server") is { } serverArg)
+        {
+            servers = Enrollment.ParseServers(serverArg);
+            pin = Required(options, "pin");
+            proxy = Optional(options, "proxy");
+        }
+        else if (StateStore.Load() is { } state)
+        {
+            servers = state.AllServers().ToList();
+            pin = state.SpkiPin;
+            proxy = state.Proxy;
+        }
+        else if (StateStore.LoadPending() is { } pending)
+        {
+            servers = Enrollment.ParseServers(string.Join(",", pending.ServerUrls));
+            pin = pending.SpkiPin;
+            proxy = pending.Proxy;
+        }
+        else
+        {
+            Console.Error.WriteLine("Probe ist nicht registriert – --server und --pin angeben.");
+            return ExitNotEnrolled;
+        }
+
+        if (string.IsNullOrWhiteSpace(pin) || servers.Count == 0)
+        {
+            Console.Error.WriteLine("Server oder Pin fehlen.");
+            return ExitNotEnrolled;
+        }
+
+        CliResult? lastResult = null;
+        var lastCode = ExitUnreachable;
+        foreach (var server in servers)
+        {
+            var attempt = new CliResult(null);
+            var (code, cert) = await FetchPinnedCertificateAsync(server, pin, proxy, attempt);
+            if (cert is null)
+            {
+                lastResult = attempt;
+                lastCode = code;
+                continue;
+            }
+
+            using (cert)
+            {
+                var outcome = RootTrust.Install(cert);
+                result.Set("trusted", outcome == RootTrust.Outcome.NotSelfSigned ? "0" : "1");
+                result.Set("outcome", outcome.ToString());
+                result.Set("thumbprint", cert.Thumbprint);
+                Console.WriteLine(outcome switch
+                {
+                    RootTrust.Outcome.Added => $"Zertifikat {cert.Subject} unter „Vertrauenswürdige Stammzertifizierungsstellen“ abgelegt.",
+                    RootTrust.Outcome.AlreadyTrusted => "Zertifikat ist bereits als vertrauenswürdig hinterlegt.",
+                    _ => "Der Server nutzt ein Zertifikat einer Zertifizierungsstelle – nichts abzulegen.",
+                });
+                return ExitOk;
+            }
+        }
+
+        if (lastResult is not null)
+        {
+            result.CopyFrom(lastResult);
+        }
+
+        result.Set("trusted", "0");
+        Console.Error.WriteLine("Zertifikat nicht abgelegt: " + (lastResult?.Get("error") ?? "Server nicht erreichbar"));
+        return lastCode;
+    }
+
+    /// <summary>Zertifikat des Servers holen; nur zurückgeben, wenn sein Schlüssel zum Pin passt.</summary>
+    private static async Task<(int Code, X509Certificate2? Certificate)> FetchPinnedCertificateAsync(
+        Uri server, string pin, string? proxy, CliResult result)
+    {
+        X509Certificate2? pinned = null;
+        var handler = new SocketsHttpHandler
+        {
+            ConnectTimeout = TimeSpan.FromSeconds(10),
+            SslOptions = new SslClientAuthenticationOptions
+            {
+                RemoteCertificateValidationCallback = (_, cert, _, _) =>
+                {
+                    if (cert is null)
+                    {
+                        return false;
+                    }
+
+                    var c = new X509Certificate2(cert);
+                    if (!SpkiPin.Matches(c, pin))
+                    {
+                        c.Dispose();
+                        return false;
+                    }
+
+                    pinned?.Dispose();
+                    pinned = c;
+                    return true;
+                },
+            },
+        };
+        if (proxy is not null)
+        {
+            handler.Proxy = new WebProxy(proxy);
+            handler.UseProxy = true;
+        }
+
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
+        try
+        {
+            using var response = await http.GetAsync(new Uri(server, "healthz"));
+            return (ExitOk, pinned);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            pinned?.Dispose();
+            return (Fail(ex, result), null);
         }
     }
 
@@ -453,6 +591,7 @@ public static class Cli
               wachtl-probe.exe show-pin --server https://wachtl.firma.local
               wachtl-probe.exe status
               wachtl-probe.exe deregister         am Server abmelden und Token löschen (Deinstallation)
+              wachtl-probe.exe trust [--remove 1] Server-Zertifikat als Stammzertifikat ablegen/entfernen (als Administrator)
               wachtl-probe.exe --version
 
             Optional bei check/enroll/configure: --out ergebnis.ini (für den Setup-Assistenten)

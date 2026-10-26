@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Zertifikat installieren{% endblock %}
+{% block content %}
+<div class="login wide">
+  <h1>Zertifikat installieren</h1>
+  <p>Wachtl nutzt ein eigenes Zertifikat. Ist es auf dem Gerät als vertrauenswürdig hinterlegt, öffnet der
+    Browser Wachtl ohne Sicherheitswarnung. Das Zertifikat gilt nur für die Adressen dieses Wachtl-Servers.</p>
+
+  {% if cert %}
+  <p><a class="button primary" href="{{ url_for('web.certificate_download') }}" download>Zertifikat herunterladen</a></p>
+  <p class="muted">Gültig bis {{ cert.not_valid_after_utc.strftime('%d.%m.%Y') }}.
+    Fingerabdruck (SHA-256) zum Vergleichen:</p>
+  <pre>{{ fingerprint }}</pre>
+  {% else %}
+  <p class="muted">Das Zertifikat ist auf diesem Server nicht hinterlegt (WACHTL_CERT_FILE). Es liegt im
+    Wachtl-Ordner unter <code>certs/wachtl.crt</code>.</p>
+  {% endif %}
+
+  <h2>Windows</h2>
+  <p><strong>PCs mit Wachtl-Probe und der Windows-Server: nichts zu tun.</strong> Das Setup legt das Zertifikat
+    automatisch unter <em>Vertrauenswürdige Stammzertifizierungsstellen</em> ab und entfernt es bei der
+    Deinstallation wieder.</p>
+  <p>Andere PCs: Datei öffnen › <em>Zertifikat installieren</em> › <em>Lokaler Computer</em> ›
+    <em>Alle Zertifikate in folgendem Speicher speichern</em> › <em>Vertrauenswürdige Stammzertifizierungsstellen</em>.
+    Für viele PCs per Gruppenrichtlinie: Computerkonfiguration › Richtlinien › Windows-Einstellungen ›
+    Sicherheitseinstellungen › Richtlinien für öffentliche Schlüssel › Vertrauenswürdige Stammzertifizierungsstellen.</p>
+
+  <h2>macOS</h2>
+  <p>Datei öffnen, Schlüsselbund <em>System</em> wählen. Danach in der Schlüsselbundverwaltung doppelt auf
+    „{{ cert.subject.rfc4514_string() if cert else 'Wachtl' }}“ klicken › <em>Vertrauen</em> ›
+    <em>Bei Verwendung dieses Zertifikats: Immer vertrauen</em>. Oder im Terminal:</p>
+  <pre>sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain wachtl.crt</pre>
+
+  <h2>iPhone und iPad</h2>
+  <p>Diese Seite in Safari öffnen und das Zertifikat herunterladen › <em>Einstellungen › Profil geladen</em> ›
+    <em>Installieren</em>. Danach unter <em>Einstellungen › Allgemein › Info › Zertifikatsvertrauenseinstellungen</em>
+    das Wachtl-Zertifikat einschalten.</p>
+
+  <h2>Android</h2>
+  <p>Zertifikat herunterladen › <em>Einstellungen › Sicherheit › Weitere Sicherheitseinstellungen ›
+    Verschlüsselung und Anmeldedaten › Zertifikat installieren › CA-Zertifikat</em> (Bezeichnungen je nach
+    Hersteller leicht anders). Chrome vertraut ihm danach; einzelne Apps können eigene Regeln haben.</p>
+
+  <h2>Linux</h2>
+  <pre>sudo cp wachtl.crt /usr/local/share/ca-certificates/wachtl.crt
+sudo update-ca-certificates</pre>
+  <p class="muted">Firefox und Chrome unter Linux nutzen teils einen eigenen Speicher: dort unter
+    Einstellungen › Datenschutz und Sicherheit › Zertifikate importieren.</p>
+
+  <h2>Firefox</h2>
+  <p class="muted">Unter Windows und macOS übernimmt Firefox die Stammzertifikate des Systems
+    (Einstellung <code>security.enterprise_roots.enabled</code>). Sonst unter Einstellungen › Datenschutz und
+    Sicherheit › Zertifikate anzeigen › Zertifizierungsstellen › Importieren.</p>
+
+  <p class="forgot"><a href="{{ url_for('web.login') }}">Zur Anmeldung</a></p>
+</div>
+{% endblock %}
