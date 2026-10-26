@@ -153,9 +153,11 @@ def topology_context(site_id: int):
 @login_required()
 def topology_index():
     """Menüpunkt Topologie: bei einem Standort direkt sein Baum, sonst eine Kachel je Standort."""
+    from .web import single_site
+
+    if only := single_site():
+        return redirect(url_for("web.topology", site_id=only["id"]))
     sites = q("SELECT * FROM sites ORDER BY name")
-    if len(sites) == 1:
-        return redirect(url_for("web.topology", site_id=sites[0]["id"]))
     cards = []
     for site in sites:
         sw = q1("SELECT COUNT(*) AS n, SUM(CASE WHEN last_error IS NOT NULL AND status = 'active' THEN 1 ELSE 0 END) AS bad, "
