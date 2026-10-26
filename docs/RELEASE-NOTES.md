@@ -3,11 +3,13 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
-## Unveröffentlicht
+## Neu in 0.9.6
 
 - **Switch-Topologie**: Neuer Reiter Standort › **Topologie**. Wachtl fragt die Switches per SNMP ab (**SNMPv1, v2c und v3** mit MD5/SHA-1/SHA-2 und DES/AES-128/192/256) und zeigt einen **Baum** vom Internet über das Gateway bis zu jedem Switch und Gerät – mit Port und Geschwindigkeit an jeder Verbindung. Klick auf einen Switch: Seitenbereich mit Uplink, Ports, Nachbarn und „Weboberfläche öffnen“. **Switch aufgeschaltet**: Frontansicht aller Ports; ein Klick zeigt Gerät, VLAN, PoE, Fehler und die Messwerte einer Wachtl-Probe am Port. Dazu **Switch-Karten**, **Probleme** (Port-Fehler, Verbindungen unter 1 Gbit/s, Halbduplex, Kabelkreise, nicht verwaltete Switches, Switches ohne Zugangsdaten) und **Pfad suchen** (jedes Kabel vom Gerät bis ins Internet). Ein **Assistent** fragt je Switch die Zugangsdaten ab, testet sie sofort und übernimmt sie auf Wunsch für den nächsten Switch. Zugangsdaten liegen verschlüsselt in der Datenbank. Details: [TOPOLOGIE.md](TOPOLOGIE.md).
 
 - **Verlauf der Topologie**: Wachtl prüft den Port-Status der Switches jede Minute und fragt sie alle 5 Minuten vollständig ab (beides einstellbar). Kurze Aussetzer zwischen zwei Abfragen erkennt es über den Zeitpunkt der letzten Statusänderung am Port. Jede Änderung wird gespeichert: Link weg/da, kurz ohne Link, Geschwindigkeit, Port-Fehler, Neustart, Switch nicht erreichbar, Nachbar geändert, Gerät neu oder umgesteckt. **Zeitleiste am Baum** wie Time Machine: Klick auf eine Änderung zeigt den Baum von damals. Dazu **Chronik** mit Filtern, **Port-Verlauf** je Switch (jeder Port über 6 h, 24 h oder 7 Tage) und **Störung im Kontext**: Paketverlust einer Probe neben den Ports auf ihrem Weg und den Änderungen derselben Zeit, mit Einschätzung der Ursache (Link aus der Ausfallübersicht).
+
+- **Standort bearbeiten**: Ein Stift neben dem Standortnamen öffnet das Bearbeiten direkt (statt eines aufklappbaren Menüs).
 
 ## Neu in 0.9.5
 
