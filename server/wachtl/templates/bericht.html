@@ -12,14 +12,14 @@
 <form method="get" action="{{ url_for('web.report_pdf') }}" class="settings-form" data-check-form novalidate>
   <input type="hidden" name="teile" value="1">
   <fieldset>
-    <legend>Standort und Zeitraum</legend>
+    <legend>{{ 'Zeitraum' if single_site else 'Standort und Zeitraum' }}</legend>
     <div class="grid-form">
-      {% call(attrs) field("site", "Standort", error=fe.site) %}
+      {% if not single_site %}{% call(attrs) field("site", "Standort", error=fe.site) %}
         <select name="site" {{ attrs }}>
           <option value="">Alle Standorte</option>
           {% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if form.site == s.id|string }}>{{ s.name }}</option>{% endfor %}
         </select>
-      {% endcall %}
+      {% endcall %}{% endif %}
       {% call(attrs) field("range", "Zeitraum", error=fe.range) %}
         <select name="range" data-field="range" {{ attrs }}>
           {% for k, v in presets.items() %}<option value="{{ k }}" {{ 'selected' if form.range == k }}>{{ v[0] }}</option>{% endfor %}

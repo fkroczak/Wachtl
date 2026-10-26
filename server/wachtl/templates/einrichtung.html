@@ -4,15 +4,17 @@
 {% block content %}
 <nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / Probes einrichten</nav>
 <h1>Probes einrichten</h1>
-<p class="muted">Vier Schritte, alles ist mit bewährten Standards vorbelegt. Prüfen, bei Bedarf anpassen, unten auf <strong>Einrichten</strong> klicken –
+<p class="muted">{{ 'Vier' if sites|length > 1 else 'Drei' }} Schritte, alles ist mit bewährten Standards vorbelegt. Prüfen, bei Bedarf anpassen, unten auf <strong>Einrichten</strong> klicken –
   danach gibt es das fertige Setup für die PCs. Alles lässt sich später unter <a href="{{ url_for('web.admin') }}">Verwaltung</a> ändern.</p>
 {{ error_summary(errors) }}
 {% set f = form %}
+{% set multi = sites|length > 1 %}{% set o = 0 if multi else 1 %}
 {% set n = notify_settings %}
 <form method="post" class="settings-form" data-check-form>
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="steps">
 
+  {% if multi %}
   <fieldset class="card">
     <legend><h2>1 · Standort</h2></legend>
     <p class="muted small">Wo stehen die PCs? Der Standort gruppiert die Probes in Übersicht und Alarmen.</p>
@@ -31,9 +33,15 @@
       {% endcall %}
     </div>
   </fieldset>
+  {% elif sites %}
+  <input type="hidden" name="site_id" value="{{ sites[0].id }}">
+  {% else %}
+  <input type="hidden" name="site_id" value="new">
+  {% if f.get('site_name') %}<input type="hidden" name="site_name" value="{{ f.get('site_name') }}">{% endif %}
+  {% endif %}
 
   <fieldset class="card">
-    <legend><h2>2 · Messungen</h2></legend>
+    <legend><h2>{{ 2 - o }} · Messungen</h2></legend>
     <p class="muted small">Das Standardpaket deckt LAN, Internet und den Weg zum Wachtl-Server ab. Was es schon gibt, wird nicht doppelt angelegt.</p>
     <div class="scroll">
     <table>
@@ -51,17 +59,19 @@
     </table>
     </div>
     <div class="grid-form">
+      {% if multi %}
       {% call(attrs) field("scope", "Gilt für", help="„Alle Probes“ ist für die meisten Kunden richtig – neue Standorte bekommen die Messungen dann automatisch.") %}
         <select name="scope" {{ attrs }}>
           <option value="all" {{ 'selected' if f.get('scope', 'all') == 'all' }}>alle Probes</option>
           <option value="site" {{ 'selected' if f.get('scope') == 'site' }}>nur diesen Standort</option>
         </select>
       {% endcall %}
+      {% else %}<input type="hidden" name="scope" value="all">{% endif %}
     </div>
   </fieldset>
 
   <fieldset class="card">
-    <legend><h2>3 · Alarmierung</h2></legend>
+    <legend><h2>{{ 3 - o }} · Alarmierung</h2></legend>
     <p class="muted small">Wer soll erfahren, wenn ein Standort, das Internet oder ein Ziel ausfällt? Leer lassen = keine Benachrichtigung.
       SMTP-Benutzer und -Passwort stehen unter <a href="{{ admin_url('benachrichtigungen') }}">Verwaltung › Benachrichtigungen</a>.</p>
     <div class="grid-form">
@@ -85,7 +95,7 @@
   </fieldset>
 
   <fieldset class="card">
-    <legend><h2>4 · PCs</h2></legend>
+    <legend><h2>{{ 4 - o }} · PCs</h2></legend>
     <p class="muted small">Danach gibt es eine Setup-Datei mit Server, Pin und Token. Auf jedem PC starten und <em>Installieren</em> klicken.
       {% if not probe_setup %}<strong>Hinweis:</strong> Auf diesem Server liegt noch kein Setup – dann zeigt Wachtl die Werte zum Eintragen.{% endif %}</p>
     <div class="grid-form">

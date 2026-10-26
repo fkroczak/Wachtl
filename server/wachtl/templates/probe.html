@@ -7,7 +7,7 @@
 {% from "_tabs.html" import tabs as tabnav %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / Probe</nav>
+<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / Probe</nav>
 <h1>{{ probe.hostname }}{% if probe.kind == 'server' %} <span class="badge info">Wachtl-Server</span>{% endif %}</h1>
 {% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.probe', probe_id=probe.id, tab=key))) %}{% endfor %}
 {{ tabnav(tab_items, tab) }}
@@ -181,7 +181,7 @@
     <dl>
       <dt>Status</dt><dd>
         {{ probe_state(probe) }}{% if probe.deregistered_at %} am {{ probe.deregistered_at|dt }} (abgemeldet){% endif %}</dd>
-      <dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>
+      {% if not single_site %}<dt>Standort</dt><dd><a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a></dd>{% endif %}
       <dt>Letzter Kontakt</dt><dd title="{{ probe.last_seen|dt }}">{{ probe.last_seen|ago }}</dd>
       <dt>IP-Adresse</dt><dd>{{ probe.last_ip or '–' }}{% if addresses and addresses != [probe.last_ip] %} <span class="muted">(lokal {{ addresses|join(', ') }})</span>{% endif %}</dd>
       <dt>Gegenstelle</dt><dd>{{ onoff(probe.iperf_server) }}{{ (' iperf3 Port %d, RTP UDP %d'|format(probe.iperf_port, default_rtp_port)) if probe.iperf_server }}</dd>
@@ -238,6 +238,7 @@
   <button class="primary">Speichern</button>
 </form>
 
+{% if not single_site %}
 <h2 id="standort">Standort dieser Probe</h2>
 <form method="post" action="{{ url_for('web.probe_move', probe_id=probe.id) }}" class="row">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -245,6 +246,7 @@
   <button class="primary" data-confirm="Probe {{ probe.hostname }} dem gewählten Standort zuordnen? Sie misst danach die Messungen dieses Standorts.">Zuordnen</button>
 </form>
 <p class="muted small">Bisherige Messwerte und Meldungen bleiben beim alten Standort; neue Werte zählen zum neuen Standort.</p>
+{% endif %}
 {% endif %}
 
 {% endif %}
