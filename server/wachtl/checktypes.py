@@ -65,6 +65,11 @@ THRESHOLD_FIELDS = (
           help="0 = kein Alarm", group="Schwellwerte"),
 )
 
+# Netzwerkscan (docs/NETZWERKSCAN.md): Standard-Ports, die Geräte im Kundennetz typischerweise anbieten
+NETSCAN_PORTS = "21,22,23,25,53,80,110,135,139,143,443,445,515,554,631,993,995,1883,3306,3389,5060,5432,5900,8006,8080,8443,9100"
+NETSCAN_MAX_PORTS = 1024
+NETSCAN_SCHEDULE_FIELDS = tuple(replace(f, default=15) if f.key == "schedule_min" else f for f in SCHEDULE_FIELDS)
+
 # Sprachtest: kurze Tests häufiger als Bandbreitentests (ein Gespräch belastet die Leitung kaum)
 RTP_SCHEDULE_FIELDS = tuple(replace(f, default=15) if f.key == "schedule_min" else f for f in SCHEDULE_FIELDS)
 RTP_PEERS = (("server", "Wachtl-Server"), ("probe", "andere Probe"),
@@ -180,11 +185,31 @@ TYPES: dict[str, CheckType] = {
                   help="3,6 = viele Gesprächspartner merken Störungen. 0 = kein Alarm."),
         ),
     ),
+    "netscan": CheckType(
+        "netscan", "Netzwerkscan (Geräte und Dienste)",
+        "Sucht regelmäßig alle Geräte im lokalen Netz der Probe, prüft offene Ports und erkennt Dienste "
+        "(SSH, HTTP, HTTPS, RDP …). Geräte, die sich unregelmäßig an- und abmelden, und doppelte IP-Adressen "
+        "fallen so auf.",
+        "Netze", "", False,
+        (
+            Field("subnets", "Netze", "text", "auto", group="Netz",
+                  help="auto = alle eigenen Netze der Probe (höchstens /22 je Netzwerkkarte). Sonst private Netze "
+                       "in CIDR-Schreibweise, durch Komma getrennt, z. B. 192.168.10.0/24, 10.0.5.0/24."),
+            Field("port_scan", "Ports prüfen und Dienste erkennen", "bool", True, group="Netz"),
+            Field("ports", "TCP-Ports", "text", NETSCAN_PORTS, group="Netz",
+                  help="Komma-getrennt, Bereiche erlaubt (z. B. 8000-8010), höchstens 1024 Ports."),
+            Field("timeout_ms", "Timeout je Versuch", "int", 500, 100, 5000, unit="ms"),
+            Field("parallel", "Gleichzeitige Versuche", "int", 64, 1, 256),
+            Field("max_hosts", "Höchstens Adressen", "int", 1024, 1, 4096,
+                  help="Schutz vor versehentlich großen Netzen; größere Netze brechen mit Fehler ab."),
+        ) + NETSCAN_SCHEDULE_FIELDS,
+    ),
 }
 
-ROLE_DEFAULT = {"ping": "target", "path": "target", "iperf": "target", "speedtest": "reference", "rtp": "target"}
+ROLE_DEFAULT = {"ping": "target", "path": "target", "iperf": "target", "speedtest": "reference", "rtp": "target",
+                "netscan": "target"}
 BANDWIDTH_TYPES = ("iperf", "speedtest")
-SCHEDULED_TYPES = BANDWIDTH_TYPES + ("rtp",)
+SCHEDULED_TYPES = BANDWIDTH_TYPES + ("rtp", "netscan")
 PEER_TYPES = ("iperf", "rtp")       # Gegenstelle Wachtl-Server, andere Probe oder eigener Host
 
 
@@ -248,6 +273,15 @@ def parse_params(type_key: str, form: dict, *, probe_ids: set[int] | None = None
             errors.append(FieldError("iperf3-Host fehlt.", "host"))
         if values["method"] == "http" and not values["down_url"] and not values["up_url"]:
             errors.append(FieldError("Mindestens eine Download- oder Upload-URL angeben.", "down_url"))
+    if type_key == "netscan":
+        try:
+            values["subnets"] = normalize_subnets(values["subnets"])
+        except ValueError as exc:
+            errors.append(FieldError(f"Netze: {exc}", "subnets"))
+        try:
+            values["ports"] = format_ports(parse_ports(values["ports"]))
+        except ValueError as exc:
+            errors.append(FieldError(f"TCP-Ports: {exc}", "ports"))
     if type_key in SCHEDULED_TYPES:
         if not values["weekdays"] or set(values["weekdays"]) - set("1234567"):
             errors.append(FieldError("Wochentage: nur Ziffern 1 bis 7.", "weekdays"))
@@ -265,7 +299,73 @@ def timeout_ms(type_key: str, params: dict) -> int:
     """Spalte ``timeout_ms`` geplanter Checks: Abbruchzeit, beim Sprachtest Testdauer plus Reserve."""
     if type_key == "rtp":
         return (int(params["duration_s"]) + 10) * 1000
+    if type_key == "netscan":
+        return 30 * 60 * 1000          # großes Netz mit Portscan: bis zu einer halben Stunde
     return int(params["timeout_s"]) * 1000
+
+
+def normalize_subnets(raw: str) -> str:
+    """„auto“ oder private IPv4-Netze (CIDR, Komma-getrennt), höchstens /16 groß – nie das Internet scannen."""
+    raw = (raw or "").strip()
+    if raw.lower() in ("", "auto"):
+        return "auto"
+    out: list[str] = []
+    for part in raw.replace(";", ",").replace(" ", ",").split(","):
+        if not part:
+            continue
+        try:
+            net = ipaddress.ip_network(part if "/" in part else part + "/32", strict=False)
+        except ValueError:
+            raise ValueError(f"„{part[:40]}“ ist kein Netz in CIDR-Schreibweise") from None
+        if net.version != 4:
+            raise ValueError("nur IPv4-Netze")
+        if not (net.is_private or net.subnet_of(ipaddress.ip_network("100.64.0.0/10"))) or net.is_loopback:
+            raise ValueError(f"{net} ist kein privates Netz – gescannt werden nur interne Netze")
+        if net.prefixlen < 16:
+            raise ValueError(f"{net} ist zu groß (höchstens /16)")
+        if str(net) not in out:
+            out.append(str(net))
+    if not out:
+        return "auto"
+    if len(out) > 16:
+        raise ValueError("höchstens 16 Netze")
+    return ", ".join(out)
+
+
+def parse_ports(raw: str) -> list[int]:
+    """TCP-Ports „22,80,8000-8010“ → sortierte Liste ohne Doppelte."""
+    ports: set[int] = set()
+    for part in (raw or "").replace(";", ",").replace(" ", ",").split(","):
+        if not part:
+            continue
+        lo, _, hi = part.partition("-")
+        try:
+            a, b = int(lo), int(hi or lo)
+        except ValueError:
+            raise ValueError(f"„{part[:20]}“ ist kein Port") from None
+        if not (1 <= a <= 65535 and 1 <= b <= 65535) or a > b:
+            raise ValueError(f"„{part[:20]}“ liegt nicht zwischen 1 und 65535")
+        ports.update(range(a, b + 1))
+        if len(ports) > NETSCAN_MAX_PORTS:
+            raise ValueError(f"höchstens {NETSCAN_MAX_PORTS} Ports")
+    if not ports:
+        raise ValueError("mindestens ein Port")
+    return sorted(ports)
+
+
+def format_ports(ports: list[int]) -> str:
+    """Liste wieder kompakt schreiben: zusammenhängende Ports als Bereich."""
+    out: list[str] = []
+    i = 0
+    while i < len(ports):
+        j = i
+        while j + 1 < len(ports) and ports[j + 1] == ports[j] + 1:
+            j += 1
+        out.append(str(ports[i]) if j - i < 2 else f"{ports[i]}-{ports[j]}")
+        if 0 < j - i < 2:
+            out.extend(str(p) for p in ports[i + 1:j + 1])
+        i = j + 1
+    return ",".join(out)
 
 
 def _convert(f: Field, raw: str):
@@ -334,6 +434,10 @@ def summary(check: dict, params: dict, probe_names: dict[int, str] | None = None
     if t == "path":
         hops = {"all": "alle Hops", "first": f"erste {p['first_n']} Hops", "none": "nur Traceroute"}[p["ping_hops"]]
         return f"{hops} alle {check['interval_s']} s, Pfad alle {p['trace_interval_min']} min"
+    if t == "netscan":
+        when = f"alle {p['schedule_min']} min" if p["schedule_min"] else "nur manuell"
+        ports = f", {len(parse_ports(p['ports']))} Ports" if p["port_scan"] else ", ohne Portscan"
+        return f"{p['subnets']}{ports}, {when}"
     if t == "rtp":
         when = f"alle {p['schedule_min']} min" if p["schedule_min"] else "nur manuell"
         return f"{p['codec'].upper().replace('G', 'G.', 1)}, {p['ptime_ms']} ms, {p['duration_s']} s, {when}"
@@ -352,6 +456,8 @@ def target_for(type_key: str, params: dict, probe_names: dict[int, str] | None =
             name = (probe_names or {}).get(params["peer_probe_id"], str(params["peer_probe_id"]))
             return f"probe:{name}"
         return f"{params['host']}:{params['port']}"
+    if type_key == "netscan":
+        return params["subnets"]
     if type_key == "speedtest":
         if params["method"] == "iperf":
             return f"{params['host']}:{params['port']}"

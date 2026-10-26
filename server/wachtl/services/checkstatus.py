@@ -22,7 +22,8 @@ from ..db import q
 
 STATE_LABELS = {"ok": "ok", "warn": "auffällig", "down": "gestört", "stale": "keine Daten", "waiting": "wartet"}
 PROBLEM_STATES = ("down", "warn", "stale")
-KIND_LABELS = {"ping": "Ping", "path": "Pfad", "iperf": "iperf3", "speedtest": "WAN", "rtp": "Sprache"}
+KIND_LABELS = {"ping": "Ping", "path": "Pfad", "iperf": "iperf3", "speedtest": "WAN", "rtp": "Sprache",
+               "netscan": "Netzwerk"}
 # so lange darf ein Dauerping ohne Wert bleiben, bevor er als „keine Daten“ gilt
 PING_STALE_S = 180
 LOSS_WARN_PCT = 2
@@ -70,6 +71,9 @@ def latest_runs(probe_ids: list[int] | None = None) -> tuple[dict, dict]:
     for r in q("SELECT r.* FROM rtp_runs r JOIN (SELECT MAX(id) AS id FROM rtp_runs" + where +
                " GROUP BY probe_id, check_id) m ON m.id = r.id", params):
         bandwidth[(r["probe_id"], r["check_id"], "rtp")] = r
+    for r in q("SELECT r.* FROM netscan_runs r JOIN (SELECT MAX(id) AS id FROM netscan_runs" + where +
+               " GROUP BY probe_id, check_id) m ON m.id = r.id", params):
+        bandwidth[(r["probe_id"], r["check_id"], "netscan")] = r
     return paths, bandwidth
 
 
@@ -156,6 +160,26 @@ def _rtp_state(probe: dict, c: dict, run: dict | None, now: int) -> CheckState:
     return CheckState(c, "ok", detail, run["ts"], vals)
 
 
+def _netscan_state(probe: dict, c: dict, run: dict | None, now: int) -> CheckState:
+    params = checktypes.merged("netscan", json.loads(c["params"] or "{}"))
+    params["offset_min"] = repo._schedule_offset(probe["id"], c["id"], params["schedule_min"], params["offset_min"])
+    params["timeout_s"] = 900          # ein Scan dauert länger als ein Bandbreitentest
+    vals = {"netscan": run}
+    overdue = schedule.overdue_since(params, run["ts"] if run else None, int(c.get("created_at") or 0), now)
+    if run is None:
+        if overdue:
+            return CheckState(c, "stale", "geplanter Netzwerkscan ist ausgeblieben", values=vals)
+        plan = "wartet auf den ersten Scan" if params["schedule_min"] else "nur manuell, noch nicht gescannt"
+        return CheckState(c, "waiting", plan, values=vals)
+    if run["error"]:
+        return CheckState(c, "down", run["error"], run["ts"], vals)
+    detail = f"{run['hosts_found']} Geräte"
+    if overdue:
+        return CheckState(c, "stale", f"geplanter Scan überfällig, letzter vor {(now - run['ts']) // 60} min",
+                          run["ts"], vals)
+    return CheckState(c, "ok", detail, run["ts"], vals)
+
+
 def probe_states(probe: dict, checks: list[dict], live: dict, paths: dict, bandwidth: dict,
                  now: int | None = None) -> list[CheckState]:
     """Zustand je zugewiesenem Check einer Probe (``checks`` aus ``repo.checks_for_probe``)."""
@@ -168,6 +192,8 @@ def probe_states(probe: dict, checks: list[dict], live: dict, paths: dict, bandw
             out.append(_path_state(c, paths.get((probe["id"], c["id"])), now))
         elif c["type"] == "rtp":
             out.append(_rtp_state(probe, c, bandwidth.get((probe["id"], c["id"], "rtp")), now))
+        elif c["type"] == "netscan":
+            out.append(_netscan_state(probe, c, bandwidth.get((probe["id"], c["id"], "netscan")), now))
         elif c["type"] in checktypes.BANDWIDTH_TYPES:
             runs = {d: bandwidth.get((probe["id"], c["id"], d)) for d in ("down", "up")}
             out.append(_bandwidth_state(probe, c, runs, now))

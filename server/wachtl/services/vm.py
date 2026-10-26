@@ -279,3 +279,84 @@ def site_sparklines(site_id: int) -> dict[tuple[str, str], dict]:
     for item in instant(f"avg_over_time(wachtl_ping_jitter_ms{{{sel}}}[5m])"):
         entry(item["metric"])["jitter"] = _num(item["value"][1])
     return out
+
+
+# -- PDF-Bericht: Verläufe und Hop-Werte über einen frei gewählten Zeitraum (1-min-Aggregate, 13 Monate) ------
+def _range(query: str, start: int, end: int, step: int) -> list[dict]:
+    return _get(_cfg("VM_AGG_URL"), "/api/v1/query_range",
+                {"query": query, "start": int(start), "end": int(end), "step": int(step)})
+
+
+def report_ping_series(probe_id: int, start: int, end: int, step: int) -> dict[str, dict]:
+    """Je Ping-Check einer Probe: Latenz (Mittel, Max, p10/p90), Verlust (Mittel, Max), Jitter, Minuten mit
+    Verlust und verlorene Sekunden je Schritt. Ein Wert bei ``ts`` gilt für den Abschnitt (ts − step, ts].
+
+    Wirft VMError, wenn VictoriaMetrics nicht antwortet; nur die Zusatzwerte (Minuten mit Verlust) dürfen fehlen.
+    """
+    sel = f'probe="{int(probe_id)}"'
+    w = f"{int(step)}s"
+    required = {
+        "avg": f"avg_over_time(wachtl:ping_rtt_ms:avg_1m{{{sel}}}[{w}])",
+        "max": f"max_over_time(wachtl:ping_rtt_ms:max_1m{{{sel}}}[{w}])",
+        "q": f"avg_over_time(wachtl:ping_rtt_ms:quantiles_1m{{{sel}}}[{w}])",
+        "loss": f"avg_over_time(wachtl:ping_loss_ratio_1m{{{sel}}}[{w}]) * 100",
+        "jitter": f"avg_over_time(wachtl:ping_jitter_ms:avg_1m{{{sel}}}[{w}])",
+    }
+    optional = {
+        "loss_max": f"max_over_time(wachtl:ping_loss_ratio_1m{{{sel}}}[{w}]) * 100",
+        "loss_minutes": f"count_gt_over_time(wachtl:ping_loss_ratio_1m{{{sel}}}[{w}], 0)",
+        "lost_s": f"sum_over_time(wachtl:ping_loss_ratio_1m{{{sel}}}[{w}]) * 60",
+    }
+    out: dict[str, dict] = {}
+    for key, query in [*required.items(), *optional.items()]:
+        try:
+            result = _range(query, start, end, step)
+        except VMError:
+            if key in required:
+                raise
+            continue
+        for item in result:
+            m = item["metric"]
+            entry = out.setdefault(m.get("check_id", ""), {"role": m.get("role", ""), "target": m.get("target", ""),
+                                                           "series": {}})
+            name = f"p{round(float(m['phi']) * 100)}" if key == "q" and m.get("phi") else key
+            points = entry["series"].setdefault(name, {})
+            for ts, v in item["values"]:
+                v = _num(v)
+                if v is not None:
+                    points.setdefault(int(float(ts)), []).append(v)
+    # mehrere Reihen je Check (z. B. Ziel oder Name geändert) zu einem Wert je Zeitpunkt zusammenfassen
+    for entry in out.values():
+        entry["series"] = {name: sorted((ts, sum(vs) / len(vs)) for ts, vs in pts.items())
+                           for name, pts in entry["series"].items()}
+    return out
+
+
+def report_hop_table(probe_id: int, check_id: int, start: int, end: int) -> dict[int, dict]:
+    """Je Hop eines Pfad-Checks: Verlust, Latenz (Mittel, Max) und Jitter über den ganzen Zeitraum."""
+    sel = _sel(probe_id, check_id)
+    w = f"{max(int(end) - int(start), 60)}s"
+    queries = {
+        "loss": f"avg_over_time(wachtl:hop_loss_ratio_1m{{{sel}}}[{w}]) * 100",
+        "avg": f"avg_over_time(wachtl:hop_rtt_ms:avg_1m{{{sel}}}[{w}])",
+        "max": f"max_over_time(wachtl:hop_rtt_ms:max_1m{{{sel}}}[{w}])",
+        "jitter": f"avg_over_time(wachtl:hop_jitter_ms:avg_1m{{{sel}}}[{w}])",
+        "minutes": f"count_over_time(wachtl:hop_rtt_ms:avg_1m{{{sel}}}[{w}])",
+    }
+    hops: dict[int, dict] = {}
+    for key, query in queries.items():
+        for item in _get(_cfg("VM_AGG_URL"), "/api/v1/query", {"query": query, "time": int(end)}):
+            labels = item["metric"]
+            try:
+                hop = int(labels.get("hop", ""))
+            except ValueError:
+                continue
+            ip_entry = hops.setdefault(hop, {"ips": {}})["ips"].setdefault(labels.get("hop_ip", ""), {})
+            ip_entry[key] = _num(item["value"][1])
+    for entry in hops.values():
+        ips = entry["ips"]
+        main = max(ips, key=lambda ip: (ips[ip].get("minutes") or 0, ips[ip].get("avg") is not None))
+        entry.update(ips[main])
+        entry["ip"] = main
+        entry["other_ips"] = sorted(ip for ip in ips if ip and ip != main)
+    return hops

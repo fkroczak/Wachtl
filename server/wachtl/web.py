@@ -496,7 +496,7 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
 
 
 SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Ausfälle", "meldungen": "Hinweise & Meldungen",
-             "messungen": "Alle Messungen"}
+             "messungen": "Alle Messungen", "netzwerk": "Netzwerk"}
 PROBE_TABS_DETAIL = {"messungen": "Messungen", "ping": "Ping & Pfade", "bandbreite": "Bandbreite & Sprache",
                      "meldungen": "Hinweise & Meldungen", "alarme": "Alarme", "details": "Details"}
 
@@ -513,6 +513,8 @@ def _tab(tabs: dict, default: str) -> str:
 def site(site_id: int):
     tab = _tab(SITE_TABS, "probes")
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
+    if tab == "netzwerk":
+        return _site_network(s)
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
         "WHERE p.site_id = ? ORDER BY p.hostname",
@@ -1707,3 +1709,190 @@ def notify_test():
     except notify.NotifyError as exc:
         flash(str(exc), "error")
     return redirect(admin_url("benachrichtigungen"))
+
+
+# -- Netzwerkscan (docs/NETZWERKSCAN.md) ---------------------------------------
+NETSCAN_RANGES = {"24h": ("24 Stunden", 86400), "7d": ("7 Tage", 7 * 86400), "30d": ("30 Tage", 30 * 86400)}
+
+
+def _site_network(s: dict):
+    """Reiter „Netzwerk“ eines Standorts: Geräte, Anwesenheit, Dienste mit Links, Auffälligkeiten."""
+    from .services import netscan
+
+    rng = request.args.get("zeitraum", "24h")
+    if rng not in NETSCAN_RANGES:
+        rng = "24h"
+    until = repo.now()
+    since = until - NETSCAN_RANGES[rng][1]
+    probes = q("SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
+               "WHERE p.site_id = ? AND p.status = 'active' ORDER BY p.hostname", (s["id"],))
+    scans = []
+    for p in probes:
+        for c in repo.checks_for_probe(p):
+            if c["type"] == "netscan":
+                last = q1("SELECT * FROM netscan_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC "
+                          "LIMIT 1", (p["id"], c["id"]))
+                pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? "
+                             "AND delivered_at IS NULL", (p["id"], c["id"]))
+                scans.append({"probe": p, "check": c, "last": last, "pending": pending})
+    devices = netscan.devices(s["id"], since, until)
+    first = q1("SELECT MIN(ts) AS ts FROM netscan_runs WHERE site_id = ? AND error IS NULL", (s["id"],))
+    for d in devices:
+        d["bar"] = netscan.presence_bar(d["presence"], since, until, first["ts"] if first else None)
+    order = {True: 0, False: 1}
+    devices.sort(key=lambda d: (0 if {"ip_conflict", "irregular"} & set(d["flags"]) else 1, order[d["online"]],
+                                _ip_sort(d["ip"])))
+    events = netscan.events(s["id"], since, until, limit=100)
+    kpi = {
+        "online": sum(d["online"] for d in devices), "total": len(devices),
+        "irregular": sum("irregular" in d["flags"] for d in devices),
+        "conflicts": len({e["ip"] for e in events if e["kind"] == "ip_conflict"}),
+        "new": sum("new" in d["flags"] for d in devices),
+        "services": sum(len([x for x in d["services"] if x["link"]]) for d in devices),
+    }
+    return render_template("netscan.html", tab="netzwerk", tabs=SITE_TABS, site=s, scans=scans, devices=devices,
+                           events=events, kpi=kpi, rng=rng, ranges=NETSCAN_RANGES, since=since, until=until,
+                           FLAG_LABELS=netscan.FLAG_LABELS)
+
+
+def _ip_sort(ip: str | None):
+    try:
+        import ipaddress
+
+        return (0, int(ipaddress.ip_address(ip or "")))
+    except ValueError:
+        return (1, 0)
+
+
+@bp.get("/netzwerk/geraete/<int:device_id>/<int:port>.rdp")
+@login_required()
+def netscan_rdp(device_id: int, port: int):
+    """Remotedesktop-Verbindung als .rdp-Datei – Windows öffnet sie mit mstsc."""
+    from .services import netscan
+
+    d = q1("SELECT * FROM net_devices WHERE id = ?", (device_id,)) or abort(404)
+    if not q1("SELECT id FROM net_services WHERE device_id = ? AND port = ? AND service = 'rdp'", (device_id, port)):
+        abort(404)
+    name = "".join(ch for ch in (d["hostname"] or d["ip"] or "geraet") if ch.isalnum() or ch in ".-_")[:60] or "geraet"
+    return Response(netscan.rdp_file(d["ip"], port), mimetype="application/x-rdp",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.rdp"'})
+
+
+@bp.post("/netzwerk/geraete/<int:device_id>/notiz")
+@login_required("operator")
+def netscan_note(device_id: int):
+    d = q1("SELECT * FROM net_devices WHERE id = ?", (device_id,)) or abort(404)
+    note = request.form.get("note", "").strip()[:80] or None
+    ex("UPDATE net_devices SET note = ? WHERE id = ?", (note, device_id))
+    repo.audit(current_user()["username"], "netscan.note", f"device:{device_id}", note or "(entfernt)")
+    flash("Bezeichnung gespeichert." if note else "Bezeichnung entfernt.", "ok")
+    return redirect(url_for("web.site", site_id=d["site_id"], tab="netzwerk", zeitraum=request.form.get("zeitraum"))
+                    + f"#geraet-{device_id}")
+
+
+# -- PDF-Bericht ---
+from .services import report_data  # noqa: E402
+from .services import report_pdf as pdf_report  # noqa: E402
+
+REPORT_PRESETS = {
+    "24h": ("Letzte 24 Stunden", 86400),
+    "7d": ("Letzte 7 Tage", 7 * 86400),
+    "30d": ("Letzte 30 Tage", 30 * 86400),
+    "custom": ("Eigener Zeitraum (von/bis)", None),
+}
+REPORT_LIMITS = {"kunde": 120, "ersteller": 80, "bemerkung": 1000}
+_DT_FORMAT = "%Y-%m-%dT%H:%M"
+
+
+def _report_text(value: str | None, limit: int) -> str:
+    """Freitext für das PDF: ohne Steuerzeichen (Zeilenumbrüche bleiben), gekürzt."""
+    text = "".join(ch for ch in (value or "") if ch in "\n" or ord(ch) >= 32).replace("\r", "")
+    return text.strip()[:limit]
+
+
+def _report_form(args, user: dict) -> tuple[dict, list]:
+    """Formularwerte für Bericht-Seite und PDF. Fehler als FieldError (Feld wird markiert)."""
+    FieldError = checktypes.FieldError
+    form = {
+        "site": (args.get("site") or "").strip(),
+        "range": args.get("range") if args.get("range") in REPORT_PRESETS else "7d",
+        "von": (args.get("von") or "").strip(), "bis": (args.get("bis") or "").strip(),
+        "kunde": _report_text(args.get("kunde"), REPORT_LIMITS["kunde"]),
+        "ersteller": _report_text(args.get("ersteller") if "ersteller" in args else user["username"],
+                                  REPORT_LIMITS["ersteller"]),
+        "bemerkung": _report_text(args.get("bemerkung"), REPORT_LIMITS["bemerkung"]),
+        "teile": [k for k in report_data.SECTIONS if args.get(f"teil_{k}")] if args.get("teile")
+        else list(report_data.SECTIONS),
+    }
+    errors = []
+    form["site_id"] = None
+    if form["site"]:
+        site = q1("SELECT id, name FROM sites WHERE id = ?", (form["site"],)) if form["site"].isdigit() else None
+        if site is None:
+            errors.append(FieldError("Diesen Standort gibt es nicht.", "site"))
+        else:
+            form["site_id"] = site["id"]
+            form["site_name"] = site["name"]
+    now_ts = repo.now()
+    if form["range"] == "custom":
+        parsed = {}
+        for key, label in (("von", "Von"), ("bis", "Bis")):
+            try:
+                parsed[key] = int(datetime.strptime(form[key], _DT_FORMAT).timestamp())
+            except ValueError:
+                errors.append(FieldError(f"{label}: bitte Datum und Uhrzeit angeben.", key))
+        if len(parsed) == 2:
+            since, until = parsed["von"], min(parsed["bis"], now_ts)
+            if since >= until:
+                errors.append(FieldError("Bis muss nach Von liegen (und nicht nach jetzt).", "bis"))
+            elif until - since > report_data.MAX_PERIOD_S:
+                errors.append(FieldError(f"Zeitraum höchstens {report_data.MAX_PERIOD_S // 86400} Tage.", "bis"))
+            form["since"], form["until"] = since, until
+    else:
+        form["until"] = now_ts
+        form["since"] = now_ts - REPORT_PRESETS[form["range"]][1]
+        form["von"] = datetime.fromtimestamp(form["since"]).strftime(_DT_FORMAT)
+        form["bis"] = datetime.fromtimestamp(form["until"]).strftime(_DT_FORMAT)
+    return form, errors
+
+
+def _report_page(form: dict, errors: list, status: int = 200):
+    return render_template(
+        "bericht.html", form=form, errors=errors, field_errors={e.field: e for e in reversed(errors) if e.field},
+        sites=q("SELECT id, name FROM sites ORDER BY name"), presets=REPORT_PRESETS, sections=report_data.SECTIONS,
+        limits=REPORT_LIMITS, max_days=report_data.MAX_PERIOD_S // 86400,
+    ), status
+
+
+@bp.get("/bericht")
+@login_required()
+def report_view():
+    form, _ = _report_form(request.args, current_user())
+    return _report_page(form, [])
+
+
+def _report_filename(site_name: str | None, until: int) -> str:
+    name = site_name or "Alle-Standorte"
+    for a, b in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("Ä", "Ae"), ("Ö", "Oe"), ("Ü", "Ue"), ("ß", "ss")):
+        name = name.replace(a, b)
+    name = "-".join("".join(ch if ch.isascii() and ch.isalnum() else " " for ch in name).split())[:60] or "Standort"
+    return f"Wachtl-Bericht-{name}-{datetime.fromtimestamp(until).strftime('%Y%m%d')}.pdf"
+
+
+@bp.get("/bericht.pdf")
+@login_required()
+def report_pdf():
+    user = current_user()
+    form, errors = _report_form(request.args, user)
+    if errors:
+        return _report_page(form, errors, 400)
+    data = report_data.collect(form["site_id"], form["since"], form["until"], form["teile"],
+                               meta={"customer": form["kunde"], "author": form["ersteller"],
+                                     "remark": form["bemerkung"]})
+    pdf = pdf_report.render(data)
+    repo.audit(user["username"], "report.pdf", f"site:{form['site_id']}" if form["site_id"] else "",
+               f"{report_data.fmt_ts(form['since'], False)} bis {report_data.fmt_ts(form['until'], False)}, "
+               f"{len(data['incidents'])} Störungen, Teile: {', '.join(form['teile']) or 'nur Zusammenfassung'}")
+    filename = _report_filename(form.get("site_name"), form["until"])
+    return Response(pdf, mimetype="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"})

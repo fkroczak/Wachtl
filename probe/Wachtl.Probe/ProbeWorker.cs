@@ -5,6 +5,7 @@ using Wachtl.Probe.Buffer;
 using Wachtl.Probe.Checks;
 using Wachtl.Probe.Config;
 using Wachtl.Probe.Diagnostics;
+using Wachtl.Probe.NetScan;
 using Wachtl.Probe.Rtp;
 using Wachtl.Probe.Transport;
 using Wachtl.Probe.Tray;
@@ -151,7 +152,7 @@ public sealed class ProbeWorker : BackgroundService
         }
     }
 
-    private static readonly string[] SupportedTypes = { "ping", "path", "iperf", "speedtest", "rtp" };
+    private static readonly string[] SupportedTypes = { "ping", "path", "iperf", "speedtest", "rtp", "netscan" };
 
     private async Task<bool> TryPendingEnrollmentAsync(PendingEnrollment pending, CancellationToken ct)
     {
@@ -310,6 +311,8 @@ public sealed class ProbeWorker : BackgroundService
             _loggerFactory.CreateLogger<BandwidthRunner>()),
         "rtp" => new RtpRunner(check, (result, token) => _api!.PostResultAsync("results/rtp", result, token),
             _loggerFactory.CreateLogger<RtpRunner>()),
+        "netscan" => new NetScanRunner(check, (result, token) => _api!.PostResultAsync("results/netscan", result, token),
+            _loggerFactory.CreateLogger<NetScanRunner>()),
         _ => new PingRunner(check, _buffer!, _gateway, _loggerFactory.CreateLogger<PingRunner>(), _live),
     };
 
@@ -325,6 +328,7 @@ public sealed class ProbeWorker : BackgroundService
                     PathRunner p => p.Check.Id == command.CheckId,
                     BandwidthRunner b => b.Check.Id == command.CheckId,
                     RtpRunner v => v.Check.Id == command.CheckId,
+                    NetScanRunner n => n.Check.Id == command.CheckId,
                     _ => false,
                 });
             }
@@ -338,6 +342,10 @@ public sealed class ProbeWorker : BackgroundService
                 case ("run_check", RtpRunner r):
                     _logger.LogInformation("Auftrag vom Server: Sprachtest {Id} jetzt ausführen", command.CheckId);
                     r.RunNow();
+                    break;
+                case ("run_check", NetScanRunner n):
+                    _logger.LogInformation("Auftrag vom Server: Netzwerkscan {Id} jetzt ausführen", command.CheckId);
+                    n.RunNow();
                     break;
                 case ("retrace", PathRunner p):
                     _logger.LogInformation("Auftrag vom Server: Pfad von Check {Id} neu ermitteln", command.CheckId);

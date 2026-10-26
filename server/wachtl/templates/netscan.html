@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Netzwerk · {{ site.name }}{% endblock %}
+{% from "_tabs.html" import tabs as tabnav %}
+{% block content %}
+<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
+<h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
+{% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
+{{ tabnav(tab_items, tab) }}
+
+{% if not scans %}
+<section class="card">
+  <h2>Noch kein Netzwerkscan eingerichtet</h2>
+  <p>Ein Netzwerkscan sucht regelmäßig alle Geräte im Netz dieses Standorts, prüft offene Ports und erkennt Dienste.
+     So fallen Geräte auf, die sich unregelmäßig an- und abmelden, und doppelte IP-Adressen.</p>
+  {% if has_role(user, 'admin') %}<p><a class="button primary" href="{{ url_for('web.check_new', ctype='netscan') }}">Netzwerkscan einrichten</a></p>
+  {% else %}<p class="muted">Ein Administrator kann ihn unter Verwaltung › Checks einrichten.</p>{% endif %}
+</section>
+{% else %}
+
+<section class="cards stats" aria-label="Kennzahlen des Netzwerks">
+  <div class="card stat"><span class="num">{{ kpi.online }} / {{ kpi.total }}</span><span>Geräte erreichbar</span></div>
+  <a class="card stat {{ 'warn' if kpi.irregular }}" href="#geraete"><span class="num">{{ kpi.irregular }}</span><span>unregelmäßige Geräte</span></a>
+  <a class="card stat {{ 'bad' if kpi.conflicts }}" href="#auffaelligkeiten"><span class="num">{{ kpi.conflicts }}</span><span>IP-Konflikte</span></a>
+  <a class="card stat {{ 'warn' if kpi.new }}" href="#geraete"><span class="num">{{ kpi.new }}</span><span>neue Geräte (24 h)</span></a>
+  <div class="card stat"><span class="num">{{ kpi.services }}</span><span>Dienste mit Link</span></div>
+</section>
+
+<h2>Scans</h2>
+<div class="scroll"><table>
+  <thead><tr><th>Probe</th><th>Netze</th><th>Letzter Scan</th><th>Ergebnis</th><th><span class="sr-only">Aktion</span></th></tr></thead>
+  <tbody>{% for sc in scans %}
+    <tr>
+      <td><a href="{{ url_for('web.probe', probe_id=sc.probe.id) }}">{{ sc.probe.hostname }}</a></td>
+      <td>{{ sc.check.target }}{% if sc.last and sc.last.subnets %}<br><span class="muted small">{{ (sc.last.subnets|fromjson)|join(', ') }}</span>{% endif %}</td>
+      <td class="nowrap">{% if sc.last %}{{ sc.last.ts|dt }}{% else %}–{% endif %}</td>
+      <td>{% if not sc.last %}<span class="muted">noch kein Ergebnis</span>
+        {% elif sc.last.error %}<span class="down-t">{{ sc.last.error }}</span>
+        {% else %}{{ sc.last.hosts_found }} Geräte{% if sc.last.duration_s %} in {{ sc.last.duration_s|round|int }} s{% endif %}{% endif %}</td>
+      <td>{% if has_role(user, 'operator') %}{% if sc.pending %}<span class="muted">Scan beauftragt</span>{% else %}
+        <form method="post" action="{{ url_for('web.check_run', probe_id=sc.probe.id, check_id=sc.check.id) }}" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ url_for('web.site', site_id=site.id, tab='netzwerk') }}">
+          <button class="link" aria-label="Jetzt scannen: {{ sc.check.name }} auf {{ sc.probe.hostname }}">Jetzt scannen</button></form>{% endif %}{% endif %}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table></div>
+
+<h2 id="geraete">Geräte</h2>
+<nav class="tabs" aria-label="Zeitraum">
+  {%- for key, (text, _s) in ranges.items() %}<a href="{{ url_for('web.site', site_id=site.id, tab='netzwerk', zeitraum=key) }}"{% if key == rng %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
+</nav>
+<p class="muted">Auffällige Geräte stehen oben. Die Leiste zeigt, wann das Gerät bei den Scans im gewählten Zeitraum erreichbar war (grün = gesehen, gelb = nicht gesehen, grau = noch nicht gescannt).
+  Unregelmäßig = mindestens 3-mal neu aufgetaucht in 24 Stunden. Die Links starten die Verbindung <strong>von diesem PC aus</strong> – sie funktionieren nur, wenn er das Gerät erreicht (gleiches Netz oder VPN).</p>
+{% if devices %}
+<div class="scroll"><table class="netscan">
+  <thead><tr><th>Gerät</th><th>MAC</th><th>Erreichbar ({{ ranges[rng][0] }})</th><th>Wieder&shy;kehrer</th><th>Dienste</th><th>Gesehen</th></tr></thead>
+  <tbody>{% for d in devices %}
+    <tr id="geraet-{{ d.id }}">
+      <td><span class="dot {{ 'ok' if d.online else 'off' }}" aria-hidden="true"></span><span class="sr-only">{{ 'erreichbar' if d.online else 'nicht erreichbar' }}: </span>
+        <strong>{{ d.label }}</strong>{% if d.is_probe %} <span class="badge info">Probe</span>{% endif %}
+        {% if d.label != d.ip %}<br><span class="muted">{{ d.ip }}{% if d.hostname and d.hostname != d.label %} · {{ d.hostname }}{% endif %}</span>{% endif %}
+        {% for f in d.flags %}<span class="badge {{ 'critical' if f == 'ip_conflict' else 'warning' if f in ('irregular', 'new') else 'info' }}">{{ FLAG_LABELS[f] }}</span> {% endfor %}
+        {% if has_role(user, 'operator') %}
+        <details class="note-edit"><summary>Bezeichnung</summary>
+          <form method="post" action="{{ url_for('web.netscan_note', device_id=d.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="zeitraum" value="{{ rng }}">
+            <label for="note-{{ d.id }}">Bezeichnung für {{ d.ip }}</label>
+            <input id="note-{{ d.id }}" name="note" maxlength="80" value="{{ d.note or '' }}" placeholder="z. B. Drucker Empfang">
+            <button>Speichern</button>
+          </form>
+        </details>{% endif %}
+      </td>
+      <td class="nowrap mono">{{ d.mac or '–' }}</td>
+      <td><span class="healthbar" role="img" aria-label="{{ d.label }}: in {{ d.bar|select('equalto', 'on')|list|length }} von {{ d.bar|reject('equalto', 'none')|list|length }} gescannten Abschnitten erreichbar">
+        {%- for c in d.bar %}<span{% if c == 'off' %} class="hb-warn"{% elif c == 'none' %} class="hb-none"{% endif %}></span>{% endfor -%}</span></td>
+      <td class="{{ 'warn-t' if 'irregular' in d.flags }}">{{ d.returns }}</td>
+      <td>{% for sv in d.services %}{% set ln = sv.link %}
+        <div class="svc">{% if ln and ln.kind == 'url' %}<a href="{{ ln.url }}" target="_blank" rel="noopener noreferrer">{{ sv.label }}</a>
+          {% elif ln and ln.kind == 'rdp' %}<a href="{{ url_for('web.netscan_rdp', device_id=d.id, port=sv.port) }}" download>{{ sv.label }}</a>
+          {% elif ln and ln.kind == 'copy' %}{{ sv.label }} <code>{{ ln.text }}</code>
+          {% else %}{{ sv.label }}{% endif %}
+          <span class="muted small">{{ sv.port }}{% if sv.http_title %} · {{ sv.http_title }}{% elif sv.banner %} · {{ sv.banner[:60] }}{% elif sv.http_server %} · {{ sv.http_server }}{% endif %}{% if not sv.current %} · zuletzt {{ sv.last_seen|ago }}{% endif %}</span></div>
+      {% else %}<span class="muted">–</span>{% endfor %}</td>
+      <td class="nowrap small">seit {{ d.first_seen|dt }}<br>zuletzt {{ d.last_seen|ago }}</td>
+    </tr>
+  {% endfor %}</tbody>
+</table></div>
+{% else %}
+<p class="muted">Im gewählten Zeitraum wurden keine Geräte gefunden. Der erste Scan läuft mit dem nächsten Zeitplan oder über „Jetzt scannen“.</p>
+{% endif %}
+
+<h2 id="auffaelligkeiten">Auffälligkeiten</h2>
+{% if events %}
+<div class="scroll"><table>
+  <thead><tr><th>Zeit</th><th>Art</th><th>Gerät</th><th>Details</th></tr></thead>
+  <tbody>{% for e in events %}
+    <tr><td class="nowrap">{{ e.ts|dt }}</td>
+      <td><span class="badge {{ 'critical' if e.kind == 'ip_conflict' else 'warning' if e.kind in ('ip_changed', 'new_device') else 'info' }}">{{ e.kind_label }}</span></td>
+      <td>{% if e.device_id %}<a href="#geraet-{{ e.device_id }}">{{ e.device_label }}</a>{% else %}{{ e.device_label }}{% endif %}{% if e.ip %} <span class="muted">{{ e.ip }}</span>{% endif %}</td>
+      <td>{{ e.detail }}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% else %}
+<p class="muted">Keine Auffälligkeiten im gewählten Zeitraum.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -95,7 +95,7 @@ def run_check(probe_id: int, check_id: int):
     if probe is None:
         return jsonify(error="Probe nicht gefunden"), 404
     check = repo.check_map_for_probe({**probe, "site_id": probe["site_id"]}).get(str(check_id))
-    if check is None or check["type"] not in ("iperf", "speedtest", "rtp", "path"):
+    if check is None or check["type"] not in ("iperf", "speedtest", "rtp", "path", "netscan"):
         return jsonify(error="Check gehört nicht zur Probe oder ist kein Bandbreiten-, Sprach- oder Pfad-Check"), 404
     ctype = "retrace" if check["type"] == "path" else "run_check"
     cid = repo.queue_command(probe_id, ctype, check_id, current_user()["username"])

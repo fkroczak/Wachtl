@@ -42,11 +42,13 @@ Windows-Probes (C#-Dienst) ──HTTPS, nur ausgehend──▶ Traefik ─▶ Fl
 | Client-Hinweise (0.8) | Probe erkennt Kabel getrennt, Link-Geschwindigkeit, Treiberfehler, DHCP/Gateway, Paketfehler – Sprechblase mit Lösung auf dem PC, Anzeige im Web-UI ([docs/CLIENT-HINWEISE.md](docs/CLIENT-HINWEISE.md)) |
 | Störungsmeldungen (0.6) | Benutzer melden Netzprobleme (Jetzt oder einstellbare Uhrzeit); Seite „Meldungen“, Übersicht und Markierung zum Zeitpunkt in allen Graphen der Probe |
 | Sprache (0.9) | RTP-Sprachtest wie ein Telefonat (G.711/G.729) zum Wachtl-Server, zu einer anderen Probe oder einem eigenen Reflektor: MOS, Laufzeit, Jitter und Verlust je Richtung, Alarm bei schlechter Sprachqualität ([docs/MESSUNGEN.md](docs/MESSUNGEN.md#sprache-rtpvoip)) |
+| PDF-Bericht (1.0) | Alle Störungen eines Zeitraums als PDF für den Provider: Einschätzung, wo das Problem liegt, Zeitstrahl mit Kurzausfällen, Leitungsschwankungen, Störungsliste, Pfadanalyse, Netzwerkscan |
+| Netzwerkscan (1.0) | Geräte im Kundennetz, Anwesenheit, unregelmäßige Geräte, IP-Konflikte, Portscan mit Diensterkennung und Links zum Verbinden ([docs/NETZWERKSCAN.md](docs/NETZWERKSCAN.md)) |
 | Ausfälle (0.3) | Übersicht mit Dauer und Ursache (Probe/Standort, Gateway/LAN, WAN, Ziel), Folgestörungen zusammengefasst |
 
 Alle Mess-Einstellungen: [docs/MESSUNGEN.md](docs/MESSUNGEN.md).
 
-Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte (PDF/CSV), Heatmaps, mTLS und automatische Probe-Updates.
+Nächste Phasen: DNS-, HTTP/HTTPS- und TCP-Checks, MTU, Berichte als CSV, Heatmaps, mTLS und automatische Probe-Updates.
 Konzept für die automatische Fehlerdiagnose mit Lösungsvorschlägen: [docs/DIAGNOSE-KONZEPT.md](docs/DIAGNOSE-KONZEPT.md).
 
 ## Download

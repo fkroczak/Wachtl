@@ -458,6 +458,34 @@ def result_rtp():
     return jsonify(stored=1), 201
 
 
+@bp.post("/results/netscan")
+@probe_auth
+def result_netscan():
+    """Ergebnis eines Netzwerkscans (docs/NETZWERKSCAN.md): Geräte, offene Ports, Dienste."""
+    from .services import netscan
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error="JSON-Objekt erwartet"), 400
+    check = _own_check(data.get("check_id"), ("netscan",))
+    try:
+        values = netscan.validate(data)
+    except netscan.ScanError as exc:
+        return jsonify(error=str(exc)), 400
+    ts = _result_ts(data.get("ts"))
+    netscan.store(g.probe, check, values, ts)
+    lines = [ingest.server_lines("wachtl_netscan_ok", g.probe, check, 0 if values["error"] else 1, ts, {})]
+    if not values["error"]:
+        lines.append(ingest.server_lines("wachtl_netscan_hosts", g.probe, check, len(values["hosts"]), ts, {}))
+    try:
+        vm.import_lines(lines)
+    except vm.VMError as exc:
+        log.warning("Netzwerkscan-Metriken nicht gespeichert: %s", exc)
+    log.info("Probe %s: Netzwerkscan %s – %d Geräte%s", g.probe["hostname"], check["target"], len(values["hosts"]),
+             f", Fehler: {values['error']}" if values["error"] else "")
+    return jsonify(stored=len(values["hosts"])), 201
+
+
 # -- intern: Alertmanager-Webhook ------------------------------------------
 internal = Blueprint("api_internal", __name__, url_prefix="/api/internal")
 

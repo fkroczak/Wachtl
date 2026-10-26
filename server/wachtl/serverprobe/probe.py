@@ -14,7 +14,8 @@ from pathlib import Path
 from .. import __version__, repo
 from . import icmp, net
 from .api import Api, ApiError
-from .runners import BandwidthRunner, PathRunner, PingRunner, RtpRunner, Runner, ScheduledRunner, check_key
+from .runners import (BandwidthRunner, NetscanRunner, PathRunner, PingRunner, RtpRunner, Runner, ScheduledRunner,
+                      check_key)
 from .tray import PENDING_FILE, PendingReports, ReportRejected, TrayEndpoint, TrayService
 
 log = logging.getLogger("wachtl.serverprobe")
@@ -22,7 +23,7 @@ ENROLL_FILE = "enroll.json"     # legt der Server beim Start an (einmaliger Enro
 STATE_FILE = "probe.json"       # Probe-ID und Token nach der Registrierung
 MAX_BUFFER = 500_000            # Zeilen; der Server ist lokal, längere Ausfälle puffert niemand
 BATCH = 5000
-SUPPORTED = ("ping", "path", "iperf", "speedtest", "rtp")
+SUPPORTED = ("ping", "path", "iperf", "speedtest", "rtp", "netscan")
 
 
 def write_private(path: Path, data: dict) -> None:
@@ -158,6 +159,8 @@ class ServerProbe:
             return BandwidthRunner(check, self.report("bandwidth"), self.iperf_exe, self.measure)
         if check["type"] == "rtp":
             return RtpRunner(check, self.report("rtp"), self.measure_rtp)
+        if check["type"] == "netscan":
+            return NetscanRunner(check, self.report("netscan"))
         return PingRunner(check, self.sink, **self.measurement)
 
     def apply_config(self, config: dict) -> None:

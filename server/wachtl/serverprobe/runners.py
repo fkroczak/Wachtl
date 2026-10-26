@@ -14,7 +14,7 @@ from datetime import datetime
 from typing import Callable
 
 from .. import schedule
-from . import bandwidth, icmp, net
+from . import bandwidth, icmp, net, netscan
 
 log = logging.getLogger("wachtl.serverprobe")
 Sink = Callable[[str], None]
@@ -284,6 +284,7 @@ class ScheduledRunner(Runner):
     """Misst nach Zeitplan (schedule_min, Zeitfenster, Wochentage) oder auf Anforderung „Jetzt messen“."""
 
     label = "Check"
+    default_schedule_min = 60
 
     def __init__(self, check: dict):
         super().__init__(check)
@@ -299,7 +300,7 @@ class ScheduledRunner(Runner):
         c = self.check
         log.info("%s %s (%s) gestartet: %s", self.label, c["id"], c["type"], c["target"])
         while not self.stop_event.is_set():
-            nxt = schedule.next_run(datetime.now(), int(_p(c, "schedule_min", 60)), int(_p(c, "offset_min", 0)),
+            nxt = schedule.next_run(datetime.now(), int(_p(c, "schedule_min", self.default_schedule_min)), int(_p(c, "offset_min", 0)),
                                     _p(c, "window_start", "00:00"), _p(c, "window_end", "23:59"),
                                     str(_p(c, "weekdays", "1234567")))
             wait = (nxt - datetime.now()).total_seconds() if nxt else None
@@ -377,6 +378,35 @@ class RtpRunner(ScheduledRunner):
             log.info("Sprachtest %s: MOS %s, Laufzeit %s ms, Verlust %s %%, Jitter %s ms", self.check["id"],
                      result.get("mos"), result.get("rtt_ms"), result.get("loss_pct"), result.get("jitter_ms"))
         self.report({"check_id": self.check["id"], "ts": ts, "trigger": trigger, "result": result})
+
+
+class NetscanRunner(ScheduledRunner):
+    """Netzwerkscan (docs/NETZWERKSCAN.md); je Probe immer nur ein Scan gleichzeitig."""
+
+    label = "Netzwerkscan"
+    default_schedule_min = 15
+    one_at_a_time = threading.Lock()
+
+    def __init__(self, check: dict, report: Callable[[dict], None],
+                 scan: Callable[[dict, str, threading.Event], dict] | None = None):
+        super().__init__(check)
+        self.report = report
+        self.scan = scan or netscan.run_scan
+
+    def _measure_and_report(self, trigger: str) -> None:
+        with self.one_at_a_time:
+            if self.stop_event.is_set():
+                return
+            log.info("Netzwerkscan %s startet (%s): %s", self.check["id"], trigger, self.check.get("target"))
+            result = self.scan(self.check, trigger, self.stop_event)
+        if self.stop_event.is_set():
+            return
+        if result.get("error"):
+            log.warning("Netzwerkscan %s fehlgeschlagen: %s", self.check["id"], result["error"])
+        else:
+            log.info("Netzwerkscan %s: %d Geräte in %s s", self.check["id"], len(result.get("hosts") or []),
+                     result.get("duration_s"))
+        self.report(result)
 
 
 def measure_rtp(check: dict, stop: threading.Event | None = None) -> dict:
