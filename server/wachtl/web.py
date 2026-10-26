@@ -1644,8 +1644,9 @@ def _site_network(s: dict):
                              "AND delivered_at IS NULL", (p["id"], c["id"]))
                 scans.append({"probe": p, "check": c, "last": last, "pending": pending})
     devices = netscan.devices(s["id"], since, until)
+    first = q1("SELECT MIN(ts) AS ts FROM netscan_runs WHERE site_id = ? AND error IS NULL", (s["id"],))
     for d in devices:
-        d["bar"] = netscan.presence_bar(d["presence"], since, until)
+        d["bar"] = netscan.presence_bar(d["presence"], since, until, first["ts"] if first else None)
     order = {True: 0, False: 1}
     devices.sort(key=lambda d: (0 if {"ip_conflict", "irregular"} & set(d["flags"]) else 1, order[d["online"]],
                                 _ip_sort(d["ip"])))

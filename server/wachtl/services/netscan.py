@@ -438,13 +438,19 @@ def events(site_id: int | None, since: int, until: int | None = None, limit: int
     return rows
 
 
-def presence_bar(pres: list[dict], since: int, until: int, cells: int = 48, step_hint: int = 900) -> list[bool | None]:
-    """Anwesenheit als Zellen für die Anzeige: True = gesehen, False = nicht gesehen."""
+def presence_bar(pres: list[dict], since: int, until: int, monitored_from: int | None, cells: int = 48,
+                 step_hint: int = 900) -> list[str]:
+    """Anwesenheit als Zellen: „on“ = gesehen, „off“ = gescannt, aber nicht gesehen, „none“ = noch nicht gescannt."""
     step = (until - since) / cells
-    out: list[bool | None] = []
+    out: list[str] = []
     for i in range(cells):
         a, b = since + i * step, since + (i + 1) * step
-        out.append(any(p["first_ts"] - step_hint / 2 < b and p["last_ts"] + step_hint / 2 > a for p in pres))
+        if any(p["first_ts"] - step_hint / 2 < b and p["last_ts"] + step_hint / 2 > a for p in pres):
+            out.append("on")
+        elif monitored_from is None or b <= monitored_from:
+            out.append("none")
+        else:
+            out.append("off")
     return out
 
 

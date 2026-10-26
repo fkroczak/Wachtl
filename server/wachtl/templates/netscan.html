@@ -49,7 +49,7 @@
 <nav class="tabs" aria-label="Zeitraum">
   {%- for key, (text, _s) in ranges.items() %}<a href="{{ url_for('web.site', site_id=site.id, tab='netzwerk', zeitraum=key) }}"{% if key == rng %} class="active" aria-current="page"{% endif %}>{{ text }}</a>{% endfor -%}
 </nav>
-<p class="muted">Auffällige Geräte stehen oben. Die Leiste zeigt, wann das Gerät bei den Scans im gewählten Zeitraum erreichbar war (grau = nicht gesehen).
+<p class="muted">Auffällige Geräte stehen oben. Die Leiste zeigt, wann das Gerät bei den Scans im gewählten Zeitraum erreichbar war (grün = gesehen, gelb = nicht gesehen, grau = noch nicht gescannt).
   Unregelmäßig = mindestens 3-mal neu aufgetaucht in 24 Stunden. Die Links starten die Verbindung <strong>von diesem PC aus</strong> – sie funktionieren nur, wenn er das Gerät erreicht (gleiches Netz oder VPN).</p>
 {% if devices %}
 <div class="scroll"><table class="netscan">
@@ -58,7 +58,7 @@
     <tr id="geraet-{{ d.id }}">
       <td><span class="dot {{ 'ok' if d.online else 'off' }}" aria-hidden="true"></span><span class="sr-only">{{ 'erreichbar' if d.online else 'nicht erreichbar' }}: </span>
         <strong>{{ d.label }}</strong>{% if d.is_probe %} <span class="badge info">Probe</span>{% endif %}
-        <br><span class="muted">{{ d.ip }}{% if d.hostname and d.hostname != d.label %} · {{ d.hostname }}{% endif %}</span>
+        {% if d.label != d.ip %}<br><span class="muted">{{ d.ip }}{% if d.hostname and d.hostname != d.label %} · {{ d.hostname }}{% endif %}</span>{% endif %}
         {% for f in d.flags %}<span class="badge {{ 'critical' if f == 'ip_conflict' else 'warning' if f in ('irregular', 'new') else 'info' }}">{{ FLAG_LABELS[f] }}</span> {% endfor %}
         {% if has_role(user, 'operator') %}
         <details class="note-edit"><summary>Bezeichnung</summary>
@@ -71,8 +71,8 @@
         </details>{% endif %}
       </td>
       <td class="nowrap mono">{{ d.mac or '–' }}</td>
-      <td><span class="healthbar" role="img" aria-label="{{ d.label }}: {{ d.bar|select|list|length }} von {{ d.bar|length }} Abschnitten erreichbar">
-        {%- for c in d.bar %}<span{% if not c %} class="hb-none"{% endif %}></span>{% endfor -%}</span></td>
+      <td><span class="healthbar" role="img" aria-label="{{ d.label }}: in {{ d.bar|select('equalto', 'on')|list|length }} von {{ d.bar|reject('equalto', 'none')|list|length }} gescannten Abschnitten erreichbar">
+        {%- for c in d.bar %}<span{% if c == 'off' %} class="hb-warn"{% elif c == 'none' %} class="hb-none"{% endif %}></span>{% endfor -%}</span></td>
       <td class="{{ 'warn-t' if 'irregular' in d.flags }}">{{ d.returns }}</td>
       <td>{% for sv in d.services %}{% set ln = sv.link %}
         <div class="svc">{% if ln and ln.kind == 'url' %}<a href="{{ ln.url }}" target="_blank" rel="noopener noreferrer">{{ sv.label }}</a>

@@ -132,6 +132,33 @@ def main(base: str) -> dict:
                 "adapter": "Ethernet", "adapter_description": "Intel(R) Ethernet Connection I219-V", "title": title,
                 "message": msg, "solution": sol, "detected_at": now - ago,
                 "resolved_at": now - ago + dur if state == "resolved" else None}))
+        # Netzwerkscan: 8 Scans im Abstand von 15 min; das Handy kommt und geht, ein Gerät mit doppelter IP
+        from wachtl.services import netscan as netscan_service
+
+        scan = repo.create_check("Netzwerkscan Büro", "auto", "target", 900, 1800000, "probe", 1, "netscan",
+                                 checktypes.merged("netscan", {}))
+        lan = [
+            {"ip": "192.168.1.1", "mac": "3C:A6:2F:11:22:01", "hostname": "fritz.box", "rtt_ms": 0.6, "ports": [
+                {"port": 80, "http_status": 301, "http_server": "box"},
+                {"port": 443, "tls": True, "http_status": 200, "http_title": "FRITZ!Box", "tls_subject": "CN=fritz.box"}]},
+            {"ip": "192.168.1.10", "mac": "00:15:5D:01:02:10", "hostname": "srv-dc01.kunde.local", "rtt_ms": 0.4,
+             "ports": [{"port": 445}, {"port": 3389}, {"port": 53}]},
+            {"ip": "192.168.1.20", "mac": "00:11:32:AA:BB:20", "hostname": "nas.kunde.local", "rtt_ms": 0.7, "ports": [
+                {"port": 22, "banner": "SSH-2.0-OpenSSH_8.2"}, {"port": 5001, "tls": True, "http_status": 200,
+                                                               "http_title": "Synology DiskStation"}]},
+            {"ip": "192.168.1.30", "mac": "00:80:77:12:34:30", "hostname": None, "rtt_ms": 1.9,
+             "ports": [{"port": 9100}, {"port": 80, "http_status": 200, "http_title": "Brother HL-L2350DW"}]},
+            {"ip": "192.168.1.50", "mac": "A8:5E:45:00:00:50", "hostname": "pc-empfang.kunde.local", "self": True,
+             "rtt_ms": 0.1, "ports": []},
+        ]
+        phone = {"ip": "192.168.1.77", "mac": "DA:A1:19:C0:FF:EE", "hostname": None, "rtt_ms": 12.0, "ports": []}
+        intruder = {"ip": "192.168.1.30", "mac": "B8:27:EB:00:00:99", "hostname": "raspberrypi", "rtt_ms": 2.5,
+                    "ports": [{"port": 22, "banner": "SSH-2.0-OpenSSH_7.9p1 Raspbian"}]}
+        scanner = {"id": 1, "site_id": site, "hostname": "PC-EMPFANG"}
+        for i, with_phone in enumerate([True, False, True, False, True, False, True, True]):
+            hosts = lan + ([phone] if with_phone else []) + ([intruder] if i == 7 else [])
+            netscan_service.store(scanner, {"id": scan}, netscan_service.validate(
+                {"hosts": hosts, "subnets": ["192.168.1.0/24"], "duration_s": 21.4}), now - (7 - i) * 900)
     print(f"Demodaten angelegt: Pfad-Check {path}, WAN-Check {wan}")
     return {"probe": 1, "site": site, "ping_check": 2, "path_check": path, "wan_check": wan, "rtp_check": voice}
 
