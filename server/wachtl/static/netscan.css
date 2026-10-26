@@ -1,0 +1,33 @@
+/* Netzwerk-Seite (netscan.html). Eigene Datei wie topology.css: nur hier geladen, belastet das
+   CSS-Budget der anderen Seiten nicht (docs/quality-guardrails.md). */
+table.netscan td { vertical-align: top; }
+table.netscan .healthbar { min-width: 140px; }
+table.netscan .badge { margin-top: 0.2rem; }
+.svc + .svc { margin-top: 0.25rem; }
+.svc code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.85em; }
+.note-edit { margin-top: 0.3rem; font-size: 0.85rem; }
+.note-edit > summary { margin: 0; }   /* nicht der große Abstand aufklappbarer Abschnitte: Zeile bleibt niedrig */
+.note-edit form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
+
+/* Schmale Bildschirme: jede Zeile eine Karte, Felder mit Beschriftung (data-label) in zwei Spalten,
+   breite Inhalte (Leiste, Dienste, Aktion) über die volle Breite. Kein Seitwärts-Wischen mehr. */
+@media (max-width: 700px) {
+  .scroll:has(> table.stack) { overflow: visible; border: 0; background: none; box-shadow: none; }
+  table.stack { display: block; white-space: normal; overflow: visible; border: 0; background: none; box-shadow: none; }
+  table.stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  table.stack tbody { display: flex; flex-direction: column; gap: 0.6rem; }
+  table.stack tr { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1rem; padding: 0.8rem 0.9rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+  table.stack td { display: block; padding: 0; border: 0; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+  table.stack td.nowrap { white-space: normal; }
+  table.stack td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 0.1rem;
+    color: var(--text-muted); font-size: 0.78rem; font-weight: 500; }
+  table.stack .st-head, table.stack .st-wide { grid-column: 1 / -1; }
+  /* kurze Werte (MAC, Wiederkehrer) nebeneinander direkt unter dem Kopf, breite Inhalte danach */
+  table.stack td.st-wide { order: 1; }
+  table.stack td.st-head { order: -1; }
+  table.stack tbody tr:hover > td { background: none; }
+  table.stack td:empty { display: none; }
+  table.netscan .healthbar { min-width: 0; display: flex; }
+  table.stack button.link { min-height: 44px; }
+}

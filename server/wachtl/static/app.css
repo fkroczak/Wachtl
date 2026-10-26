@@ -411,7 +411,7 @@ table.hops td.num, td.num { text-align: right; font-variant-numeric: tabular-num
 tr.hop-real td { background: color-mix(in srgb, var(--bad) 7%, transparent); }
 tr.hop-ratelimit td { color: var(--text-muted); }
 tr.route-changed td { background: color-mix(in srgb, var(--warn) 8%, transparent); }
-.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.85em; }
 .badge.info { background: var(--accent-soft); color: var(--text-muted); }
 .card .card-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
 tr.firing td { background: color-mix(in srgb, var(--bad) 4%, transparent); }
@@ -558,14 +558,6 @@ details.fold { margin-top: 1.2rem; }
 details.fold > summary { margin: 0 0 0.6rem; }
 details.fold > summary h2 { margin: 0; }
 
-/* Netzwerkscan */
-table.netscan td { vertical-align: top; }
-table.netscan .healthbar { min-width: 140px; }
-table.netscan .badge { margin-top: 0.2rem; }
-.svc + .svc { margin-top: 0.25rem; }
-.mono, .svc code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.85em; }
-.note-edit { margin-top: 0.3rem; font-size: 0.85rem; }
-.note-edit form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.3rem; }
 
 /* 1.0: Live-Benachrichtigungen unten rechts (app.js) und Zahl aktiver Alarme in der Navigation */
 .nav-count[hidden] { display: none; }
