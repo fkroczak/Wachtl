@@ -52,7 +52,10 @@ nur bei der Ersteinrichtung einmalig übernommen.
 
 ## 5. Erste Schritte im Web-UI
 
-1. `https://wachtl.kunde.local` öffnen. Die Browserwarnung ist bei selbstsignierten Zertifikaten normal; dauerhaft beheben, indem `deploy/certs/wachtl.crt` per GPO als vertrauenswürdige Stammzertifizierungsstelle verteilt wird.
+1. `https://wachtl.kunde.local` öffnen. Die Browserwarnung ist beim ersten Aufruf normal. Windows-PCs mit Probe
+   legen das Zertifikat bei der Installation selbst unter „Vertrauenswürdige Stammzertifizierungsstellen“ ab;
+   alle anderen Geräte: Seite `https://wachtl.kunde.local/zertifikat` (Link auf der Anmeldeseite), siehe
+   [Zertifikat im Browser](BETRIEB.md#zertifikat-im-browser).
 2. Mit `admin` und dem Passwort aus Schritt 3 anmelden, unter **admin › Konto** das Passwort ändern.
 3. **Verwaltung › Standorte**: Standorte anlegen (Name, Kundennummer).
 4. **Verwaltung › Standardpaket**: mit einem Klick Ping, Traceroute, iperf3 und Speedtest für alle Probes anlegen (Schritt-für-Schritt: [ROLLOUT.md](ROLLOUT.md)). Eigene Ziele (Server, Firewall, Cloud-Dienste) unter **Verwaltung › Checks** ergänzen, global, je Standort oder je Probe.

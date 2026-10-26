@@ -62,6 +62,30 @@ Versionen der Fremdkomponenten (VictoriaMetrics, Alertmanager, Traefik, PostgreS
 
 Automatische, signierte Updates sind für Phase 4 geplant (Ed25519-signiertes Manifest).
 
+## Zertifikat im Browser
+
+Wachtl stellt sich ein eigenes Zertifikat aus (10 Jahre). Damit Browser nicht warnen, muss es auf dem Gerät als
+vertrauenswürdige Stammzertifizierungsstelle hinterlegt sein. Es enthält eine **Namensbeschränkung** und gilt
+damit nur für die Namen und IP-Adressen des Wachtl-Servers – selbst wer den Schlüssel des Servers stiehlt, kann
+damit keine fremden Seiten fälschen. Ältere Zertifikate ohne Beschränkung stellt das Update einmal neu aus
+(gleicher Schlüssel, der Pin der Probes bleibt).
+
+| Gerät | Wie |
+| --- | --- |
+| Windows-PC mit Probe | automatisch beim Probe-Setup, Entfernen bei der Deinstallation (beide Server-Varianten) |
+| Windows-Server (Wachtl-Server) | automatisch beim Setup und jedem Update |
+| Windows ohne Probe | GPO (Computerkonfiguration › Richtlinien › Windows-Einstellungen › Sicherheitseinstellungen › Richtlinien für öffentliche Schlüssel › Vertrauenswürdige Stammzertifizierungsstellen) oder Datei von `/zertifikat` öffnen › Lokaler Computer |
+| macOS | Datei von `/zertifikat` › Schlüsselbund „System“ › „Immer vertrauen“, oder per MDM-Profil |
+| iPhone, iPad | in Safari `/zertifikat` › Profil installieren › Einstellungen › Allgemein › Info › Zertifikatsvertrauenseinstellungen einschalten (MDM: Profil mit Zertifikat-Payload) |
+| Android | Datei von `/zertifikat` › Einstellungen › Sicherheit › Zertifikat installieren › CA-Zertifikat |
+| Linux | `/usr/local/share/ca-certificates/wachtl.crt` + `update-ca-certificates`; Firefox/Chrome ggf. zusätzlich im eigenen Zertifikatspeicher |
+
+Die Seite `https://<Server>/zertifikat` (ohne Anmeldung, verlinkt auf der Anmeldeseite) bietet das Zertifikat zum
+Herunterladen an, zeigt den SHA-256-Fingerabdruck zum Vergleichen und die Schritte je Gerät.
+
+Hinweis Apple: macOS und iOS lehnen TLS-Serverzertifikate mit mehr als 825 Tagen Laufzeit ab. Je nach Version
+kann Safari das Wachtl-Zertifikat (10 Jahre) deshalb trotz Vertrauensstellung ablehnen.
+
 ## Sicherheitskonzept
 
 | Ebene | Maßnahme |

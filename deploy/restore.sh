@@ -11,7 +11,8 @@ read -r -p "Aktuelle Daten werden überschrieben. Fortfahren? (ja/nein) " answer
 WORK="$(mktemp -d)"
 tar -xzf "$ARCHIVE" -C "$WORK"
 cp "$WORK/env" .env && chmod 600 .env
-rm -rf certs && cp -r "$WORK/certs" .
+# in den bestehenden Ordner kopieren: Traefik und App binden ihn ein, ein neuer Ordner wäre für sie unsichtbar
+mkdir -p certs && cp -r "$WORK/certs/." certs/
 
 docker compose up -d postgres
 sleep 5

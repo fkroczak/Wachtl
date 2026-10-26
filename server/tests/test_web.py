@@ -215,6 +215,33 @@ class WebTest(AppTestCase):
         self.assertIn("Startmenü", html)
         self.assertNotIn("passwort.sh", html)
 
+    def test_certificate_page_public_with_download(self):
+        import tempfile
+        from pathlib import Path
+
+        from cryptography import x509
+
+        from wachtl.win import certs
+
+        self.assertIn("/zertifikat", self.client.get("/login").get_data(as_text=True))
+        # ohne hinterlegtes Zertifikat: Seite mit Hinweis, Download 404
+        self.app.config["CERT_FILE"] = ""
+        r = self.client.get("/zertifikat")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("nicht hinterlegt", r.get_data(as_text=True))
+        self.assertEqual(self.client.get("/zertifikat/wachtl.crt").status_code, 404)
+        with tempfile.TemporaryDirectory() as tmp:
+            crt = Path(tmp) / "c.pem"
+            certs.create_certificate(["wachtl.kunde.local"], Path(tmp) / "k.pem", crt)
+            self.app.config["CERT_FILE"] = str(crt)
+            html = self.client.get("/zertifikat").get_data(as_text=True)
+            self.assertIn("Fingerabdruck", html)
+            self.assertIn("Vertrauenswürdige Stammzertifizierungsstellen", html)
+            r = self.client.get("/zertifikat/wachtl.crt")
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.mimetype, "application/x-x509-ca-cert")
+            self.assertEqual(x509.load_der_x509_certificate(r.data), certs.load_certificate(crt))
+
     def test_admin_resets_password_and_unlocks(self):
         self.make_user()
         self.make_user("leser", "readonly")
@@ -390,7 +417,7 @@ class PrefilledSetupTest(AppTestCase):
         os.makedirs(self.probe_dir)
         with open(os.path.join(self.probe_dir, "WachtlProbeSetup-0.3.0.exe"), "wb") as f:
             f.write(b"MZ-alt")
-        with open(os.path.join(self.probe_dir, "WachtlSetup-0.9.2.exe"), "wb") as f:
+        with open(os.path.join(self.probe_dir, "WachtlSetup-0.9.3.exe"), "wb") as f:
             f.write(b"MZ" + b"x" * 5000)
         self.app.config.update(PROBE_DIR=self.probe_dir, PUBLIC_URL="https://wachtl.test:8443", SPKI_PIN="PIN=",
                                SERVER_URLS=["https://wachtl:8443", "https://10.0.0.5:8443", "https://wachtl.test:8443"])

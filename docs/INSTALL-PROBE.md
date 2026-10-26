@@ -25,6 +25,11 @@ und einen Token für die eingestellte Zahl PCs. Auf dem PC als Administrator sta
 - Ist der Server bei der Installation gar nicht erreichbar (Standort offline, VPN aus), wird die Probe trotzdem
   installiert und meldet sich selbst an, sobald der Server erreichbar ist.
 - Welche Ziele gemessen werden, legt immer der Server fest (Verwaltung › Checks).
+- Das Setup legt das Zertifikat des Servers unter **Vertrauenswürdige Stammzertifizierungsstellen** ab
+  (Anzeigename „Wachtl Server (Probe)“) – der Browser auf dem PC öffnet Wachtl danach ohne Warnung. Es wird nur
+  abgelegt, wenn es zum Pin passt, und gilt nur für die Adressen des Servers. War der Server bei der Installation
+  nicht erreichbar, holt das nächste Setup bzw. Update das nach, von Hand: `wachtl-probe.exe trust` (als Administrator).
+  Die Deinstallation entfernt es wieder (`wachtl-probe.exe trust --remove 1`).
 
 Dasselbe Setup ohne Vorbelegung (`WachtlSetup-<Version>.exe`, Link ebenfalls unter „Probes registrieren“) fragt nach
 der Rolle (Probe ist Standard) und dann auf einer Seite nach Server, Pin, Token und optional Proxy.
@@ -36,7 +41,7 @@ Mehrere Server-Adressen mit Komma trennen. Ist die Probe schon installiert, frag
 ```powershell
 WachtlSetup-Standort.exe /VERYSILENT /SUPPRESSMSGBOXES
 # ohne Vorbelegung:
-WachtlSetup-0.9.2.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
+WachtlSetup-0.9.3.exe /VERYSILENT /SUPPRESSMSGBOXES /Server=https://wachtl.kunde.local,https://10.0.0.5 /Pin="kpbQ…=" /Token=wachtl-… [/Proxy=http://proxy:3128] [/Hostname=PC-01]
 ```
 
 Exit-Code 0 = Probe läuft (angemeldet oder Anmeldung folgt automatisch), 10 = nicht betriebsbereit (Grund im `/LOG`,

@@ -13,6 +13,12 @@
     if (mark) window.location.href = mark.dataset.href;
   });
 
+  // Verlauf je Standort: Balken mit Ausfall per Mausklick öffnen (Tastatur: Link „Ausfälle“ daneben)
+  document.addEventListener("click", (ev) => {
+    const bar = ev.target.closest(".healthbar [data-href]");
+    if (bar) window.location.href = bar.dataset.href;
+  });
+
   // Benutzermenü: schließt bei Klick daneben und mit Escape (Fokus zurück auf den Namen)
   const userMenu = document.querySelector("[data-usermenu]");
   if (userMenu) {
