@@ -21,7 +21,7 @@
 ; 10 = installiert, aber nicht betriebsbereit (Grund im /LOG). /SUPPRESSMSGBOXES ist unbeaufsichtigt Pflicht.
 
 #ifndef AppVersion
-  #define AppVersion "0.9.5"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef BuildDir
   #define BuildDir "..\build\server"

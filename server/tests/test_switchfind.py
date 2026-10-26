@@ -1,4 +1,4 @@
-"""1.1: Switches automatisch finden, TP-Link Easy Smart über die Weboberfläche, wahrscheinliche Knotenpunkte."""
+"""1.0: Switches automatisch finden, TP-Link Easy Smart über die Weboberfläche, wahrscheinliche Knotenpunkte."""
 import json
 import re
 import socket

@@ -1,4 +1,4 @@
--- 1.1: Switches automatisch finden (docs/TOPOLOGIE.md#switches-automatisch-finden) und Switches ohne SNMP
+-- 1.0: Switches automatisch finden (docs/TOPOLOGIE.md#switches-automatisch-finden) und Switches ohne SNMP
 -- über ihre Weboberfläche abfragen (TP-Link Easy Smart).
 
 -- Zugangsart je Switch: snmp (Standard) | easysmart (Weboberfläche TP-Link Easy Smart, HTTP)

@@ -79,7 +79,7 @@ public class TrayCoreTests
     {
         var status = Json.Read<TrayStatus>(
             "{\"role\":\"server\",\"name\":\"SRV\",\"site\":\"Zentrale\",\"server_url\":\"https://w\",\"dashboard_url\":\"https://w\"," +
-            "\"version\":\"0.9.5\",\"enrolled\":true,\"connected\":false,\"last_contact\":1792230000,\"pending_reports\":2,\"neu\":1}")!;
+            "\"version\":\"1.0.0\",\"enrolled\":true,\"connected\":false,\"last_contact\":1792230000,\"pending_reports\":2,\"neu\":1}")!;
         Assert.True(status.IsServer);
         Assert.Equal("https://w", status.DashboardUrl);
         Assert.Equal(1792230000, status.LastContact);

@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from flask import Flask, jsonify, render_template, request
 
-__version__ = "0.9.5"
+__version__ = "1.0.0"
 
 
 def _env(key: str, default: str | None = None) -> str | None:
