@@ -8,7 +8,7 @@
   {% if min_s %}Störungen unter {{ min_s|duration }} werden nicht gezeigt.{% endif %}</p>
 
 <form method="get" class="row">
-  <label>Zeitraum <select name="range">{% for r in ranges %}<option {{ 'selected' if r == range_key }}>{{ r }}</option>{% endfor %}</select></label>
+  <label>Zeitraum <select name="range">{% for r, label in ranges.items() %}<option value="{{ r }}" {{ 'selected' if r == range_key }}>{{ label }}</option>{% endfor %}</select></label>
 {% if not single_site %}<label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
   <label>Ursache <select name="cause"><option value="">alle</option>{% for k, v in causes.items() %}<option value="{{ k }}" {{ 'selected' if cause == k }}>{{ v[0] }}</option>{% endfor %}</select></label>
   <label class="check"><input type="checkbox" name="all" value="1" {{ 'checked' if show_all }}> Folgestörungen zeigen</label>
@@ -29,6 +29,7 @@
   {% endif %}
 </section>
 
+{% if pages > 1 %}<p class="muted" role="status">Seite {{ page }} von {{ pages }}, neueste zuerst ({{ total }} Störungen).</p>{% endif %}
 <div class="scroll">
 <table>
   <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Probe</th><th>Ziel</th><th>Meldung</th></tr></thead>
@@ -47,5 +48,11 @@
   {% else %}<tr><td colspan="{{ 6 if single_site else 7 }}" class="muted">Keine Störungen im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
 </table>
 </div>
+{% if pages > 1 %}
+<nav class="pager" aria-label="Seiten der Störungsliste">
+  {% if page > 1 %}<a class="button" href="{{ url_for('web.outages_view', page=page - 1, **args) }}">Neuere Störungen</a>{% endif %}
+  {% if page < pages %}<a class="button" href="{{ url_for('web.outages_view', page=page + 1, **args) }}">Ältere Störungen</a>{% endif %}
+</nav>
+{% endif %}
 <p class="muted small">Beginn und Dauer sind sekundengenau aus den Rohdaten (erster bis letzter Ping ohne Antwort).</p>
 {% endblock %}

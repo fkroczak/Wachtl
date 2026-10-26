@@ -8,19 +8,16 @@
 
 <h2>Aktiv</h2>
 {% if firing %}
+<div class="scroll">
 <table>
-  <thead><tr><th>Stufe</th><th>Alarm</th><th>seit</th><th>Bestätigt</th>{% if has_role(user,'operator') %}<th><span class="sr-only">Aktionen</span></th>{% endif %}</tr></thead>
+  <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Bestätigt</th></tr></thead>
   <tbody>
   {% for a in firing %}
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
-      <td>{{ a.summary or a.alertname }}<br><span class="muted small">{{ a.alertname }}{% set l = a.labels|fromjson %}{% if l.cause %} · Ursache: {{ l.cause }}{% endif %}{% set refs = alert_links(a) %}{% if refs|trim %} · {{ refs }}{% endif %}</span></td>
-      <td title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
-      <td>{% if a.acked_by %}{{ a.acked_by }}<br><span class="muted small">{{ a.acked_at|dt }}</span>{% else %}–{% endif %}</td>
-      {% if has_role(user,'operator') %}
-      <td>
-        {% if not a.acked_by %}
-        <form method="post" action="{{ url_for('web.alert_ack', event_id=a.id) }}" class="ack">
+      <td>{{ a.summary or a.alertname }}<br><span class="muted small">{{ a.alertname }}{% set l = a.labels|fromjson %}{% if l.cause %} · Ursache: {{ l.cause }}{% endif %}{% set refs = alert_links(a) %}{% if refs|trim %} · {{ refs }}{% endif %}</span>
+        {% if has_role(user,'operator') and not a.acked_by %}
+        <form method="post" action="{{ url_for('web.alert_ack', event_id=a.id) }}" class="ack report-action">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           {% set what = a.summary or a.alertname %}
           <select name="hours" aria-label="Stummschalten für (Alarm: {{ what }})">
@@ -31,15 +28,19 @@
         </form>
         {% endif %}
       </td>
-      {% endif %}
+      <td class="nowrap" title="{{ a.starts_at|dt }}">{{ a.starts_at|ago }}</td>
+      <td>{% if a.acked_by %}{{ a.acked_by }}<br><span class="muted small">{{ a.acked_at|dt }}</span>{% else %}–{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}<p class="muted">Keine aktiven Alarme.</p>{% endif %}
 
 <h2>Historie</h2>
 {% if history %}
+<p class="muted" role="status">{{ history_total }} beendete {{ 'Alarm' if history_total == 1 else 'Alarme' }}{% if history_pages > 1 %} · Seite {{ history_page }} von {{ history_pages }}{% endif %}</p>
+<div class="scroll">
 <table>
   <thead><tr><th>Stufe</th><th>Alarm</th><th>Beginn</th><th>Ende</th><th>Bestätigt</th></tr></thead>
   <tbody>
@@ -47,12 +48,19 @@
     <tr>
       <td><span class="badge {{ a.severity }}">{{ a.severity|severity }}</span></td>
       <td>{{ a.summary or a.alertname }}{% set refs = alert_links(a) %}{% if refs|trim %}<br><span class="muted small">{{ refs }}</span>{% endif %}</td>
-      <td>{{ a.starts_at|dt }}</td>
-      <td>{{ a.ends_at|dt }}</td>
+      <td class="nowrap">{{ a.starts_at|dt }}</td>
+      <td class="nowrap">{{ a.ends_at|dt }}</td>
       <td>{{ a.acked_by or '–' }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
+{% if history_pages > 1 %}
+<nav class="pager" aria-label="Seiten der Historie">
+  {% if history_page > 1 %}<a class="button" href="{{ url_for('web.alerts', page=history_page - 1) }}">Neuere Alarme</a>{% endif %}
+  {% if history_page < history_pages %}<a class="button" href="{{ url_for('web.alerts', page=history_page + 1) }}">Ältere Alarme</a>{% endif %}
+</nav>
+{% endif %}
 {% else %}<p class="muted">Noch keine beendeten Alarme.</p>{% endif %}
 {% endblock %}

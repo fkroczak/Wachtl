@@ -20,26 +20,16 @@
 {% set back = url_for('web.reports_view', page=page, **args) %}
 <div class="scroll">
 <table class="reports">
-  <thead><tr><th>Störung</th><th>Eingang</th><th>PC / Probe</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Benutzer</th><th>Art</th><th>Dauer</th><th>Beschreibung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+  <thead><tr><th>Störung</th><th>Status</th><th>PC / Probe</th><th>Art</th><th>Dauer</th><th>Beschreibung</th><th>Benutzer</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Eingang</th></tr></thead>
   <tbody>{% for r in items %}
     {% set what = r.category_label ~ ', ' ~ r.probe_label ~ ', ' ~ (r.occurred_at|dt) %}
     <tr class="{{ 'report-open-row' if r.status == 'open' }}">
-      <td class="nowrap">{{ r.occurred_at|dt }}</td>
-      <td class="nowrap">{{ r.received_at|dt }}</td>
-      <td>{% if r.probe_id %}<a href="{{ url_for('web.probe', probe_id=r.probe_id) }}">{{ r.probe_label }}</a>{% else %}{{ r.probe_label }}{% endif %}
-        {% if r.hostname and r.probe_name and r.hostname != r.probe_name %}<br><span class="muted small">{{ r.hostname }}</span>{% endif %}</td>
-      {% if not single_site %}<td>{% if r.site_id %}<a href="{{ url_for('web.site', site_id=r.site_id) }}">{{ r.site_name }}</a>{% else %}–{% endif %}</td>{% endif %}
-      <td>{{ r.reported_user or '–' }}</td>
-      <td>{{ r.category_label }}</td>
-      <td>{{ r.duration_label }}</td>
-      <td class="report-text">{{ r.description or '–' }}</td>
+      <td class="nowrap">{{ r.occurred_at|dt }}
+        {% set g = report_graph_url(r) %}{% if g %}<br><a class="small" href="{{ g }}" aria-label="Graph zur Meldung: {{ what }}">Graph</a>{% endif %}</td>
       <td>
         <span class="badge {{ 'report-open' if r.status == 'open' else 'info' }}">{{ r.status_label }}</span>
         {% if r.status == 'done' %}<br><span class="muted small">{{ r.done_by or '–' }}, {{ r.done_at|dt }}</span>
           {% if r.done_note %}<br><span class="small">{{ r.done_note }}</span>{% endif %}{% endif %}
-      </td>
-      <td>
-        {% set g = report_graph_url(r) %}{% if g %}<a href="{{ g }}" aria-label="Graph zur Meldung: {{ what }}">Graph</a>{% endif %}
         {% if has_role(user, 'operator') %}
         <form method="post" action="{{ url_for('web.report_status', report_id=r.id) }}" class="ack report-action">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -53,8 +43,16 @@
         </form>
         {% endif %}
       </td>
+      <td>{% if r.probe_id %}<a href="{{ url_for('web.probe', probe_id=r.probe_id) }}">{{ r.probe_label }}</a>{% else %}{{ r.probe_label }}{% endif %}
+        {% if r.hostname and r.probe_name and r.hostname != r.probe_name %}<br><span class="muted small">{{ r.hostname }}</span>{% endif %}</td>
+      <td>{{ r.category_label }}</td>
+      <td>{{ r.duration_label }}</td>
+      <td class="report-text">{{ r.description or '–' }}</td>
+      <td>{{ r.reported_user or '–' }}</td>
+      {% if not single_site %}<td>{% if r.site_id %}<a href="{{ url_for('web.site', site_id=r.site_id) }}">{{ r.site_name }}</a>{% else %}–{% endif %}</td>{% endif %}
+      <td class="nowrap">{{ r.received_at|dt }}</td>
     </tr>
-  {% else %}<tr><td colspan="10" class="muted">Keine Meldungen für diese Auswahl.</td></tr>{% endfor %}</tbody>
+  {% else %}<tr><td colspan="{{ 8 if single_site else 9 }}" class="muted">Keine Meldungen für diese Auswahl.</td></tr>{% endfor %}</tbody>
 </table>
 </div>
 

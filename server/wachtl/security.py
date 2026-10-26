@@ -147,7 +147,7 @@ def login_required(minimum: str = "readonly", api: bool = False):
             if user is None:
                 if api:
                     return jsonify(error="nicht angemeldet"), 401
-                return redirect(url_for("web.login", next=request.full_path))
+                return redirect(url_for("web.login", next=request.full_path.rstrip("?")))
             if not has_role(user, minimum):
                 if api:
                     return jsonify(error="keine Berechtigung"), 403

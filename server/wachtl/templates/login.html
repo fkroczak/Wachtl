@@ -6,10 +6,11 @@
   <img class="wordmark wordmark-light" src="{{ url_for('static', filename='wachtl-wordmark.svg') }}" alt="Wachtl" width="230" height="70">
   <img class="wordmark wordmark-dark" src="{{ url_for('static', filename='wachtl-wordmark-dark.svg') }}" alt="Wachtl" width="230" height="70">
   <p class="tagline">Netzwerk-Monitoring</p>
+  {% if error %}<div class="flash error" role="alert" id="login-error">{{ error }}</div>{% endif %}
   <form method="post" class="stack">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label>Benutzername <input name="username" autocomplete="username" required autofocus></label>
-    <label>Passwort <input name="password" type="password" autocomplete="current-password" required></label>
+    <label>Benutzername <input name="username" autocomplete="username" required value="{{ username or '' }}"{{ ' autofocus' if not username }}></label>
+    <label>Passwort <input name="password" type="password" autocomplete="current-password" required{% if username %} autofocus aria-describedby="login-error"{% endif %}></label>
     <button class="primary">Anmelden</button>
   </form>
   <p class="forgot"><a href="{{ url_for('web.password_forgot') }}">Passwort vergessen?</a>
