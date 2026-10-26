@@ -458,7 +458,7 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
 
 
 SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Ausfälle", "meldungen": "Hinweise & Meldungen",
-             "messungen": "Alle Messungen"}
+             "messungen": "Alle Messungen", "netzwerk": "Netzwerk"}
 PROBE_TABS_DETAIL = {"messungen": "Messungen", "ping": "Ping & Pfade", "bandbreite": "Bandbreite & Sprache",
                      "meldungen": "Hinweise & Meldungen", "alarme": "Alarme", "details": "Details"}
 
@@ -475,6 +475,8 @@ def _tab(tabs: dict, default: str) -> str:
 def site(site_id: int):
     tab = _tab(SITE_TABS, "probes")
     s = q1("SELECT * FROM sites WHERE id = ?", (site_id,)) or abort(404)
+    if tab == "netzwerk":
+        return _site_network(s)
     probes = q(
         "SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
         "WHERE p.site_id = ? ORDER BY p.hostname",
@@ -1615,3 +1617,81 @@ def notify_test():
     except notify.NotifyError as exc:
         flash(str(exc), "error")
     return redirect(admin_url("benachrichtigungen"))
+
+
+# -- Netzwerkscan (docs/NETZWERKSCAN.md) ---------------------------------------
+NETSCAN_RANGES = {"24h": ("24 Stunden", 86400), "7d": ("7 Tage", 7 * 86400), "30d": ("30 Tage", 30 * 86400)}
+
+
+def _site_network(s: dict):
+    """Reiter „Netzwerk“ eines Standorts: Geräte, Anwesenheit, Dienste mit Links, Auffälligkeiten."""
+    from .services import netscan
+
+    rng = request.args.get("zeitraum", "24h")
+    if rng not in NETSCAN_RANGES:
+        rng = "24h"
+    until = repo.now()
+    since = until - NETSCAN_RANGES[rng][1]
+    probes = q("SELECT p.*, s.name AS site_name FROM probes p JOIN sites s ON s.id = p.site_id "
+               "WHERE p.site_id = ? AND p.status = 'active' ORDER BY p.hostname", (s["id"],))
+    scans = []
+    for p in probes:
+        for c in repo.checks_for_probe(p):
+            if c["type"] == "netscan":
+                last = q1("SELECT * FROM netscan_runs WHERE probe_id = ? AND check_id = ? ORDER BY ts DESC, id DESC "
+                          "LIMIT 1", (p["id"], c["id"]))
+                pending = q1("SELECT id FROM probe_commands WHERE probe_id = ? AND check_id = ? "
+                             "AND delivered_at IS NULL", (p["id"], c["id"]))
+                scans.append({"probe": p, "check": c, "last": last, "pending": pending})
+    devices = netscan.devices(s["id"], since, until)
+    for d in devices:
+        d["bar"] = netscan.presence_bar(d["presence"], since, until)
+    order = {True: 0, False: 1}
+    devices.sort(key=lambda d: (0 if {"ip_conflict", "irregular"} & set(d["flags"]) else 1, order[d["online"]],
+                                _ip_sort(d["ip"])))
+    events = netscan.events(s["id"], since, until, limit=100)
+    kpi = {
+        "online": sum(d["online"] for d in devices), "total": len(devices),
+        "irregular": sum("irregular" in d["flags"] for d in devices),
+        "conflicts": len({e["ip"] for e in events if e["kind"] == "ip_conflict"}),
+        "new": sum("new" in d["flags"] for d in devices),
+        "services": sum(len([x for x in d["services"] if x["link"]]) for d in devices),
+    }
+    return render_template("netscan.html", tab="netzwerk", tabs=SITE_TABS, site=s, scans=scans, devices=devices,
+                           events=events, kpi=kpi, rng=rng, ranges=NETSCAN_RANGES, since=since, until=until,
+                           FLAG_LABELS=netscan.FLAG_LABELS)
+
+
+def _ip_sort(ip: str | None):
+    try:
+        import ipaddress
+
+        return (0, int(ipaddress.ip_address(ip or "")))
+    except ValueError:
+        return (1, 0)
+
+
+@bp.get("/netzwerk/geraete/<int:device_id>/<int:port>.rdp")
+@login_required()
+def netscan_rdp(device_id: int, port: int):
+    """Remotedesktop-Verbindung als .rdp-Datei – Windows öffnet sie mit mstsc."""
+    from .services import netscan
+
+    d = q1("SELECT * FROM net_devices WHERE id = ?", (device_id,)) or abort(404)
+    if not q1("SELECT id FROM net_services WHERE device_id = ? AND port = ? AND service = 'rdp'", (device_id, port)):
+        abort(404)
+    name = "".join(ch for ch in (d["hostname"] or d["ip"] or "geraet") if ch.isalnum() or ch in ".-_")[:60] or "geraet"
+    return Response(netscan.rdp_file(d["ip"], port), mimetype="application/x-rdp",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.rdp"'})
+
+
+@bp.post("/netzwerk/geraete/<int:device_id>/notiz")
+@login_required("operator")
+def netscan_note(device_id: int):
+    d = q1("SELECT * FROM net_devices WHERE id = ?", (device_id,)) or abort(404)
+    note = request.form.get("note", "").strip()[:80] or None
+    ex("UPDATE net_devices SET note = ? WHERE id = ?", (note, device_id))
+    repo.audit(current_user()["username"], "netscan.note", f"device:{device_id}", note or "(entfernt)")
+    flash("Bezeichnung gespeichert." if note else "Bezeichnung entfernt.", "ok")
+    return redirect(url_for("web.site", site_id=d["site_id"], tab="netzwerk", zeitraum=request.form.get("zeitraum"))
+                    + f"#geraet-{device_id}")

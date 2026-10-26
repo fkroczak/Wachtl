@@ -20,7 +20,7 @@
     <div class="grid-form">
       {% call(attrs) field("name", "Name", error=fe.name) %}
         <input name="name" required maxlength="100" value="{{ fv.name or (check.name if check else '') }}" {{ attrs }}
-          placeholder="{{ {'ping': 'z. B. Fileserver', 'path': 'z. B. Pfad zu Cloudflare', 'iperf': 'z. B. iperf zum Server', 'speedtest': 'z. B. Internet-Speedtest', 'rtp': 'z. B. Sprache zur Zentrale'}[ctype.key] }}">
+          placeholder="{{ {'ping': 'z. B. Fileserver', 'path': 'z. B. Pfad zu Cloudflare', 'iperf': 'z. B. iperf zum Server', 'speedtest': 'z. B. Internet-Speedtest', 'rtp': 'z. B. Sprache zur Zentrale', 'netscan': 'z. B. Netzwerkscan Büro'}[ctype.key] }}">
       {% endcall %}
       {% if ctype.key in ('ping', 'path') %}
         {% call(attrs) field("target", ctype.target_label, help=ctype.target_help, error=fe.target) %}
