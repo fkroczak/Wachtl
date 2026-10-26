@@ -20,6 +20,8 @@ class SetupWizardTest(AppTestCase):
         return self.client.post("/admin/einrichtung", data={**base, **data})
 
     def test_seite_mit_standards(self):
+        self.make_site("Zentrale")
+        self.make_site("Lager")
         html = self.client.get("/admin/einrichtung").get_data(as_text=True)
         self.assertIn("1 · Standort", html)
         self.assertIn('value="25"', html)
@@ -56,6 +58,19 @@ class SetupWizardTest(AppTestCase):
         self.assertEqual(len(q("SELECT id FROM sites")), 1)
         self.assertEqual(q1("SELECT scope, scope_id FROM check_assignments WHERE scope = 'site'"),
                          {"scope": "site", "scope_id": sid})
+
+    def test_ein_standort_ohne_rueckfrage(self):
+        sid = self.make_site("Zentrale")
+        html = self.client.get("/admin/einrichtung").get_data(as_text=True)
+        self.assertNotIn("· Standort</h2>", html)
+        self.assertIn("1 · Messungen", html)
+        self.assertIn(f'name="site_id" value="{sid}"', html)
+        self.assertNotIn('name="scope"', html.replace('type="hidden" name="scope"', ""))
+
+    def test_erster_standort_wird_automatisch_angelegt(self):
+        r = self.post(site_name="", email_to="")
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNotNone(q1("SELECT id FROM sites WHERE name = 'Hauptstandort'"))
 
     def test_nur_admin(self):
         self.assertEqual(self.app.test_client().get("/admin/einrichtung").status_code, 302)

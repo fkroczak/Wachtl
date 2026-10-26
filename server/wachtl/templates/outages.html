@@ -9,7 +9,7 @@
 
 <form method="get" class="row">
   <label>Zeitraum <select name="range">{% for r in ranges %}<option {{ 'selected' if r == range_key }}>{{ r }}</option>{% endfor %}</select></label>
-  <label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></label>
+{% if not single_site %}<label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site == s.id|string }}>{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
   <label>Ursache <select name="cause"><option value="">alle</option>{% for k, v in causes.items() %}<option value="{{ k }}" {{ 'selected' if cause == k }}>{{ v[0] }}</option>{% endfor %}</select></label>
   <label class="check"><input type="checkbox" name="all" value="1" {{ 'checked' if show_all }}> Folgestörungen zeigen</label>
   <button>Anzeigen</button>
@@ -23,13 +23,15 @@
     <dt>davon aktiv</dt><dd>{{ summary.active }}</dd></dl></div>
   <div class="card kv"><h2 class="card-title">Nach Ursache</h2><dl>
     {% for key, c in summary.by_cause %}<dt>{{ c.label }}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
+  {% if not single_site %}
   <div class="card kv"><h2 class="card-title">Nach Standort</h2><dl>
     {% for name, c in summary.by_site[:8] %}<dt>{% if c.site|int %}<a href="{{ url_for('web.site', site_id=c.site|int) }}">{{ name }}</a>{% else %}{{ name }}{% endif %}</dt><dd>{{ c.count }} × · {{ c.seconds|duration }}</dd>{% else %}<dt>–</dt><dd>keine</dd>{% endfor %}</dl></div>
+  {% endif %}
 </section>
 
 <div class="scroll">
 <table>
-  <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th><th>Standort</th><th>Probe</th><th>Ziel</th><th>Meldung</th></tr></thead>
+  <thead><tr><th>Beginn</th><th>Dauer</th><th>Ursache</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Probe</th><th>Ziel</th><th>Meldung</th></tr></thead>
   <tbody>{% for o in items %}
     <tr class="{{ 'firing' if o.end is none }}">
       <td class="nowrap">{{ o.start|dt }}</td>
@@ -37,12 +39,12 @@
       <td><span class="cause cause-{{ o.cause }}" title="{{ causes[o.cause][1] }}">{{ o.cause_label }}</span>
         {% if o.consequence_of %}<br><span class="muted small">Folge von: {{ o.consequence_of }}</span>{% endif %}
         {% if o.site in switch_sites %}<br><a class="small" href="{{ url_for('web.topology_context', site_id=o.site|int, probe=o.probe|int if o.probe|int else None, von=o.start, bis=o.end or o.start + o.duration) }}" aria-label="Switch-Netz zur Zeit der Störung: {{ o.probe_name }}, {{ o.start|dt }}">Switch-Netz zu dieser Zeit</a>{% endif %}</td>
-      <td>{% if o.site %}<a href="{{ url_for('web.site', site_id=o.site|int) }}">{{ o.site_name }}</a>{% endif %}</td>
+      {% if not single_site %}<td>{% if o.site %}<a href="{{ url_for('web.site', site_id=o.site|int) }}">{{ o.site_name }}</a>{% endif %}</td>{% endif %}
       <td>{% if o.probe %}<a href="{{ url_for('web.probe', probe_id=o.probe|int) }}">{{ o.probe_name }}</a>{% endif %}</td>
       <td>{% if o.cause not in ('probe', 'wan') %}{% if o.probe|int and o.check_id|int %}<a href="{{ url_for('web.target', probe_id=o.probe|int, check_id=o.check_id|int) }}" aria-label="{{ o.target }} von {{ o.probe_name }}">{{ o.target }}</a>{% else %}{{ o.target }}{% endif %}{% endif %}</td>
       <td class="small">{{ o.summary }}</td>
     </tr>
-  {% else %}<tr><td colspan="7" class="muted">Keine Störungen im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
+  {% else %}<tr><td colspan="{{ 6 if single_site else 7 }}" class="muted">Keine Störungen im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
 </table>
 </div>
 <p class="muted small">Beginn und Dauer sind sekundengenau aus den Rohdaten (erster bis letzter Ping ohne Antwort).</p>

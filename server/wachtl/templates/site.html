@@ -5,10 +5,11 @@
 {% from "_findings.html" import findings_table with context %}
 {% from "_outages.html" import outage_table with context %}
 {% from "_tabs.html" import tabs as tabnav %}
+{% from "_health.html" import healthbar, uptime, outages_link, legend, range_picker with context %}
 {% block content %}
 {% set editing = has_role(user, 'admin') and request.args.get('bearbeiten') %}
 {% if not editing %}<div data-autorefresh="30" hidden></div>{% endif %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
+{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>{% endif %}
 {% if editing %}
 <h1>Standort bearbeiten</h1>
 <form method="post" action="{{ url_for('web.site_edit', site_id=site.id) }}" class="row">
@@ -42,6 +43,20 @@
     <span>Mbit/s · {{ KIND_LABELS[st.kind] }} {{ st.ts|ago }}{% if st.problem %} · {{ st.label }}{% endif %}</span></a>
   {% endif %}
 </section>
+
+{% if site_health %}{% set h = site_health[site.id] %}
+<section class="card health" aria-labelledby="verlauf">
+  <div class="card-head">
+    <h2 id="verlauf">Verlauf – letzte {{ health_label }}</h2>
+    {{ range_picker('web.site', {'site_id': site.id}) }}
+  </div>
+  <p class="muted small health-sub">je Balken {{ health_step }}</p>
+  <ul class="health-list">
+    <li class="health-row">{{ healthbar(site, h) }}<span class="health-up">{{ uptime(h) }}{% if h.count %}<br>{{ outages_link(site, h) }}{% endif %}</span></li>
+  </ul>
+  {{ legend() }}
+</section>
+{% endif %}
 
 <h2 id="probes">Probes</h2>
 {% if widgets %}

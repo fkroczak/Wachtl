@@ -29,9 +29,9 @@
 {%- endmacro %}
 {#- nie 100,0 % zeigen, wenn es eine Störung gab: dann so viele Stellen, dass der Unterschied sichtbar ist -#}
 {% macro uptime(h) %}{% if h.up is none %}–{% elif h.any_s and h.up >= 99.95 %}{{ '%.3f'|format([h.up, 99.999]|min)|replace('.', ',') }} %{% else %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% endif %}{% endmacro %}
-{% macro range_picker(endpoint) -%}
+{% macro range_picker(endpoint, args={}) -%}
 <nav class="seg" aria-label="Zeitraum des Verlaufs">
-  {%- for key, r in health_ranges.items() %}<a href="{{ url_for(endpoint, verlauf=key) }}"{% if key == health_range %} aria-current="true"{% endif %}>{{ r[2] }}</a>{% endfor -%}
+  {%- for key, r in health_ranges.items() %}<a href="{{ url_for(endpoint, verlauf=key, **args) }}"{% if key == health_range %} aria-current="true"{% endif %}>{{ r[2] }}</a>{% endfor -%}
 </nav>
 {%- endmacro %}
 {% macro legend() -%}

@@ -2,7 +2,7 @@
 {% block title %}Netzwerk · {{ site.name }}{% endblock %}
 {% from "_tabs.html" import tabs as tabnav %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>
+{% if not single_site %}<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / Standort</nav>{% endif %}
 <h1>{{ site.name }}{% if site.customer_no %} <span class="muted">· {{ site.customer_no }}</span>{% endif %}</h1>
 {% set tab_items = [] %}{% for key, text in tabs.items() %}{% set _ = tab_items.append((key, text, url_for('web.site', site_id=site.id, tab=key))) %}{% endfor %}
 {{ tabnav(tab_items, tab) }}

@@ -2,7 +2,7 @@
 {% block title %}Pfad {{ check.target }} – {{ probe.hostname }}{% endblock %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Pfad</nav>
+<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Pfad</nav>
 <h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> → {{ check.target }}</span></h1>
 <p class="muted">Jeder Hop wird alle {{ check.interval_s }} s angepingt, der Pfad alle {{ params.trace_interval_min }} min neu ermittelt{{ ' und sofort bei Verlust am Ziel' if params.retrace_on_loss }}.</p>
 

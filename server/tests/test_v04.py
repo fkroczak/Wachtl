@@ -85,6 +85,7 @@ class CheckStatusTest(AppTestCase):
 
     def test_overview_lists_failed_measurements(self):
         self.bw(self.wan, [{"direction": "down", "error": "Zeitlimit erreicht"}])
+        self.make_site("Filiale")                  # Übersicht gibt es ab zwei Standorten
         self.make_user()
         self.login()
         with mock.patch("wachtl.services.vm.live_status", return_value={}):
@@ -104,6 +105,7 @@ class CheckStatusTest(AppTestCase):
 
     def test_offline_probe_is_one_problem(self):
         ex("UPDATE probes SET last_seen = ?", (repo.now() - 3600,))
+        self.make_site("Filiale")                  # Übersicht gibt es ab zwei Standorten
         self.make_user()
         self.login()
         with mock.patch("wachtl.services.vm.live_status", return_value={}):
@@ -220,6 +222,7 @@ class RecentOutageTest(AppTestCase):
         ins("INSERT INTO alert_events (fingerprint, alertname, severity, status, labels, summary, starts_at, ends_at, "
             "updated_at, refined_at) VALUES ('f1', 'WachtlTargetDown', 'critical', 'resolved', ?, 'down', ?, ?, ?, ?)",
             (json.dumps(labels), now - 600, now - 575, now - 575, now))
+        self.make_site("Filiale")                  # Übersicht gibt es ab zwei Standorten
         self.make_user()
         self.login()
         live = {(str(pid), str(cid)): {"up": 1, "rtt": 0.98, "loss": 0.0}}
@@ -275,11 +278,12 @@ class SiteHealthTest(AppTestCase):
 
     def test_overview_and_sidebar(self):
         self.enroll("PC-1")
+        self.make_site("Filiale")                  # Übersicht gibt es ab zwei Standorten
         self.make_user()
         self.login()
         with mock.patch("wachtl.services.vm.live_status", return_value={}):
             html = self.client.get("/").get_data(as_text=True)
         self.assertIn("Standorte – letzte 24 Stunden", html)
-        self.assertEqual(html.count('<span class="hb-'), 48)
+        self.assertEqual(html.count('<span class="hb-'), 2 * 48)       # je Standort 48 Balken
         self.assertIn('aria-label="Standorte"', html)                  # Standorte in der Seitenleiste
         self.assertRegex(html, r'<nav class="side-sites"[\s\S]*href="/sites/1"')

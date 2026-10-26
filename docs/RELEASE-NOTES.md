@@ -3,6 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Unveröffentlicht
+
+- **Nur ein Standort**: Gibt es genau einen Standort, blendet Wachtl ihn aus. „Übersicht“ zeigt direkt die Standortseite mit Probes, Netzwerk, Topologie und dem Verlauf (24 h bis 90 Tage). Menüpunkt „Standorte“, Standortliste in der Seitenleiste sowie Standortauswahl in Filtern, Bericht, Messungen, Setup und Einrichtung entfallen; die Einrichtung nutzt den vorhandenen Standort oder legt „Hauptstandort“ an. Ab dem zweiten Standort erscheint alles wieder.
+
 ## Neu in 0.9.6
 
 - **Jede Störung sichtbar und gemeldet**: Ausfälle und jeder einzelne verlorene Ping werden jetzt direkt aus den Messwerten erkannt, sobald sie beim Server ankommen – auch **nachträglich**, wenn ein PC selbst kein Netz hatte und seine Werte erst danach schickt. Bisher fielen genau diese Ausfälle (Kabel gezogen, Switch aus) unter den Tisch: Graph rot, Übersicht „0 Ausfälle“. Neue Alarmregel **Jeder Paketverlust** (Standard: jeder verlorene Ping, per E-Mail/Teams). Details: [BENACHRICHTIGUNGEN.md](BENACHRICHTIGUNGEN.md).
