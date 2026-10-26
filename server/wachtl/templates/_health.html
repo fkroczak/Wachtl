@@ -28,9 +28,9 @@
 <a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="{{ s.name }}: {{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }} in {{ health_label }} ansehen">{{ h.count }} {{ 'Ausfall' if h.count == 1 else 'Ausfälle' }}</a>
 {%- endmacro %}
 {% macro uptime(h) %}{% if h.up is not none %}{{ '%.1f'|format(h.up)|replace('.', ',') }} %{% else %}–{% endif %}{% endmacro %}
-{% macro range_picker(endpoint) -%}
+{% macro range_picker(endpoint, args={}) -%}
 <nav class="seg" aria-label="Zeitraum des Verlaufs">
-  {%- for key, r in health_ranges.items() %}<a href="{{ url_for(endpoint, verlauf=key) }}"{% if key == health_range %} aria-current="true"{% endif %}>{{ r[2] }}</a>{% endfor -%}
+  {%- for key, r in health_ranges.items() %}<a href="{{ url_for(endpoint, verlauf=key, **args) }}"{% if key == health_range %} aria-current="true"{% endif %}>{{ r[2] }}</a>{% endfor -%}
 </nav>
 {%- endmacro %}
 {% macro legend() -%}

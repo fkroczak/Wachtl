@@ -2,7 +2,7 @@
 {% block title %}{{ check.name }} – {{ probe.hostname }}{% endblock %}
 {% from "_links.html" import check_target with context %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a> / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Sprache</nav>
+<nav class="crumbs" aria-label="Navigationspfad">{% if single_site %}<a href="{{ url_for('web.site', site_id=probe.site_id) }}">Übersicht</a>{% else %}<a href="{{ url_for('web.overview') }}">Übersicht</a> / <a href="{{ url_for('web.site', site_id=probe.site_id) }}">{{ probe.site_name }}</a>{% endif %} / <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> / Sprache</nav>
 <h1>{{ check.name }} <span class="muted">· <a href="{{ url_for('web.probe', probe_id=probe.id) }}">{{ probe.hostname }}</a> ↔ {{ check_target(check) }}</span></h1>
 <p class="muted">Sprachtest (RTP) · {{ summary }}{% if params.window_start != '00:00' or params.window_end != '23:59' %} · nur {{ params.window_start }}–{{ params.window_end }} Uhr{% endif %}</p>
 

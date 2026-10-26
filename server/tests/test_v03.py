@@ -302,7 +302,7 @@ class LiveStatusTest(AppTestCase):
             self.assertEqual(r.status_code, 200)
             self.assertIn("100.0 %", r.get_data(as_text=True))
             self.assertEqual(self.client.get("/sites/1").status_code, 200)
-            self.assertEqual(self.client.get("/").status_code, 200)
+            self.assertEqual(self.client.get("/", follow_redirects=True).status_code, 200)
 
 
 class ConvertTest(__import__("unittest").TestCase):

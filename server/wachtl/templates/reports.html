@@ -9,7 +9,7 @@
 
 <form method="get" class="row">
   <label>Status <select name="status">{% for k, v in filters.items() %}<option value="{{ k }}" {{ 'selected' if k == status }}>{{ v }}</option>{% endfor %}</select></label>
-  <label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site_id == s.id }}>{{ s.name }}</option>{% endfor %}</select></label>
+  {% if not single_site %}<label>Standort <select name="site"><option value="">alle</option>{% for s in sites %}<option value="{{ s.id }}" {{ 'selected' if site_id == s.id }}>{{ s.name }}</option>{% endfor %}</select></label>{% endif %}
   {% if probe_filter %}<input type="hidden" name="probe" value="{{ probe_filter.id }}">{% endif %}
   <button>Anzeigen</button>
 </form>
@@ -20,7 +20,7 @@
 {% set back = url_for('web.reports_view', page=page, **args) %}
 <div class="scroll">
 <table class="reports">
-  <thead><tr><th>Störung</th><th>Eingang</th><th>PC / Probe</th><th>Standort</th><th>Benutzer</th><th>Art</th><th>Dauer</th><th>Beschreibung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+  <thead><tr><th>Störung</th><th>Eingang</th><th>PC / Probe</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Benutzer</th><th>Art</th><th>Dauer</th><th>Beschreibung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
   <tbody>{% for r in items %}
     {% set what = r.category_label ~ ', ' ~ r.probe_label ~ ', ' ~ (r.occurred_at|dt) %}
     <tr class="{{ 'report-open-row' if r.status == 'open' }}">
@@ -28,7 +28,7 @@
       <td class="nowrap">{{ r.received_at|dt }}</td>
       <td>{% if r.probe_id %}<a href="{{ url_for('web.probe', probe_id=r.probe_id) }}">{{ r.probe_label }}</a>{% else %}{{ r.probe_label }}{% endif %}
         {% if r.hostname and r.probe_name and r.hostname != r.probe_name %}<br><span class="muted small">{{ r.hostname }}</span>{% endif %}</td>
-      <td>{% if r.site_id %}<a href="{{ url_for('web.site', site_id=r.site_id) }}">{{ r.site_name }}</a>{% else %}–{% endif %}</td>
+      {% if not single_site %}<td>{% if r.site_id %}<a href="{{ url_for('web.site', site_id=r.site_id) }}">{{ r.site_name }}</a>{% else %}–{% endif %}</td>{% endif %}
       <td>{{ r.reported_user or '–' }}</td>
       <td>{{ r.category_label }}</td>
       <td>{{ r.duration_label }}</td>

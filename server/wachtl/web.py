@@ -38,6 +38,7 @@ def inject():
         "user": user,
         "open_reports": report_service.count("open") if user else 0,
         "nav_sites": _nav_sites() if user else None,
+        "single_site": single_site() if user else None,
         "csrf_token": csrf_token,
         "has_role": has_role,
         "ROLE_LABELS": ROLE_LABELS,
@@ -51,6 +52,7 @@ def inject():
 
 
 NAV_SITES_MAX = 15
+DEFAULT_SITE_NAME = "Hauptstandort"
 SITE_STATE_LABELS = {"down": "gestört", "warn": "auffällig", "ok": "in Ordnung", "waiting": "ohne aktive Probe"}
 
 
@@ -72,6 +74,15 @@ def site_states() -> dict[int, str]:
         if sid in states and states[sid] != "down":
             states[sid] = "down" if a["severity"] == "critical" else "warn"
     return states
+
+
+def single_site() -> dict | None:
+    """Der einzige Standort, wenn es genau einen gibt – dann blendet die Oberfläche den Standort aus
+    (Auswahlfelder, Spalten, Standortliste); ab dem zweiten erscheint alles wieder."""
+    if not hasattr(request, "single_site"):  # einmal je Anfrage
+        rows = q("SELECT * FROM sites ORDER BY id LIMIT 2")
+        request.single_site = rows[0] if len(rows) == 1 else None
+    return request.single_site
 
 
 def _nav_sites() -> dict:
@@ -443,6 +454,9 @@ OVERVIEW_ROWS = 6  # Zeilen je Liste auf der Übersicht – passt ohne Scrollen 
 @bp.get("/")
 @login_required()
 def overview():
+    if (only := single_site()) is not None:
+        # nur ein Standort: die Standortseite ist die Übersicht
+        return redirect(url_for("web.site", site_id=only["id"], **request.args))
     f = _fleet()
     recent_outages = _with_health(f)
     alerts = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 50")
@@ -594,8 +608,11 @@ def site(site_id: int):
             matrix[(st.check["id"], p["id"])] = st
     order = {"ping": 0, "path": 1, "iperf": 2, "speedtest": 3, "rtp": 4}
     active = [p for p in probes if p["status"] == "active"]
+    health = {"sites": [s], "live_ok": live_ok}
+    if tab == "probes" and single_site():
+        _with_health(health)  # nur ein Standort: der Verlauf der Übersicht steht hier
     return render_template(
-        "site.html", tab=tab, tabs=SITE_TABS, site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
+        "site.html", **{k: v for k, v in health.items() if k not in ("sites", "live_ok")}, tab=tab, tabs=SITE_TABS, site=s, probes=probes, widgets=widgets, alerts=alerts, net=net, bw=bw,
         recent_outages=_recent_outages(site_id, refine=live_ok), outage_causes=outages.CAUSES,
         kpi={"active": len(active), "online": sum(repo.probe_online(p) for p in active), "problems": problems,
              "reports": report_service.count("open", site_id=site_id)},
@@ -1144,6 +1161,8 @@ def setup_wizard():
     if request.method == "POST":
         site_choice = form.get("site_id", "new")
         site_name = form.get("site_name", "").strip()
+        if site_choice == "new" and not site_name and not sites:
+            site_name = DEFAULT_SITE_NAME  # erster Standort ohne Rückfrage, umbenennbar über den Stift
         site = None
         if site_choice == "new":
             if not site_name:

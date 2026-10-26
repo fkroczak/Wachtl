@@ -3,6 +3,10 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Unveröffentlicht
+
+- **Nur ein Standort**: Gibt es genau einen Standort, blendet Wachtl ihn aus. „Übersicht“ zeigt direkt die Standortseite mit Probes, Netzwerk, Topologie und dem Verlauf (24 h bis 90 Tage). Menüpunkt „Standorte“, Standortliste in der Seitenleiste sowie Standortauswahl in Filtern, Bericht, Messungen, Setup und Einrichtung entfallen; die Einrichtung nutzt den vorhandenen Standort oder legt „Hauptstandort“ an. Ab dem zweiten Standort erscheint alles wieder.
+
 ## Neu in 0.9.6
 
 - **Switch-Topologie**: Neuer Reiter Standort › **Topologie**. Wachtl fragt die Switches per SNMP ab (**SNMPv1, v2c und v3** mit MD5/SHA-1/SHA-2 und DES/AES-128/192/256) und zeigt einen **Baum** vom Internet über das Gateway bis zu jedem Switch und Gerät – mit Port und Geschwindigkeit an jeder Verbindung. Klick auf einen Switch: Seitenbereich mit Uplink, Ports, Nachbarn und „Weboberfläche öffnen“. **Switch aufgeschaltet**: Frontansicht aller Ports; ein Klick zeigt Gerät, VLAN, PoE, Fehler und die Messwerte einer Wachtl-Probe am Port. Dazu **Switch-Karten**, **Probleme** (Port-Fehler, Verbindungen unter 1 Gbit/s, Halbduplex, Kabelkreise, nicht verwaltete Switches, Switches ohne Zugangsdaten) und **Pfad suchen** (jedes Kabel vom Gerät bis ins Internet). Ein **Assistent** fragt je Switch die Zugangsdaten ab, testet sie sofort und übernimmt sie auf Wunsch für den nächsten Switch. Zugangsdaten liegen verschlüsselt in der Datenbank. Details: [TOPOLOGIE.md](TOPOLOGIE.md).
