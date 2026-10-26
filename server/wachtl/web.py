@@ -154,7 +154,7 @@ def fmt_ago(ts):
     return f"vor {d // 86400} Tagen"
 
 
-SEVERITY_LABELS = {"critical": "kritisch", "warning": "Warnung", "info": "Info"}
+SEVERITY_LABELS = {"critical": "Kritisch", "warning": "Warnung", "info": "Info"}
 
 
 @bp.app_template_filter("severity")
@@ -272,7 +272,8 @@ def login():
             return trust_device(redirect(nxt if nxt.startswith("/") and not nxt.startswith("//")
                                          else url_for("web.overview")), user["username"])
         repo.audit(request.form.get("username", "")[:64], "login.failed", detail=request.remote_addr or "")
-        flash(error, "error")
+        # Meldung direkt im Anmeldefeld, Benutzername bleibt stehen
+        return render_template("login.html", error=error, username=request.form.get("username", "").strip()[:64])
     return render_template("login.html")
 
 
@@ -908,6 +909,9 @@ def rtp_view(probe_id: int, check_id: int):
 
 
 OUTAGE_RANGES = BW_RANGES
+OUTAGES_PER_PAGE = 100
+OUTAGE_RANGE_LABELS = {"24h": "Letzte 24 Stunden", "7d": "Letzte 7 Tage", "30d": "Letzte 30 Tage",
+                       "90d": "Letzte 90 Tage", "365d": "Letztes Jahr"}
 
 
 @bp.get("/outages")
@@ -934,9 +938,15 @@ def outages_view():
         items = [o for o in items if o.start < window[1]]
     if cause in outages.CAUSES:
         items = [o for o in items if o.cause == cause]
+    total = len(items)
+    pages = max(1, -(-total // OUTAGES_PER_PAGE))
+    page = min(max(_int_param("page") or 1, 1), pages)
+    args = {k: v for k, v in (("range", range_key), ("site", site), ("cause", cause), ("all", "1" if show_all else None),
+                              ("from", window[0] if window else None), ("to", window[1] if window else None)) if v}
     return render_template(
-        "outages.html", items=items, summary=outages.summarize(items), causes=outages.CAUSES,
-        sites=q("SELECT * FROM sites ORDER BY name"), range_key=range_key, ranges=list(OUTAGE_RANGES),
+        "outages.html", items=items[(page - 1) * OUTAGES_PER_PAGE:page * OUTAGES_PER_PAGE], total=total, page=page,
+        pages=pages, args=args, summary=outages.summarize(items), causes=outages.CAUSES,
+        sites=q("SELECT * FROM sites ORDER BY name"), range_key=range_key, ranges=OUTAGE_RANGE_LABELS,
         site=site, cause=cause, show_all=show_all, min_s=min_s, window=window,
         switch_sites={str(r["site_id"]) for r in q("SELECT DISTINCT site_id FROM net_switches WHERE status = 'active'")},
     )
@@ -944,6 +954,7 @@ def outages_view():
 
 # -- Störungsmeldungen --------------------------------------------------------
 REPORTS_PER_PAGE = 50
+ALERTS_PER_PAGE = 50
 REPORT_FILTERS = {"open": "offen", "done": "erledigt", "all": "alle"}
 
 
@@ -1076,8 +1087,13 @@ def _chart_reports(probe_id: int) -> dict:
 @login_required()
 def alerts():
     firing = q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 200")
-    history = q("SELECT * FROM alert_events WHERE status = 'resolved' ORDER BY starts_at DESC LIMIT 200")
-    return render_template("alerts.html", firing=firing, history=history)
+    total = q1("SELECT COUNT(*) AS n FROM alert_events WHERE status = 'resolved'")["n"]
+    pages = max(1, -(-total // ALERTS_PER_PAGE))
+    page = min(max(_int_param("page") or 1, 1), pages)
+    history = q("SELECT * FROM alert_events WHERE status = 'resolved' ORDER BY starts_at DESC LIMIT ? OFFSET ?",
+                (ALERTS_PER_PAGE, (page - 1) * ALERTS_PER_PAGE))
+    return render_template("alerts.html", firing=firing, history=history, history_total=total,
+                           history_page=page, history_pages=pages)
 
 
 @bp.post("/alerts/<int:event_id>/ack")
@@ -1557,7 +1573,7 @@ def check_create():
             interval, timeout = -1, -1
         if not repo.valid_target(target) or (ctype == "path" and target == "gateway"):
             errors.append(FieldError("Ziel ist keine gültige IP-Adresse oder kein gültiger Hostname"
-                                     + ("." if ctype == "path" else " und nicht 'gateway'."), "target"))
+                                     + ("." if ctype == "path" else " und nicht „gateway“."), "target"))
         if interval not in repo.ALLOWED_INTERVALS:
             errors.append(FieldError("Ungültiges Intervall.", "interval_s"))
         if not 100 <= timeout <= 5000:
@@ -1701,10 +1717,43 @@ def user_delete(user_id: int):
     return redirect(admin_url("benutzer"))
 
 
+AUDIT_LIMIT = 500
+# Anzeigenamen für die Aktionscodes im Audit-Log (der Code bleibt als Tooltip sichtbar)
+AUDIT_OBJECTS = {"alert": "Alarm", "check": "Check", "login": "Anmeldung", "measure": "Messeinstellungen",
+                 "netscan": "Netzwerkscan", "notify": "Benachrichtigungen", "probe": "Probe", "report": "Meldung",
+                 "rules": "Alarmregeln", "site": "Standort", "token": "Token", "topology": "Topologie",
+                 "tool": "Werkzeug", "user": "Benutzer"}
+AUDIT_VERBS = {"create": "angelegt", "update": "geändert", "delete": "gelöscht", "toggle": "ein-/ausgeschaltet",
+               "ack": "bestätigt", "test": "Test gesendet", "done": "erledigt", "reopen": "wieder geöffnet",
+               "revoke": "widerrufen", "setup": "Setup heruntergeladen", "package": "Paket heruntergeladen",
+               "password": "Passwort geändert", "password_reset": "Passwort zurückgesetzt", "failed": "fehlgeschlagen",
+               "pdf": "PDF-Bericht erstellt", "move": "verschoben", "deregister": "abgemeldet",
+               "settings": "Einstellungen geändert", "exclude": "ausgenommen", "include": "zugewiesen",
+               "note": "Bezeichnung geändert", "enroll": "registriert", "reenroll": "neu registriert",
+               "angelegt": "angelegt", "aktualisiert": "aktualisiert", "switch_create": "Switch angelegt", "switch_update": "Switch geändert",
+               "switch_delete": "Switch gelöscht", "switch_test": "Switch-Zugang getestet",
+               "switch_activate": "Switch aktiviert", "candidate_show": "Fund eingeblendet",
+               "candidate_ignore": "Fund ausgeblendet", "retrace": "Pfad neu ermittelt", "run_check": "Messung gestartet",
+               "active": "aktiviert", "disabled": "deaktiviert"}
+
+
+def audit_label(action: str) -> str:
+    """„check.create“ → „Check angelegt“; Unbekanntes bleibt als Code stehen."""
+    if action == "login":
+        return "Anmeldung"
+    obj, _, verb = (action or "").partition(".")
+    if obj not in AUDIT_OBJECTS or not verb:
+        return action or "–"
+    return f"{AUDIT_OBJECTS[obj]} {AUDIT_VERBS.get(verb, verb)}"
+
+
 @bp.get("/admin/audit")
 @login_required("admin")
 def audit():
-    rows = q("SELECT * FROM audit_log ORDER BY ts DESC LIMIT 500")
+    hide_logins = request.args.get("ohne_anmeldungen") == "1"
+    where = "WHERE action <> 'login' " if hide_logins else ""
+    total = q1(f"SELECT COUNT(*) AS n FROM audit_log {where}")["n"]
+    rows = q(f"SELECT * FROM audit_log {where}ORDER BY ts DESC LIMIT {AUDIT_LIMIT}")
     # Objekte wie "probe:5" auf ihre Seite verlinken, solange es sie noch gibt
     exists = {kind: {r["id"] for r in q(f"SELECT id FROM {table}")}
               for kind, table in (("site", "sites"), ("probe", "probes"), ("check", "checks"))}
@@ -1723,7 +1772,8 @@ def audit():
             links[r["object"]] = url_for("web.check_edit", check_id=i)
         elif kind == "report" and i in report_probe:
             links[r["object"]] = url_for("web.reports_view", status="all", probe=report_probe[i])
-    return render_template("audit.html", rows=rows, links=links)
+    return render_template("audit.html", rows=rows, links=links, total=total, limit=AUDIT_LIMIT,
+                           hide_logins=hide_logins, label=audit_label, tabs=ADMIN_TABS)
 
 
 @bp.post("/admin/notify")

@@ -1,12 +1,23 @@
 {% extends "base.html" %}
 {% block title %}Audit-Log{% endblock %}
 {% block content %}
-<nav class="crumbs" aria-label="Navigationspfad"><a href="{{ url_for('web.admin') }}">Verwaltung</a> / Audit-Log</nav>
-<h1>Audit-Log</h1>
+<h1>Verwaltung</h1>
+<nav class="tabs" aria-label="Bereiche der Verwaltung">
+  {%- for key, text in tabs.items() %}<a href="{{ url_for('web.admin', tab=key) }}">{{ text }}</a>{% endfor -%}
+  <a href="{{ url_for('web.audit') }}" class="active" aria-current="page">Audit-Log</a>
+</nav>
+<h2>Audit-Log</h2>
+<form method="get" class="row">
+  <label class="check"><input type="checkbox" name="ohne_anmeldungen" value="1" {{ 'checked' if hide_logins }}> Erfolgreiche Anmeldungen ausblenden</label>
+  <button>Anzeigen</button>
+</form>
+<p class="muted" role="status">{% if total > limit %}Neueste {{ limit }} von {{ total }} Einträgen{% else %}{{ total }} {{ 'Eintrag' if total == 1 else 'Einträge' }}{% endif %}</p>
+<div class="scroll">
 <table>
   <thead><tr><th>Zeit</th><th>Wer</th><th>Aktion</th><th>Objekt</th><th>Details</th></tr></thead>
   <tbody>{% for r in rows %}
-    <tr><td class="nowrap">{{ r.ts|dt }}</td><td>{{ r.username or '–' }}</td><td><code>{{ r.action }}</code></td><td>{% set link = links.get(r.object) %}{% if link %}<a href="{{ link }}">{{ r.object }}</a>{% else %}{{ r.object or '' }}{% endif %}</td><td>{{ r.detail or '' }}</td></tr>
+    <tr><td class="nowrap">{{ r.ts|dt }}</td><td>{{ r.username or '–' }}</td><td title="{{ r.action }}">{{ label(r.action) }}</td><td>{% set link = links.get(r.object) %}{% if link %}<a href="{{ link }}">{{ r.object }}</a>{% else %}{{ r.object or '' }}{% endif %}</td><td>{{ r.detail or '' }}</td></tr>
   {% else %}<tr><td colspan="5" class="muted">Keine Einträge.</td></tr>{% endfor %}</tbody>
 </table>
+</div>
 {% endblock %}

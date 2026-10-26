@@ -15,14 +15,15 @@
 <section id="standorte">
   <h2>Standorte</h2>
   <div class="scroll"><table>
-    <thead><tr><th>Name</th><th>Kundennummer</th><th>Beschreibung</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+    <thead><tr><th>Name</th><th><span class="sr-only">Aktionen</span></th><th>Kundennummer</th><th>Beschreibung</th></tr></thead>
     <tbody>
     {% for s in sites %}
-      <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td><td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '' }}</td>
-        <td><a href="{{ url_for('web.site', site_id=s.id, bearbeiten=1) }}" aria-label="Bearbeiten: Standort {{ s.name }}">Bearbeiten</a>
+      <tr><td><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></td>
+        <td class="nowrap"><a class="link" href="{{ url_for('web.site', site_id=s.id, bearbeiten=1) }}" aria-label="Bearbeiten: Standort {{ s.name }}">Bearbeiten</a>
           <form method="post" action="{{ url_for('web.site_delete', site_id=s.id) }}" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td></tr>
+          <button class="link danger" data-confirm="Standort {{ s.name }} löschen?" aria-label="Löschen: Standort {{ s.name }}">Löschen</button></form></td>
+        <td>{{ s.customer_no or '–' }}</td><td>{{ s.description or '–' }}</td></tr>
     {% else %}<tr><td colspan="4" class="muted">Noch keine Standorte.</td></tr>{% endfor %}
     </tbody>
   </table></div>
@@ -47,9 +48,9 @@
   <div class="scroll"><table>
     <thead><tr><th>Standort</th><th>Beschreibung</th><th>Genutzt</th><th>Gültig bis</th><th>Erstellt von</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
     <tbody>{% for t in tokens %}
-      <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by }}</td>
+      <tr><td><a href="{{ url_for('web.site', site_id=t.site_id) }}">{{ t.site_name }}</a></td><td>{{ t.description or '–' }}</td><td>{{ t.uses }} / {{ t.max_uses }}</td><td>{{ t.expires_at|dt }}</td><td>{{ t.created_by or '–' }}</td>
         <td><form method="post" action="{{ url_for('web.token_revoke', token_id=t.id) }}" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Token für {{ t.site_name }} widerrufen? PCs, die mit diesem Setup noch nicht registriert sind, können sich danach nicht mehr anmelden." aria-label="Widerrufen: Token {{ t.site_name }} {{ t.description or '' }}">Widerrufen</button></form></td></tr>
     {% endfor %}</tbody>
   </table></div>
   {% else %}<p class="muted">Keine offenen Tokens. Unten {{ '' if single_site else 'Standort wählen und ' }}Setup herunterladen – das legt einen Token an.</p>
@@ -130,15 +131,10 @@
     {% for key, ct in check_types.items() %}<a class="button {{ 'primary' if loop.first }}" href="{{ url_for('web.check_new', ctype=key) }}">+ {{ ct.label }}</a>{% endfor %}
   </div>
   <div class="scroll"><table>
-    <thead><tr><th>Name</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th><th>Status</th><th><span class="sr-only">Aktionen</span></th></tr></thead>
+    <thead><tr><th>Name</th><th><span class="sr-only">Aktionen</span></th><th>Status</th><th>Art</th><th>Ziel / Gegenstelle</th><th>Rolle</th><th>Einstellungen</th><th>Zuweisung</th></tr></thead>
     <tbody>{% for c in checks %}
       <tr class="{{ '' if c.enabled else 'disabled' }}">
         <td><a href="{{ url_for('web.check_edit', check_id=c.id) }}">{{ c.name }}</a></td>
-        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
-        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
-        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
-        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
-        <td>{{ onoff(c.enabled) }}</td>
         <td class="nowrap">
           <a class="link" href="{{ url_for('web.check_edit', check_id=c.id) }}" aria-label="Bearbeiten: {{ c.name }}">Bearbeiten</a>
           <form method="post" action="{{ url_for('web.check_toggle', check_id=c.id) }}" class="inline">
@@ -146,6 +142,11 @@
           <form method="post" action="{{ url_for('web.check_delete', check_id=c.id) }}" class="inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link danger" data-confirm="Check {{ c.name }} löschen?" aria-label="Löschen: {{ c.name }}">Löschen</button></form>
         </td>
+        <td>{{ onoff(c.enabled) }}</td>
+        <td>{{ check_types[c.type].label if c.type in check_types else c.type }}</td>
+        <td>{{ check_target(c) }}</td><td>{{ CHECK_ROLES.get(c.role, c.role) }}</td>
+        <td class="small">{{ summary(c, c.params|fromjson) if c.type in check_types else '' }}</td>
+        <td>{% for label, url in assignments[c.id] %}{{ ', ' if not loop.first }}{% if url %}<a href="{{ url }}">{{ label }}</a>{% else %}{{ label }}{% endif %}{% endfor %}</td>
       </tr>
     {% else %}<tr><td colspan="8" class="muted">Noch keine Checks.</td></tr>{% endfor %}</tbody>
   </table></div>
