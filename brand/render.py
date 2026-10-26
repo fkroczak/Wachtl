@@ -1,4 +1,4 @@
-"""Erzeugt alle Logo-Dateien aus einer Quelle (Wachtel-Umriss).
+"""Erzeugt alle Logo-Dateien aus einer Quelle (Wachtel als Tropfen, Muster 05).
 
     python brand/render.py
 
@@ -18,95 +18,63 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "out"
 ROOT = HERE.parent
 
-# Palette (flach, Farben einer Wachtel im Getreidefeld)
-INK = "#3B2A1E"       # Umbra – Umriss, Text
-BROWN = "#6B4A2E"     # Wachtelbraun – Markenfläche
-WHEAT = "#E9D3A6"     # Weizen – Füllung
-OCHRE = "#C98B2C"     # Ocker – Ruf/Ping
-OCHRE_LIGHT = "#E2B25A"
-CREAM = "#F7F4EE"     # Hintergrund
+# Palette = Farben der Weboberfläche (server/wachtl/static/app.css)
+BLUE = "#0060e0"       # --accent hell: Markenfläche, Logo auf hellem Grund
+BLUE_DARK = "#4689f0"  # --accent dunkel: Logo auf dunklem Grund
+BLUE_SOFT = "#d6e4fb"  # Unterzeile auf blauer Fläche
+INK = "#15171a"        # --text hell
+INK_DARK = "#f1f3f5"   # --text dunkel
+WHITE = "#ffffff"
 
-BODY = ("M41 49 C40.5 40 46.5 34.5 54 35 C59 35.3 62 38 64.5 41 C73 36.5 87 35.5 97 41 "
-        "C105 45.5 110 53 113 60 L120 64 L112 69 C108 86 94 96 76 96 C56 96 42 86 41 71 "
-        "C40.5 64 41 59 41.5 56 L33 52.5 Z")
-FLANKS = "M70 64 C82 62 94 64 104 70 M66 74 C78 73 88 75 98 80"
-LEGS = "M66 96 L64 108 M60 108 L68 108 M82 95 L84 108 M80 108 L88 108"
-CALL = "M25 44 A11 11 0 0 0 25 61 M17 37 A19 19 0 0 0 17 68"
-
-
-def logo_outline(ink=INK, accent=OCHRE) -> str:
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <title>Wachtl</title>
-  <path d="{BODY}" stroke="{ink}" stroke-width="5"/>
-  <path d="{FLANKS}" stroke="{ink}" stroke-width="3.5"/>
-  <path d="{LEGS}" stroke="{ink}" stroke-width="4"/>
-  <circle cx="50" cy="46" r="2.6" fill="{ink}"/>
-  <path d="{CALL}" stroke="{accent}" stroke-width="4.5"/>
-</svg>
-'''
+# Wachtel im 64er-Raster: Körper als Tropfen mit ausgespartem Auge, Schnabel, Federschopf
+MARK = (
+    '<path d="M30 14 C46 14 58 26 60 40 C50 52 40 56 30 56 C18 56 8 47 8 35 C8 23 18 14 30 14Z '
+    'M18 29a2.8 2.8 0 1 0 5.6 0a2.8 2.8 0 1 0 -5.6 0Z"/>'
+    '<path d="M8.6 30 L2 33.5 L8.4 37Z"/>'
+    '<path d="M27 14.5 C26 8.5 22 5 16 5 C19 8 21 11 22 15.5Z"/>'
+    '<circle cx="16" cy="6" r="2.6"/>'
+)
 
 
-def logo_filled() -> str:
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <title>Wachtl</title>
-  <path d="{BODY}" fill="{WHEAT}" stroke="{INK}" stroke-width="5"/>
-  <path d="{FLANKS}" stroke="{BROWN}" stroke-width="3.5"/>
-  <path d="{LEGS}" stroke="{INK}" stroke-width="4"/>
-  <circle cx="50" cy="46" r="2.6" fill="{INK}"/>
-  <path d="{CALL}" stroke="{OCHRE}" stroke-width="4.5"/>
-</svg>
-'''
+def mark(color: str, x: float = 0, y: float = 0, scale: float = 1) -> str:
+    return f'<g fill="{color}" transform="translate({x:g} {y:g}) scale({scale:g})">{MARK}</g>'
+
+
+def svg(view: str, body: str) -> str:
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{view}">\n'
+            f'  <title>Wachtl</title>\n  {body}\n</svg>\n')
+
+
+def logo(color: str = BLUE) -> str:
+    """Freistehendes Zeichen (Seitenleiste, Dokumente)."""
+    return svg("0 0 64 64", mark(color))
 
 
 def app_icon(small: bool = False) -> str:
-    """Quadratisches Programm-Symbol; klein = dickere Linien, nur ein Bogen."""
-    w_body, w_call, eye = (11, 11, 0) if small else (7, 7, 3.4)
-    call = "M25 44 A11 11 0 0 0 25 61"
-    eye_svg = f'<circle cx="50" cy="46" r="{eye}" fill="{CREAM}"/>' if eye else ""
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <title>Wachtl</title>
-  <rect width="128" height="128" rx="26" fill="{BROWN}"/>
-  <g transform="translate(66 66) scale(1.02) translate(-72 -66)">
-    <path d="{BODY}" stroke="{CREAM}" stroke-width="{w_body}"/>
-    {eye_svg}
-    <path d="{call}" stroke="{OCHRE_LIGHT}" stroke-width="{w_call}"/>
-  </g>
-</svg>
-'''
+    """Quadratisches Programm-Symbol: weiße Wachtel auf blauer Kachel; klein = weniger Rand."""
+    s = 1.6 if small else 1.4
+    return svg("0 0 128 128", f'<rect width="128" height="128" rx="28" fill="{BLUE}"/>\n  '
+               + mark(WHITE, 64 - 31 * s, 64 - 30.5 * s, s))
 
 
 def wordmark(dark: bool = False) -> str:
-    ink, accent = (CREAM, OCHRE_LIGHT) if dark else (INK, OCHRE)
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 128" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <title>Wachtl</title>
-  <path d="{BODY}" stroke="{ink}" stroke-width="5"/>
-  <path d="{FLANKS}" stroke="{ink}" stroke-width="3.5"/>
-  <path d="{LEGS}" stroke="{ink}" stroke-width="4"/>
-  <circle cx="50" cy="46" r="2.6" fill="{ink}"/>
-  <path d="{CALL}" stroke="{accent}" stroke-width="4.5"/>
-  <text x="136" y="86" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="58" font-weight="700" letter-spacing="-1" fill="{ink}" stroke="none">Wachtl</text>
-</svg>
-'''
+    ink, accent = (INK_DARK, BLUE_DARK) if dark else (INK, BLUE)
+    return svg("0 0 420 128", mark(accent, 4, 10, 1.75) + "\n  "
+               f'<text x="128" y="86" font-family="Inter, \'Segoe UI\', Arial, sans-serif" font-size="58" '
+               f'font-weight="700" letter-spacing="-1" fill="{ink}">Wachtl</text>')
 
 
 def wizard_page(w: int, h: int) -> str:
     """Linkes Bild auf Willkommens- und Abschlussseite des Setups."""
     return f'''<!doctype html><html><head><style>
-  html,body{{margin:0;width:{w}px;height:{h}px;overflow:hidden;background:{BROWN};font-family:Inter,'Segoe UI',sans-serif}}
+  html,body{{margin:0;width:{w}px;height:{h}px;overflow:hidden;background:{BLUE};font-family:Inter,'Segoe UI',sans-serif}}
   .wrap{{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:{h*0.03}px}}
-  svg{{width:{w*0.8}px;height:{w*0.8}px}}
-  .name{{color:{CREAM};font-weight:700;font-size:{w*0.17}px;letter-spacing:-0.02em}}
-  .sub{{color:{OCHRE_LIGHT};font-weight:600;font-size:{w*0.058}px;text-transform:uppercase;letter-spacing:.1em}}
-  .field{{position:absolute;left:0;right:0;bottom:0;height:{h*0.06}px;background:{OCHRE}}}
+  svg{{width:{w*0.62}px;height:{w*0.62}px}}
+  .name{{color:{WHITE};font-weight:700;font-size:{w*0.17}px;letter-spacing:-0.02em}}
+  .sub{{color:{BLUE_SOFT};font-weight:600;font-size:{w*0.058}px;text-transform:uppercase;letter-spacing:.1em}}
 </style></head><body><div class="wrap">
-<svg viewBox="0 0 128 128" fill="none" stroke-linecap="round" stroke-linejoin="round">
-  <path d="{BODY}" fill="{WHEAT}" stroke="{CREAM}" stroke-width="4"/>
-  <path d="{FLANKS}" stroke="{BROWN}" stroke-width="3.5"/>
-  <path d="{LEGS}" stroke="{CREAM}" stroke-width="4"/>
-  <circle cx="50" cy="46" r="2.6" fill="{INK}"/>
-  <path d="{CALL}" stroke="{OCHRE_LIGHT}" stroke-width="4.5"/>
-</svg>
-<div class="name">Wachtl</div><div class="sub">Netzwerk&#8209;Monitoring</div></div><div class="field"></div></body></html>'''
+<svg viewBox="0 0 64 64">{mark(WHITE)}</svg>
+<div class="name">Wachtl</div><div class="sub">Netzwerk&#8209;Monitoring</div></div></body></html>'''
 
 
 def render(page, html: str, w: int, h: int, scale: float = 1) -> Image.Image:
@@ -130,9 +98,9 @@ def to_bmp(img: Image.Image, path: Path, bg=(255, 255, 255)) -> None:
 def main() -> None:
     OUT.mkdir(exist_ok=True)
     files = {
-        "wachtl-logo.svg": logo_outline(),
-        "wachtl-logo-dark.svg": logo_outline(CREAM, OCHRE_LIGHT),
-        "wachtl-logo-filled.svg": logo_filled(),
+        "wachtl-logo.svg": logo(),
+        "wachtl-logo-dark.svg": logo(BLUE_DARK),
+        "wachtl-logo-filled.svg": app_icon(),
         "wachtl-icon.svg": app_icon(),
         "wachtl-icon-small.svg": app_icon(small=True),
         "wachtl-wordmark.svg": wordmark(),

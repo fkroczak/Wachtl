@@ -209,7 +209,7 @@ namespace Wachtl.Tray
         private static Color AccentColor(BalloonIcon icon) =>
             icon == BalloonIcon.Error ? Color.FromArgb(0xC4, 0x2B, 0x1C)
             : icon == BalloonIcon.Warning ? Color.FromArgb(0xE0, 0x9B, 0x00)
-            : Color.FromArgb(0x0F, 0x6C, 0xBD);
+            : Color.FromArgb(0x00, 0x60, 0xE0);
 
         private static Icon SystemIconFor(BalloonIcon icon) =>
             icon == BalloonIcon.Error ? SystemIcons.Error
