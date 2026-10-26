@@ -1,0 +1,42 @@
+{#- Probe-Kacheln (Standortseite, Probes-Seite). Import: with context.
+    Farbe nach Zustand: rot = gestört/offline, gelb = auffällig, grün = ok, grau = deaktiviert -#}
+{% macro probe_cards(widgets, details=False, show_site=False) -%}
+<ul class="cards widgets">
+  {%- for w in widgets %}{% set p = w.probe %}
+  <li class="card pw {{ w.level }}"{% if details %} data-filter-item="{{ w.customer_no or '' }}"{% endif %}>
+    <h3><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</h3>
+    <p class="pw-state">
+      {% if p.deregistered_at %}<span class="dot off"></span> deinstalliert
+      {% elif w.level == 'inactive' %}<span class="dot off"></span> deaktiviert
+      {% elif w.online %}<span class="dot ok"></span> online{% else %}<span class="dot down"></span> offline{% endif %}
+      {% if w.issues %} · <strong class="{{ 'down-t' if w.level == 'bad' else 'warn-t' }}">{{ w.issues|length }} {{ 'Problem' if w.issues|length == 1 else 'Probleme' }}</strong>{% endif %}
+    </p>
+    {% if w.issues %}
+    <ul class="pw-issues {{ 'down-t' if w.level == 'bad' else 'warn-t' }}">
+      {% for i in w.issues[:4] %}<li>{{ i }}</li>{% endfor %}
+      {% if w.issues|length > 4 %}<li>und {{ w.issues|length - 4 }} weitere</li>{% endif %}
+    </ul>
+    {% endif %}
+    {% if w.level != 'inactive' %}
+    {% if w.ref %}
+    <dl class="pw-kv">
+      <dt>Latenz</dt><dd>{{ w.ref.values.rtt|ms }} <span class="muted small">zu {{ w.ref.check.name }}</span></dd>
+      <dt>Verlust</dt><dd>{{ w.ref.values.loss|pct }}</dd>
+      <dt>Jitter</dt><dd>{{ w.jitter|ms }}</dd>
+      {% if w.gateway %}<dt>Gateway</dt><dd><span class="dot {{ w.gateway.state }}"></span> {{ w.gateway.label }}</dd>{% endif %}
+    </dl>
+    {% endif %}
+    <p class="small">Checks:{% for k, lbl in (('ok', 'ok'), ('warn', 'auffällig'), ('down', 'gestört'), ('stale', 'keine Daten')) %}{{ ' ·' if not loop.first }} <span class="{{ k ~ '-t' if w.counts[k] else 'muted' }}">{{ w.counts[k] }} {{ lbl }}</span>{% endfor %}</p>
+    {% if w.spark %}
+    <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" role="img" aria-label="{{ w.spark.label }}">
+      <path d="{{ w.spark.d }}"/>{% for x, h in w.spark.loss %}<rect x="{{ x }}" y="{{ 30 - h }}" width="2" height="{{ h }}"/>{% endfor %}
+    </svg>
+    {% else %}<p class="spark muted small">Kein Latenzverlauf der letzten Stunde.</p>{% endif %}
+    {% endif %}
+    {% if details %}
+    <p class="pw-meta muted small">{% if show_site %}<a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a> · {% endif %}<span title="{{ p.last_seen|dt }}">Kontakt {{ p.last_seen|ago }}</span>{% if p.version %} · v{{ p.version }}{% endif %}{% if p.buffer_items %} · Puffer {{ p.buffer_items }}{% endif %}</p>
+    {% endif %}
+  </li>
+  {%- endfor %}
+</ul>
+{%- endmacro %}

@@ -375,7 +375,7 @@ def _fleet() -> dict:
     )
     live, live_ok = _live()
     active = [p for p in probes if p["status"] == "active"]
-    states = checkstatus.overview(active, live)
+    states = checkstatus.overview(probes, live)
     per_probe = {p["id"]: checkstatus.counts(states[p["id"]]) for p in active}
     site_stats = {s["id"]: {"probes": 0, "online": 0, "problems": 0} for s in sites}
     problems = []      # (Probe, CheckState) – jede Messung, die gerade nicht funktioniert
@@ -414,7 +414,7 @@ def _fleet() -> dict:
     for sid, st in site_stats.items():
         if state.get(sid) == "ok" and st["problems"]:
             state[sid] = "warn"
-    return {"sites": sites, "probes": probes, "per_probe": per_probe, "site_stats": site_stats,
+    return {"sites": sites, "probes": probes, "states": states, "per_probe": per_probe, "site_stats": site_stats,
             "problems": problems, "offline": offline, "bandwidth": bandwidth, "voice": voice,
             "live_ok": live_ok, "site_state": state, "site_why": site_why, "KIND_LABELS": checkstatus.KIND_LABELS}
 
@@ -481,16 +481,24 @@ def sites_view():
     return render_template("sites.html", **f)
 
 
-PROBE_TABS = {"probleme": "Probleme", "alle": "Alle Probes", "bandbreite": "Bandbreite", "sprache": "Sprache"}
-
-
 @bp.get("/probes")
 @login_required()
 def probes_view():
-    tab = request.args.get("tab", "probleme")
-    if tab not in PROBE_TABS:
-        abort(404)
-    return render_template("probes.html", **_fleet(), tab=tab, tabs=PROBE_TABS)
+    """Alle Probes als Kacheln, farbig nach Zustand; darunter Bandbreite und Sprache, sofern vorhanden."""
+    f = _fleet()
+    try:
+        sparks = vm.site_sparklines()
+    except vm.VMError as exc:
+        log.warning("Mini-Graphen nicht verfügbar: %s", exc)
+        sparks = {}
+    alerts = [{**a, "probe": json.loads(a["labels"] or "{}").get("probe")}
+              for a in q("SELECT * FROM alert_events WHERE status = 'firing' ORDER BY starts_at DESC LIMIT 500")]
+    widgets = _probe_widgets(f["probes"], f["states"], alerts, sparks)[0]
+    cust = {s["id"]: s["customer_no"] or "" for s in f["sites"]}
+    for w in widgets:
+        w["customer_no"] = cust.get(w["probe"]["site_id"], "")
+    levels = {lvl: sum(w["level"] == lvl for w in widgets) for lvl in ("bad", "warn", "ok", "inactive")}
+    return render_template("probes.html", **f, widgets=widgets, levels=levels)
 
 
 @bp.get("/hinweise")
@@ -520,6 +528,45 @@ def _sparkline(data: dict | None, target: str) -> dict | None:
     label = (f"Latenz-Median der letzten Stunde zu {target}: {fmt_ms(lo)} bis {fmt_ms(hi)}, "
              f"Paketverlust in {len(loss)} von 60 Minuten")
     return {"d": " ".join(d), "loss": loss, "label": label}
+
+
+def _probe_widgets(probes: list, states: dict, alerts: list, sparks: dict) -> tuple[list, list, list, int]:
+    """Je Probe eine Kachel (Standortseite, Probes-Seite); Probes mit Problemen zuerst.
+
+    Rückgabe: Kacheln, Internet-Referenz-Checks, Bandbreiten-Checks mit Ergebnis, Zahl der Probleme.
+    ``alerts`` sind aktive Alarme mit dem Schlüssel ``probe`` (ID als Text oder None).
+    """
+    widgets, internet, bandwidth, problems = [], [], [], 0
+    for p in probes:
+        sts = states[p["id"]]
+        active = p["status"] == "active"
+        online = active and repo.probe_online(p)
+        pings = [st for st in sts if st.kind == "ping"]
+        ref = next((st for st in pings if st.check["role"] == "reference"), pings[0] if pings else None)
+        p_alerts = [a for a in alerts if a["probe"] == str(p["id"])]
+        issues = []
+        if active and not online:
+            issues.append(f"Probe offline – letzter Kontakt {fmt_ago(p['last_seen'])}")
+            problems += 1
+        elif active:
+            issues += [f"{st.check['name']}: {st.detail or st.label}" for st in sts if st.problem]
+            problems += sum(st.problem for st in sts)
+            internet += [st for st in pings if st.check["role"] == "reference"]
+        issues += [f"Alarm: {a['summary'] or a['alertname']}" for a in p_alerts]
+        if active:
+            bandwidth += [(p, st) for st in sts if st.kind in checktypes.BANDWIDTH_TYPES and st.ts]
+        bad = (active and not online) or any(st.state == "down" for st in sts) or \
+            any(a["severity"] == "critical" for a in p_alerts)
+        level = "inactive" if not active else "bad" if bad else "warn" if issues else "ok"
+        spark = sparks.get((str(p["id"]), str(ref.check["id"]))) if ref else None
+        widgets.append({
+            "probe": p, "online": online, "level": level, "issues": issues, "counts": checkstatus.counts(sts),
+            "ref": ref, "jitter": (spark or {}).get("jitter"),
+            "gateway": next((st for st in pings if st.check["role"] == "gateway"), None),
+            "spark": _sparkline(spark, ref.check["name"]) if ref and active else None,
+        })
+    widgets.sort(key=lambda w: (("bad", "warn", "ok", "inactive").index(w["level"]), w["probe"]["hostname"]))
+    return widgets, internet, bandwidth, problems
 
 
 SITE_TABS = {"probes": "Probes", "ereignisse": "Alarme & Störungen", "meldungen": "Hinweise & Meldungen",
@@ -564,37 +611,7 @@ def site(site_id: int):
         if labels.get("site") == str(site_id) or labels.get("probe") in ids:
             alerts.append({**a, "probe": labels.get("probe")})
 
-    # je Probe ein Widget; Probes mit Problemen zuerst
-    widgets, internet, bandwidth, problems = [], [], [], 0
-    for p in probes:
-        sts = states[p["id"]]
-        active = p["status"] == "active"
-        online = active and repo.probe_online(p)
-        pings = [st for st in sts if st.kind == "ping"]
-        ref = next((st for st in pings if st.check["role"] == "reference"), pings[0] if pings else None)
-        p_alerts = [a for a in alerts if a["probe"] == str(p["id"])]
-        issues = []
-        if active and not online:
-            issues.append(f"Probe offline – letzter Kontakt {fmt_ago(p['last_seen'])}")
-            problems += 1
-        elif active:
-            issues += [f"{st.check['name']}: {st.detail or st.label}" for st in sts if st.problem]
-            problems += sum(st.problem for st in sts)
-            internet += [st for st in pings if st.check["role"] == "reference"]
-        issues += [f"Alarm: {a['summary'] or a['alertname']}" for a in p_alerts]
-        if active:
-            bandwidth += [(p, st) for st in sts if st.kind in checktypes.BANDWIDTH_TYPES and st.ts]
-        bad = (active and not online) or any(st.state == "down" for st in sts) or \
-            any(a["severity"] == "critical" for a in p_alerts)
-        level = "inactive" if not active else "bad" if bad else "warn" if issues else "ok"
-        spark = sparks.get((str(p["id"]), str(ref.check["id"]))) if ref else None
-        widgets.append({
-            "probe": p, "online": online, "level": level, "issues": issues, "counts": checkstatus.counts(sts),
-            "ref": ref, "jitter": (spark or {}).get("jitter"),
-            "gateway": next((st for st in pings if st.check["role"] == "gateway"), None),
-            "spark": _sparkline(spark, ref.check["name"]) if ref and active else None,
-        })
-    widgets.sort(key=lambda w: (("bad", "warn", "ok", "inactive").index(w["level"]), w["probe"]["hostname"]))
+    widgets, internet, bandwidth, problems = _probe_widgets(probes, states, alerts, sparks)
     if not internet:
         net = None
     elif all(st.state == "ok" for st in internet):

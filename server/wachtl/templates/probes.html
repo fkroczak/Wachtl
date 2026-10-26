@@ -1,79 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Probes{% endblock %}
-{% from "_links.html" import check_target, probe_state with context %}
+{% from "_links.html" import check_target with context %}
+{% from "_probe_cards.html" import probe_cards with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
 <h1>Probes</h1>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
-{% set counts = {'probleme': problems|length + offline|length, 'alle': probes|length, 'bandbreite': bandwidth|length, 'sprache': voice|length} %}
-<nav class="tabs" aria-label="Bereiche">
-  {%- for key, text in tabs.items() %}<a href="{{ url_for('web.probes_view', tab=key) }}"{% if key == tab %} class="active" aria-current="page"{% endif %}>{{ text }} <span class="tab-count">{{ counts[key] }}</span></a>{% endfor -%}
-</nav>
 
-{% if tab == 'probleme' %}
-<h2 class="sr-only">Messungen mit Problemen</h2>
-{% if problems or offline %}
-<p class="muted">Alle Messungen, die gerade fehlschlagen, auffällig sind oder ausbleiben – Ping, Pfad, iperf3, WAN und Sprache.</p>
-<table>
-  <thead><tr><th>Zustand</th><th>Probe</th><th>Art</th><th>Check</th><th>Problem</th><th>Letztes Ergebnis</th></tr></thead>
-  <tbody>
-  {% for p in offline %}
-    <tr>
-      <td><span class="dot down"></span> offline</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
-      <td>Probe</td><td>–</td>
-      <td>Kein Heartbeat – keine der Messungen dieser Probe läuft</td>
-      <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
-    </tr>
-  {% endfor %}
-  {% for p, st in problems %}
-    <tr>
-      <td><span class="dot {{ st.state }}"></span> {{ st.label }}</td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if not single_site %} <span class="muted small"><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></span>{% endif %}</td>
-      <td>{{ KIND_LABELS[st.kind] }}</td>
-      <td><a href="{{ check_url(p, st.check) }}">{{ st.check.name }}</a></td>
-      <td>{{ st.detail }}</td>
-      <td>{{ st.ts|ago if st.ts else '–' }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% elif probes %}<p class="muted">Alle Messungen laufen ohne Auffälligkeiten.</p>
-{% else %}<p class="muted">Noch nichts gemessen – es ist keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
-
-{% elif tab == 'alle' %}
-<h2 class="sr-only">Alle Probes</h2>
-{% if probes|length > 1 %}
+{% if widgets %}
+<p class="muted">
+  {%- for lvl, text in (('bad', 'gestört'), ('warn', 'auffällig'), ('ok', 'ok'), ('inactive', 'deaktiviert')) if levels[lvl] %}{{ ' · ' if not loop.first }}<span class="{{ {'bad': 'down-t', 'warn': 'warn-t', 'ok': 'ok-t'}.get(lvl, '') }}">{{ levels[lvl] }} {{ text }}</span>{% endfor %}.
+  Probes mit Problemen stehen oben. Werte zur Internet-Referenz: Latenz der letzten Minute, Verlust und Jitter der letzten 5 Minuten; der Mini-Graph zeigt die letzte Stunde.</p>
+{% if widgets|length > 1 %}
 <p class="filter"><label for="filter">Probe{{ ' oder Standort' if not single_site }} suchen</label>
   <input id="filter" type="search" data-filter autocomplete="off" placeholder="Name oder Kundennummer"></p>
 <p class="muted" data-filter-empty role="status" hidden>Keine Probe passt zum Suchbegriff.</p>
 {% endif %}
-{% if probes %}
-<table>
-  <thead><tr><th>Status</th><th>Probe</th>{% if not single_site %}<th>Standort</th>{% endif %}<th>Checks ok / auffällig / gestört / keine Daten</th><th>Letzter Kontakt</th><th>Puffer</th><th>Version</th></tr></thead>
-  <tbody>
-  {% set site_cust = {} %}{% for s in sites %}{% set _ = site_cust.update({s.id: s.customer_no or ''}) %}{% endfor %}
-  {% for p in probes %}
-    {% set st = per_probe.get(p.id, {'ok': 0, 'warn': 0, 'down': 0, 'stale': 0, 'waiting': 0}) %}
-    <tr data-filter-item="{{ site_cust.get(p.site_id, '') }}">
-      <td>
-        {{ probe_state(p) }}
-      </td>
-      <td><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a>{% if p.kind == 'server' %} <span class="badge info">Server</span>{% endif %}</td>
-      {% if not single_site %}<td><a href="{{ url_for('web.site', site_id=p.site_id) }}">{{ p.site_name }}</a></td>{% endif %}
-      <td><span class="ok-t">{{ st.ok }}</span> / <span class="warn-t">{{ st.warn }}</span> / <span class="down-t">{{ st.down }}</span> / <span class="stale-t">{{ st.stale }}</span>{% if st.waiting %} <span class="muted small">(+{{ st.waiting }} warten)</span>{% endif %}</td>
-      <td title="{{ p.last_seen|dt }}">{{ p.last_seen|ago }}</td>
-      <td>{{ p.buffer_items or 0 }}</td>
-      <td>{{ p.version or '–' }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<h2 class="sr-only">Alle Probes</h2>
+{{ probe_cards(widgets, details=True, show_site=not single_site) }}
 {% else %}<p class="muted">Noch keine Probes registriert.{% if has_role(user,'admin') %} <a href="{{ url_for('web.setup_wizard') }}">Probes geführt einrichten</a>{% endif %}</p>{% endif %}
 
-{% elif tab == 'bandbreite' %}
-<h2 class="sr-only">Bandbreite</h2>
 {% if bandwidth %}
+<h2>Bandbreite</h2>
 <table>
   <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>Art</th><th>Download</th><th>Upload</th><th>Letzte Messung</th></tr></thead>
   <tbody>
@@ -92,11 +40,10 @@
   {% endfor %}
   </tbody>
 </table>
-{% else %}<p class="muted">Keine Bandbreiten-Checks. {% if has_role(user, 'admin') %}<a href="{{ admin_url('standardpaket') }}">Standardpaket anlegen</a> oder <a href="{{ url_for('web.check_new', ctype='speedtest') }}">WAN-Messung anlegen</a>.{% endif %}</p>{% endif %}
+{% endif %}
 
-{% else %}
-<h2 class="sr-only">Sprachqualität</h2>
 {% if voice %}
+<h2>Sprachqualität</h2>
 <table>
   <thead><tr><th>Zustand</th><th>Probe</th><th>Check</th><th>MOS</th><th>Laufzeit</th><th>Verlust</th><th>Jitter</th><th>Letzter Test</th></tr></thead>
   <tbody>
@@ -114,7 +61,5 @@
   {% endfor %}
   </tbody>
 </table>
-{% endif %}
-{% if not voice %}<p class="muted">Keine Sprachtests.{% if has_role(user, 'admin') %} <a href="{{ url_for('web.check_new', ctype='rtp') }}">Sprachtest anlegen</a>.{% endif %}</p>{% endif %}
 {% endif %}
 {% endblock %}

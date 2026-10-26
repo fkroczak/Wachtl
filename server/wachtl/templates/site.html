@@ -2,6 +2,7 @@
 {% block title %}{{ site.name }}{% endblock %}
 {% from "_reports.html" import report_table with context %}
 {% from "_links.html" import alert_links, probe_state with context %}
+{% from "_probe_cards.html" import probe_cards with context %}
 {% from "_findings.html" import findings_table with context %}
 {% from "_outages.html" import outage_table with context %}
 {% from "_tabs.html" import tabs as tabnav %}
@@ -61,41 +62,7 @@
 <h2 id="probes">Probes</h2>
 {% if widgets %}
 <p class="muted">Probes mit Problemen stehen oben. Werte zur Internet-Referenz: Latenz der letzten Minute, Verlust und Jitter der letzten 5 Minuten. Der Mini-Graph zeigt den Latenz-Median der letzten Stunde, rote Balken zeigen Paketverlust.</p>
-<ul class="cards widgets">
-  {% for w in widgets %}{% set p = w.probe %}
-  <li class="card pw {{ w.level }}">
-    <h3><a href="{{ url_for('web.probe', probe_id=p.id) }}">{{ p.hostname }}</a></h3>
-    <p class="pw-state">
-      {% if p.deregistered_at %}<span class="dot off"></span> deinstalliert
-      {% elif w.level == 'inactive' %}<span class="dot off"></span> deaktiviert
-      {% elif w.online %}<span class="dot ok"></span> online{% else %}<span class="dot down"></span> offline{% endif %}
-      {% if w.issues %} · <strong class="{{ 'down-t' if w.level == 'bad' else 'warn-t' }}">{{ w.issues|length }} {{ 'Problem' if w.issues|length == 1 else 'Probleme' }}</strong>{% endif %}
-    </p>
-    {% if w.issues %}
-    <ul class="pw-issues {{ 'down-t' if w.level == 'bad' else 'warn-t' }}">
-      {% for i in w.issues[:4] %}<li>{{ i }}</li>{% endfor %}
-      {% if w.issues|length > 4 %}<li>und {{ w.issues|length - 4 }} weitere</li>{% endif %}
-    </ul>
-    {% endif %}
-    {% if w.level != 'inactive' %}
-    {% if w.ref %}
-    <dl class="pw-kv">
-      <dt>Latenz</dt><dd>{{ w.ref.values.rtt|ms }} <span class="muted small">zu {{ w.ref.check.name }}</span></dd>
-      <dt>Verlust</dt><dd>{{ w.ref.values.loss|pct }}</dd>
-      <dt>Jitter</dt><dd>{{ w.jitter|ms }}</dd>
-      {% if w.gateway %}<dt>Gateway</dt><dd><span class="dot {{ w.gateway.state }}"></span> {{ w.gateway.label }}</dd>{% endif %}
-    </dl>
-    {% endif %}
-    <p class="small">Checks:{% for k, lbl in (('ok', 'ok'), ('warn', 'auffällig'), ('down', 'gestört'), ('stale', 'keine Daten')) %}{{ ' ·' if not loop.first }} <span class="{{ k ~ '-t' if w.counts[k] else 'muted' }}">{{ w.counts[k] }} {{ lbl }}</span>{% endfor %}</p>
-    {% if w.spark %}
-    <svg class="spark" viewBox="0 0 120 30" preserveAspectRatio="none" role="img" aria-label="{{ w.spark.label }}">
-      <path d="{{ w.spark.d }}"/>{% for x, h in w.spark.loss %}<rect x="{{ x }}" y="{{ 30 - h }}" width="2" height="{{ h }}"/>{% endfor %}
-    </svg>
-    {% else %}<p class="spark muted small">Kein Latenzverlauf der letzten Stunde.</p>{% endif %}
-    {% endif %}
-  </li>
-  {% endfor %}
-</ul>
+{{ probe_cards(widgets) }}
 {% else %}<p class="muted">An diesem Standort ist noch keine Probe registriert.{% if has_role(user,'admin') %} <a href="{{ admin_url('enrollment') }}">Setup für diesen Standort herunterladen</a>{% endif %}</p>{% endif %}
 
 {% elif tab == 'ereignisse' %}

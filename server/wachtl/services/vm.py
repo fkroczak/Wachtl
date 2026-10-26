@@ -259,13 +259,14 @@ def live_status() -> dict[tuple[str, str], dict]:
     return status
 
 
-def site_sparklines(site_id: int) -> dict[tuple[str, str], dict]:
-    """Je (Probe, Check) eines Standorts: Latenz-Median und Verlust je Minute der letzten Stunde, Jitter (5 min).
+def site_sparklines(site_id: int | None = None) -> dict[tuple[str, str], dict]:
+    """Je (Probe, Check) eines Standorts (ohne site_id: aller Standorte): Latenz-Median und Verlust je Minute der
+    letzten Stunde, Jitter (5 min).
 
-    Zwei Bereichs- und eine Sofortabfrage für den ganzen Standort – für die Mini-Graphen im Standort-Dashboard.
+    Zwei Bereichs- und eine Sofortabfrage – für die Mini-Graphen der Probe-Kacheln.
     """
     end = int(time.time())
-    sel = f'site="{int(site_id)}"'
+    sel = f'site="{int(site_id)}"' if site_id is not None else 'site!=""'
     out: dict[tuple[str, str], dict] = {}
 
     def entry(m: dict) -> dict:

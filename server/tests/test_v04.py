@@ -94,8 +94,8 @@ class CheckStatusTest(AppTestCase):
             self.assertIn("Zeitlimit erreicht", html)
             self.assertIn("noch kein Traceroute-Ergebnis", html)
             self.assertIn(f"/probes/{self.pid}/bandwidth/{self.wan}", html)
-            self.assertIn("Checks ok / auffällig / gestört / keine Daten",
-                          self.client.get("/probes?tab=alle").get_data(as_text=True))
+            self.assertIn("Checks:",
+                          self.client.get("/probes").get_data(as_text=True))
             probe_html = self.client.get(f"/probes/{self.pid}").get_data(as_text=True)
             self.assertIn("Alle Messungen", probe_html)
             self.assertIn("Zeitlimit erreicht", probe_html)
