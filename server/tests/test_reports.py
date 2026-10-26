@@ -238,8 +238,12 @@ class ReportPagesTest(AppTestCase):
         self.assertIn(f"/probes/{self.pid}/checks/", html)       # Link zum Graph …
         self.assertIn(f"at={self.now - 300}", html)              # … um den Zeitpunkt
         # Navigation zeigt die offenen Meldungen barrierefrei
-        self.assertRegex(html, r'aria-current="page"><svg[^>]*>.*?</svg>Meldungen <span class="nav-count" aria-hidden="true">1</span>'
-                               r'<span class="sr-only"> \(1 offen\)</span>')
+        self.assertRegex(html, r'aria-current="page"><svg[^>]*>.*?</svg>Alarme <span class="nav-count" aria-hidden="true">1</span>'
+                               r'<span class="sr-only"> \(1 offene Meldung\)</span>')
+        # Alarme, Meldungen und PC-Hinweise teilen sich einen Menüpunkt mit Reitern
+        self.assertRegex(html, r'aria-current="page">Störungsmeldungen <span class="tab-count"')
+        for url in ("/alerts", "/hinweise"):
+            self.assertIn('aria-label="Alarme und Meldungen"', self.client.get(url).get_data(as_text=True), url)
         for url in ("/meldungen", f"/probes/{self.pid}?tab=meldungen", "/sites/1?tab=meldungen"):
             page = self.client.get(url).get_data(as_text=True)
             self.assertIn("WLAN bricht ab", page, url)
