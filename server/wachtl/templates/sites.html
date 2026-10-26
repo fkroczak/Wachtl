@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Standorte{% endblock %}
-{% from "_health.html" import healthbar, uptime, legend with context %}
+{% from "_health.html" import healthbar, uptime, outages_link, legend, range_picker with context %}
 {% block content %}
 <div data-autorefresh="30" hidden></div>
-<h1>Standorte</h1>
+<div class="page-head"><h1>Standorte</h1>{{ range_picker('web.sites_view') }}</div>
 {% if not live_ok %}<div class="flash error">Messdaten sind gerade nicht abrufbar (VictoriaMetrics). Stammdaten werden trotzdem angezeigt.</div>{% endif %}
 {% if sites %}
 {% if sites|length > 1 %}
@@ -15,14 +15,14 @@
   {% for s in sites %}
   {% set st = site_stats[s.id] %}{% set h = site_health[s.id] %}{% set state = site_state.get(s.id, 'waiting') %}
   <li class="card site-tile {{ state }}" data-filter-item="{{ s.customer_no or '' }}">
-    <h2><span class="dot {{ state }}" aria-hidden="true"></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></h2>
+    {% set why = site_why.get(s.id, []) %}<h2><span class="dot {{ state }}" aria-hidden="true"{% if why %} title="{{ why|map(attribute='text')|join(' · ') }}"{% endif %}></span><a href="{{ url_for('web.site', site_id=s.id) }}">{{ s.name }}</a></h2>
     {% if s.customer_no %}<p class="muted small">Kd.-Nr. {{ s.customer_no }}</p>{% endif %}
     {{ healthbar(s, h) }}
-    <p class="tile-scale muted small" aria-hidden="true"><span>vor 24 h</span><span>{{ uptime(h) }} ohne Störung</span><span>jetzt</span></p>
+    <p class="tile-scale muted small" aria-hidden="true"><span>vor {{ health_label }}</span><span>{{ uptime(h) }} ohne Störung</span><span>jetzt</span></p>
     <dl class="tile-kv">
       <div><dt>Probes online</dt><dd>{{ st.online }} / {{ st.probes }}</dd></div>
       <div><dt>Probleme</dt><dd class="{{ 'down-t' if st.problems }}">{{ st.problems }}</dd></div>
-      <div><dt>Ausfälle 24 h</dt><dd>{{ h.count }}</dd></div>
+      <div><dt>Ausfälle {{ health_label }}</dt><dd>{% if h.count %}<a href="{{ url_for('web.outages_view', site=s.id, range=health_range) }}" aria-label="Ausfälle von {{ s.name }} in {{ health_label }} ansehen">{{ h.count }}</a>{% else %}0{% endif %}</dd></div>
     </dl>
   </li>
   {% endfor %}

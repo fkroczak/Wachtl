@@ -370,6 +370,18 @@ def _fleet() -> dict:
         bandwidth += [(p, st) for st in states[p["id"]] if st.kind in checktypes.BANDWIDTH_TYPES]
         voice += [(p, st) for st in states[p["id"]] if st.kind == "rtp"]
     problems.sort(key=lambda item: (("down", "stale", "warn").index(item[1].state), item[0]["hostname"]))
+    # Warum ein Standort gerade nicht grün ist (Punkt vor dem Namen): offline, Alarme, auffällige Messungen
+    site_why: dict[int, list] = defaultdict(list)
+    for p in offline:
+        site_why[p["site_id"]].append({"text": f"{p['hostname']} offline", "href": url_for("web.probe", probe_id=p["id"])})
+    for a in q("SELECT summary, alertname, labels FROM alert_events WHERE status = 'firing'"):
+        try:
+            sid = int(json.loads(a["labels"] or "{}").get("site") or 0)
+        except (ValueError, TypeError):
+            continue
+        site_why[sid].append({"text": f"Alarm: {a['summary'] or a['alertname']}", "href": url_for("web.alerts")})
+    for p, st in problems:
+        site_why[p["site_id"]].append({"text": f"{st.check['name']}: {st.label}", "href": check_url(p, st.check)})
     # Zustand je Standort für Punkte und Sortierung: Alarme/Heartbeat, dazu auffällige Messungen
     state = site_states()
     for sid, st in site_stats.items():
@@ -377,15 +389,38 @@ def _fleet() -> dict:
             state[sid] = "warn"
     return {"sites": sites, "probes": probes, "per_probe": per_probe, "site_stats": site_stats,
             "problems": problems, "offline": offline, "bandwidth": bandwidth, "voice": voice,
-            "live_ok": live_ok, "site_state": state, "KIND_LABELS": checkstatus.KIND_LABELS}
+            "live_ok": live_ok, "site_state": state, "site_why": site_why, "KIND_LABELS": checkstatus.KIND_LABELS}
+
+
+# Zeitraum des Standort-Verlaufs: Sekunden, Zahl der Balken, Beschriftungen
+HEALTH_RANGES = {
+    "24h": (86400, 48, "24 Stunden", "30 Minuten"),
+    "7d": (7 * 86400, 56, "7 Tage", "3 Stunden"),
+    "30d": (30 * 86400, 60, "30 Tage", "12 Stunden"),
+    "90d": (90 * 86400, 90, "90 Tage", "1 Tag"),
+}
+
+
+def _health_range() -> str:
+    """Gewählter Zeitraum aus ?verlauf=, sonst der zuletzt gewählte (bleibt in der Sitzung)."""
+    key = request.args.get("verlauf")
+    if key in HEALTH_RANGES:
+        session["verlauf"] = key
+        return key
+    key = session.get("verlauf")
+    return key if key in HEALTH_RANGES else "24h"
 
 
 def _with_health(f: dict) -> list:
-    """Ausfälle der letzten 24 h und daraus der Verlauf je Standort (legt site_health in f ab)."""
-    recent = _recent_outages(refine=f["live_ok"])
+    """Ausfälle der letzten 24 h (Rückgabe) und der Verlauf je Standort im gewählten Zeitraum (in f abgelegt)."""
+    key = _health_range()
+    span, buckets, label, step = HEALTH_RANGES[key]
     now = repo.now()
-    f["site_health"] = outages.site_health(recent, f["sites"], now - RECENT_OUTAGES_S, now)
-    return recent
+    min_s = settings_service.get()["outage_min_s"]
+    items = outages.load(now - max(span, RECENT_OUTAGES_S), None, min_s, refine=f["live_ok"])
+    f["site_health"] = outages.site_health(items, f["sites"], now - span, now, buckets=buckets)
+    f.update(health_range=key, health_ranges=HEALTH_RANGES, health_label=label, health_step=step)
+    return [o for o in items if o.end is None or o.end >= now - RECENT_OUTAGES_S]
 
 
 SITE_ORDER = {"down": 0, "warn": 1, "ok": 2, "waiting": 3}
@@ -826,13 +861,24 @@ def outages_view():
     cause = request.args.get("cause") or None
     show_all = request.args.get("all") == "1"
     min_s = settings_service.get()["outage_min_s"]
-    items = outages.load(repo.now() - OUTAGE_RANGES[range_key], site, min_s, include_consequences=show_all)
+    since = repo.now() - OUTAGE_RANGES[range_key]
+    try:  # Zeitfenster aus einem Balken des Standort-Verlaufs
+        window = (int(request.args["from"]), int(request.args["to"]))
+        if not 0 < window[0] < window[1]:
+            raise ValueError
+    except (KeyError, ValueError):
+        window = None
+    if window:
+        since = window[0]
+    items = outages.load(since, site, min_s, include_consequences=show_all)
+    if window:
+        items = [o for o in items if o.start < window[1]]
     if cause in outages.CAUSES:
         items = [o for o in items if o.cause == cause]
     return render_template(
         "outages.html", items=items, summary=outages.summarize(items), causes=outages.CAUSES,
         sites=q("SELECT * FROM sites ORDER BY name"), range_key=range_key, ranges=list(OUTAGE_RANGES),
-        site=site, cause=cause, show_all=show_all, min_s=min_s,
+        site=site, cause=cause, show_all=show_all, min_s=min_s, window=window,
     )
 
 

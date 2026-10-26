@@ -97,9 +97,9 @@ h2 { font-size: 1.07rem; font-weight: 600; margin: 2rem 0 0.7rem; }
 .sidebar { flex: 0 0 232px; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto;
   display: flex; flex-direction: column; gap: 0.2rem; padding: 0.9rem 0.7rem; background: var(--bar-bg);
   color: var(--bar-text); border-right: 1px solid var(--border); }
-.side-head { display: flex; align-items: center; gap: 0.5rem; padding: 0 0.3rem 0.8rem 0.5rem; }
+.side-head { display: flex; align-items: center; justify-content: center; padding: 0.1rem 0 0.9rem; }
 .brand { display: inline-flex; align-items: center; gap: 0.55rem; font-weight: 700; font-size: 1.15rem;
-  color: var(--bar-text); letter-spacing: -0.01em; margin-right: auto; }
+  color: var(--bar-text); letter-spacing: -0.01em; }
 .brand:hover { text-decoration: none; }
 .brand img { width: 32px; height: 32px; }
 .logo-dark { display: none; }
@@ -124,9 +124,15 @@ h2 { font-size: 1.07rem; font-weight: 600; margin: 2rem 0 0.7rem; }
 .side-sites .dot { flex-shrink: 0; }
 .side-sites a.side-more { font-size: 0.85rem; color: var(--accent); }
 .sidebar :focus-visible { outline-offset: -2px; }
-/* Benutzermenü: Kürzel als runder Knopf neben der Marke */
+/* Benutzermenü: unten in der Seitenleiste, Kürzel mit Name und Rolle; öffnet nach oben */
 .usermenu { position: relative; }
 .usermenu > summary { list-style: none; cursor: pointer; display: flex; border-radius: 50%; }
+.side-user { margin-top: auto; padding-top: 0.7rem; border-top: 1px solid var(--border); }
+.side-user > summary { align-items: center; gap: 0.65rem; padding: 0.4rem 0.5rem; border-radius: var(--radius-sm); }
+.side-user > summary:hover, .side-user[open] > summary { background: var(--surface-2); }
+.side-user-name { display: grid; min-width: 0; font-weight: 600; color: var(--bar-text); overflow-wrap: anywhere; }
+.side-user-name .small { font-weight: 400; color: var(--bar-muted); }
+.side-user .usermenu-panel { top: auto; bottom: calc(100% + 0.3rem); left: 0; right: 0; min-width: 0; }
 .usermenu > summary::-webkit-details-marker { display: none; }
 .avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%;
   background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 0.8rem; }
@@ -153,7 +159,8 @@ h2 { font-size: 1.07rem; font-weight: 600; margin: 2rem 0 0.7rem; }
   .side-nav { flex-direction: row; flex-wrap: wrap; gap: 2px 4px; }
   .side-nav a { padding: 0.4rem 0.6rem; }
   .side-sites { display: none; }
-  .usermenu-panel { left: auto; right: 0; }
+  .side-user { margin-top: 0.3rem; padding-top: 0.3rem; }
+  .side-user .usermenu-panel { top: calc(100% + 0.3rem); bottom: auto; right: auto; min-width: 13rem; }
 }
 main { max-width: 1360px; margin: 0 auto; padding: 1.5rem; }
 .crumbs { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
@@ -434,7 +441,7 @@ label.choice input { width: 1.1rem; height: 1.1rem; margin: 0; }
 
 /* Übersicht: Verlauf je Standort der letzten 24 h (UniFi-Stil) */
 .health { margin-top: 1rem; }
-.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; margin-bottom: 0.9rem; }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; margin-bottom: 0.9rem; }
 .card-head h2 { margin: 0; flex-grow: 1; }
 .health-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
 .health-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; }
@@ -442,6 +449,20 @@ label.choice input { width: 1.1rem; height: 1.1rem; margin: 0; }
 .health-name a { color: var(--text); font-weight: 500; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .healthbar { flex: 1 1 16rem; display: flex; gap: 2px; height: 22px; }
 .healthbar > span { flex: 1 1 0; border-radius: 2px; background: var(--ok-fill); }
+.healthbar > [data-href] { cursor: pointer; }
+.healthbar > [data-href]:hover { filter: brightness(1.25); outline: 2px solid var(--accent); outline-offset: 1px; }
+.health-up a { font-size: 0.82rem; }
+.health-sub { margin: -0.6rem 0 0.9rem; }
+.health-why { flex-basis: 100%; padding-left: 1.2rem; color: var(--text-muted); }
+.health-why a { color: var(--text-muted); text-decoration: underline; }
+.health-why a:hover { color: var(--accent); }
+/* Umschalter für Zeiträume (Standort-Verlauf) */
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; gap: 2px; padding: 2px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.seg a { padding: 0.2rem 0.6rem; border-radius: var(--radius-sm); color: var(--text-muted); font-size: 0.82rem;
+  text-decoration: none; white-space: nowrap; }
+.seg a:hover { color: var(--text); }
+.seg a[aria-current] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
 .healthbar > .hb-warn, .health-legend .hb-warn { background: var(--warn-fill); }
 .healthbar > .hb-down, .health-legend .hb-down { background: var(--bad-fill); }
 .healthbar > .hb-none, .health-legend .hb-none { background: var(--none-fill); }

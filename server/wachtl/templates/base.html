@@ -29,21 +29,6 @@
 <aside class="sidebar">
   <div class="side-head">
     <a class="brand" href="{{ url_for('web.overview') }}"><img src="{{ url_for('static', filename='wachtl-logo.svg') }}" class="logo-light" alt="" width="32" height="32"><img src="{{ url_for('static', filename='wachtl-logo-dark.svg') }}" class="logo-dark" alt="" width="32" height="32">Wachtl</a>
-    <details class="usermenu" data-usermenu>
-      <summary{% if request.endpoint in ('web.account', 'web.design') %} class="active"{% endif %}><span class="sr-only">Benutzermenü </span><span class="avatar" aria-hidden="true">{{ user.username[:2]|upper }}</span><span class="sr-only">{{ user.username }}</span></summary>
-      <div class="usermenu-panel">
-        <p class="usermenu-head">{{ user.username }}<span class="muted small">{{ ROLE_LABELS[user.role] }}</span></p>
-        <ul>
-          {% for endpoint, label in [('web.account', 'Konto'), ('web.design', 'Design')] %}
-          <li><a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ label }}</a></li>
-          {% endfor %}
-        </ul>
-        <form method="post" action="{{ url_for('web.logout') }}" class="usermenu-logout">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button>Abmelden</button>
-        </form>
-      </div>
-    </details>
   </div>
   <nav class="side-nav" aria-label="Hauptnavigation">
     {% set nav = [('web.overview', 'Übersicht'), ('web.sites_view', 'Standorte'), ('web.probes_view', 'Probes'),
@@ -66,6 +51,20 @@
     {% if nav_sites.total > nav_sites['items']|length %}<a class="side-more" href="{{ url_for('web.overview') }}#standorte">Alle {{ nav_sites.total }} Standorte</a>{% endif %}
   </nav>
   {% endif %}
+  <details class="usermenu side-user" data-usermenu>
+    <summary{% if request.endpoint in ('web.account', 'web.design') %} class="active"{% endif %}><span class="sr-only">Benutzermenü </span><span class="avatar" aria-hidden="true">{{ user.username[:2]|upper }}</span><span class="side-user-name">{{ user.username }}<span class="small">{{ ROLE_LABELS[user.role] }}</span></span></summary>
+    <div class="usermenu-panel">
+      <ul>
+        {% for endpoint, label in [('web.account', 'Konto'), ('web.design', 'Design')] %}
+        <li><a href="{{ url_for(endpoint) }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}>{{ label }}</a></li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="{{ url_for('web.logout') }}" class="usermenu-logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button>Abmelden</button>
+      </form>
+    </div>
+  </details>
 </aside>
 <div class="page">
 {% endif %}
