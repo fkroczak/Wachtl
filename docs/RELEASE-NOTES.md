@@ -7,6 +7,12 @@
 
 - **Eigene Wachtl-CA**: Wachtl stellt sein Server-Zertifikat jetzt mit einer eigenen Zertifizierungsstelle aus. Auf die Geräte kommt nur die CA (10 Jahre, per Namensbeschränkung nur für die Adressen des Servers). Das Server-Zertifikat gilt 397 Tage und erneuert sich 30 Tage vor Ablauf selbst – Windows im laufenden Dienst ohne Neustart, Linux täglich per Cron. Damit akzeptieren auch Safari auf Mac, iPhone und iPad das Zertifikat. Der Pin der Probes bleibt gleich; bestehende Installationen stellt das Update einmal um.
 - **Tägliche Prüfung auf den PCs**: Die geplante Aufgabe „Wachtl Zertifikat“ legt die CA nach, wenn der Server beim Setup nicht erreichbar war, und übernimmt eine neu ausgestellte CA.
+
+## Neu in 0.9.3
+
+- **Netzwerkkarte deaktiviert oder entfernt**: Wachtl meldet jetzt unten rechts, wenn eine verbundene Netzwerkkarte in Windows deaktiviert oder abgezogen wird (USB-Adapter, Dockingstation). Bisher fiel die Karte still aus der Überwachung, es kam kein Hinweis. Deaktiviert: sofort, kritisch ohne andere Verbindung, sonst Warnung. Entfernt: wie „Kabel getrennt“ (nur Info, solange z. B. das WLAN übernimmt).
+- **Jede Trennung wird gemeldet**: „Kabel getrennt“ und andere kritische Hinweise kamen nach dem ersten Mal 30 Minuten lang nicht wieder – wer das Kabel zum Test zweimal zog, sah beim zweiten Mal nichts. Kritische Hinweise und Verbindungsverlust erscheinen jetzt jedes Mal.
+- **Zuverlässigere Erkennung**: Ändert sich eine Karte, liest die Probe den Geräte-Manager sofort neu statt bis zu 30 s alte Werte zu nutzen. Das Wachtl-Symbol fragt alle 5 s statt 10 s und gibt nach einem Fehler beim Abfragen (z. B. während eines Updates) nicht mehr bis zur nächsten Anmeldung auf.
 - **Zertifikat direkt vertrauenswürdig**: Das Setup legt das Server-Zertifikat unter **Vertrauenswürdige Stammzertifizierungsstellen** ab – auf dem Windows-Server (Server-Setup) und auf jedem PC mit Probe (Probe-Setup, nur wenn es zum Pin passt). Browser öffnen Wachtl dort ohne Warnung, eine GPO ist nicht mehr nötig. Die Deinstallation entfernt es wieder. Gilt für Windows- und Linux-Server gleichermaßen.
 - **Namensbeschränkung**: Das Zertifikat gilt nur noch für die Namen und IP-Adressen des Wachtl-Servers. Bestehende Zertifikate werden beim Update einmal neu ausgestellt – gleicher Schlüssel, der Pin der Probes bleibt.
 - **Andere Geräte**: Neue Seite `/zertifikat` (Link auf der Anmeldeseite) zum Herunterladen mit Fingerabdruck und Anleitung für Windows, macOS, iPhone/iPad, Android und Linux.

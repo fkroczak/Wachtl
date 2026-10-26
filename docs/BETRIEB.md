@@ -81,7 +81,7 @@ Wachtl hat eine eigene Zertifizierungsstelle, die **Wachtl-CA**:
 - Neue Servernamen (Windows: Setup erneut ausführen; Linux: `WACHTL_HOST` und `./setup.sh`) stellen die CA mit
   demselben Schlüssel neu aus. PCs mit Probe übernehmen sie innerhalb eines Tages (geplante Aufgabe), andere Geräte
   brauchen sie neu von `/zertifikat`.
-- Bis 0.9.2 war das Zertifikat selbstsigniert (10 Jahre). Das Update stellt einmal auf die CA um, gleicher Pin.
+- Bis 0.9.3 war das Zertifikat selbstsigniert (10 Jahre). Das Update stellt einmal auf die CA um, gleicher Pin.
 
 | Gerät | Wie |
 | --- | --- |

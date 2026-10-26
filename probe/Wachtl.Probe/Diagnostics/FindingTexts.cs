@@ -151,8 +151,40 @@ public static class FindingTexts
         $"Die Netzwerkkarte „{name}“ zählt keine auffälligen Paketfehler mehr.");
 
     public static FindingText AdapterGone(string name) => new(
-        "Netzwerkkarte deaktiviert oder entfernt",
-        $"Die Netzwerkkarte „{name}“ wurde deaktiviert oder entfernt, der Hinweis ist damit erledigt.");
+        "Hinweis abgelöst: Netzwerkkarte deaktiviert oder entfernt",
+        $"Die Netzwerkkarte „{name}“ wurde deaktiviert oder entfernt. Der bisherige Hinweis zu dieser Karte entfällt.");
+
+    public static FindingText AdapterDisabled(string name, string description, string? fallback) => new(
+        "Netzwerkkarte deaktiviert",
+        $"Die Netzwerkkarte „{name}“{Paren(description, name)} wurde in Windows deaktiviert."
+        + (fallback is null ? " Der PC hat damit keine Netzwerkverbindung mehr." : $" Die Verbindung läuft vorerst über „{fallback}“ weiter."),
+        "Netzwerkkarte wieder aktivieren: Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen, "
+        + "bei der Karte „Aktivieren“ wählen (oder im Geräte-Manager: Rechtsklick › Gerät aktivieren).",
+        $"„{name}“ wurde deaktiviert"
+        + (fallback is null ? ", der PC hat kein Netzwerk mehr.\n" : $", die Verbindung läuft über „{fallback}“.\n")
+        + "Lösung: Unter Einstellungen › Netzwerk und Internet › Erweiterte Netzwerkeinstellungen die Karte aktivieren.");
+
+    public static FindingText AdapterEnabled(string name, TimeSpan downtime) => new(
+        "Netzwerkkarte wieder aktiviert",
+        $"Die Netzwerkkarte „{name}“ ist wieder aktiviert (deaktiviert für {Duration(downtime)}).");
+
+    public static FindingText AdapterRemoved(string name, string description, string? fallback) => new(
+        "Netzwerkkarte entfernt",
+        $"Die Netzwerkkarte „{name}“{Paren(description, name)} ist nicht mehr vorhanden: abgezogen (USB-Netzwerkadapter, Dockingstation) "
+        + "oder vom Treiber abgemeldet."
+        + (fallback is null ? " Der PC hat damit keine Netzwerkverbindung mehr." : $" Die Verbindung läuft vorerst über „{fallback}“ weiter."),
+        "USB-Netzwerkadapter bzw. Dockingstation wieder anschließen (anderen USB-Anschluss testen). "
+        + "Bei einer eingebauten Karte den PC neu starten; bleibt sie weg, im Geräte-Manager nach Fehlern sehen und den Treiber neu installieren.",
+        $"„{name}“ ist nicht mehr vorhanden"
+        + (fallback is null ? ", der PC hat kein Netzwerk mehr.\n" : $", die Verbindung läuft über „{fallback}“.\n")
+        + "Lösung: Adapter bzw. Dockingstation wieder anschließen oder den PC neu starten.");
+
+    public static FindingText AdapterBack(string name, TimeSpan downtime) => new(
+        "Netzwerkkarte wieder vorhanden",
+        $"Die Netzwerkkarte „{name}“ ist wieder da (fehlte {Duration(downtime)}).");
+
+    private static string Paren(string description, string name) =>
+        string.IsNullOrEmpty(description) || string.Equals(description, name, StringComparison.OrdinalIgnoreCase) ? string.Empty : $" ({description})";
 
     /// <summary>Text zu Geräte-Manager-Fehlercodes (ConfigManagerErrorCode).</summary>
     public static string DriverCode(int code) => code switch

@@ -118,7 +118,7 @@ class CertTest(TempDirTest):
     def test_old_self_signed_certificate_moves_to_ca_with_same_pin(self):
         key, crt, _, ca_crt = self.files()
         certs.load_or_create_key(key)
-        # Zertifikat wie bis 0.9.2: selbstsigniert, 10 Jahre
+        # Zertifikat wie bis 0.9.3: selbstsigniert, 10 Jahre
         subprocess.run(["openssl", "req", "-new", "-x509", "-key", str(key), "-out", str(crt), "-days", "3650",
                         "-subj", "/CN=a.local/O=Wachtl", "-addext", "subjectAltName=DNS:a.local"],
                        check=True, capture_output=True)
