@@ -62,7 +62,7 @@
         {%- elif f.key == 'peer_probe_id' -%}
           <select name="{{ f.key }}" {{ 'disabled' if off }} {{ attrs }}>
             <option value="0">– Probe wählen –</option>
-            {% for p in probes %}<option value="{{ p.id }}" {{ 'selected' if p.id == v|int }}>{{ p.hostname }} ({{ p.site_name }}){{ '' if p.iperf_server else ' – Gegenstelle nicht aktiv' }}</option>{% endfor %}
+            {% for p in probes %}<option value="{{ p.id }}" {{ 'selected' if p.id == v|int }}>{{ p.hostname }}{{ '' if single_site else ' (' ~ p.site_name ~ ')' }}{{ '' if p.iperf_server else ' – Gegenstelle nicht aktiv' }}</option>{% endfor %}
           </select>
         {%- elif f.kind in ('int', 'float') -%}
           <input name="{{ f.key }}" type="number" value="{{ v }}" {{ 'disabled' if off }} {{ attrs }}
@@ -94,7 +94,7 @@
       {% call(attrs) field("scope", "Gilt für", error=fe.scope) %}
         <select name="scope" {{ attrs }} data-scope-select>
           <option value="all" {{ 'selected' if sc == 'all' }}>Alle Probes</option>
-          <option value="site" {{ 'selected' if sc == 'site' }}>Ein Standort</option>
+          {% if not single_site or sc == 'site' %}<option value="site" {{ 'selected' if sc == 'site' }}>Ein Standort</option>{% endif %}
           <option value="probe" {{ 'selected' if sc == 'probe' }}>Eine Probe</option>
         </select>
       {% endcall %}
@@ -106,10 +106,10 @@
       <div class="field" data-scope="probe" {{ 'hidden' if sc != 'probe' }}>
         <label for="f-probe_id">Probe</label>
         <select name="probe_id" id="f-probe_id">{% for p in probes %}
-          <option value="{{ p.id }}" {{ 'selected' if sc == 'probe' and p.id == assignment.scope_id }}>{{ p.hostname }} ({{ p.site_name }})</option>{% endfor %}</select>
+          <option value="{{ p.id }}" {{ 'selected' if sc == 'probe' and p.id == assignment.scope_id }}>{{ p.hostname }}{{ '' if single_site else ' (' ~ p.site_name ~ ')' }}</option>{% endfor %}</select>
       </div>
     </div>
-    {% if ctype.key in ('iperf', 'speedtest') %}<p class="muted small">Tipp: Bandbreitentests belasten die Leitung. Bei vielen Probes je Standort einen Check pro Standort einer einzelnen Probe zuweisen.</p>{% endif %}
+    {% if ctype.key in ('iperf', 'speedtest') %}<p class="muted small">Tipp: Bandbreitentests belasten die Leitung. Bei vielen Probes {{ 'den Check' if single_site else 'je Standort einen Check pro Standort' }} einer einzelnen Probe zuweisen.</p>{% endif %}
   </fieldset>
 
   <div class="actions">

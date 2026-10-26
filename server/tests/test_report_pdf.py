@@ -307,6 +307,7 @@ class ReportPdfTest(ReportBase):
 class ReportRouteTest(ReportBase):
     def setUp(self):
         super().setUp()
+        self.make_site("Filiale")   # Standortauswahl gibt es ab zwei Standorten
         self.make_user("leser", "readonly")
 
     def test_requires_login(self):

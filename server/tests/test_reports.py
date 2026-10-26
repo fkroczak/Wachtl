@@ -336,6 +336,7 @@ class ReportPagesTest(AppTestCase):
 
     def test_overview_without_reports_unchanged(self):
         ex("DELETE FROM incident_reports")
+        self.make_site("Filiale")                  # Übersicht gibt es ab zwei Standorten
         self.make_user()
         self.login()
         html = self.client.get("/").get_data(as_text=True)
