@@ -3,7 +3,7 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
-## Unveröffentlicht
+## Neu in 0.9.3
 
 - **Netzwerkkarte deaktiviert oder entfernt**: Wachtl meldet jetzt unten rechts, wenn eine verbundene Netzwerkkarte in Windows deaktiviert oder abgezogen wird (USB-Adapter, Dockingstation). Bisher fiel die Karte still aus der Überwachung, es kam kein Hinweis. Deaktiviert: sofort, kritisch ohne andere Verbindung, sonst Warnung. Entfernt: wie „Kabel getrennt“ (nur Info, solange z. B. das WLAN übernimmt).
 - **Jede Trennung wird gemeldet**: „Kabel getrennt“ und andere kritische Hinweise kamen nach dem ersten Mal 30 Minuten lang nicht wieder – wer das Kabel zum Test zweimal zog, sah beim zweiten Mal nichts. Kritische Hinweise und Verbindungsverlust erscheinen jetzt jedes Mal.
