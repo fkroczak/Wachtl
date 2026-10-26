@@ -1,13 +1,20 @@
 name: Build und Tests
 
 on:
+  # Branches nur über den Pull Request testen – sonst läuft jeder PR-Commit doppelt (push + pull_request).
+  # Branch ohne PR: Workflow von Hand starten (workflow_dispatch).
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
   release:
     types: [published]
+
+# Neuer Commit im PR bricht den veralteten Lauf ab; main und Tags laufen immer zu Ende.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 env:
   WACHTL_VERSION: "1.0.1"
@@ -21,11 +28,17 @@ jobs:
         working-directory: server
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q -n auto   # pytest-xdist: alle Kerne des Runners
 
   ui-quality:
     # Barrierefreiheit, Tastatur, Reflow und Performance-Budgets des Web-UI (docs/quality-guardrails.md).
@@ -40,6 +53,12 @@ jobs:
       WACHTL_E2E_PASSWORD: e2e-admin-passwort
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -83,6 +102,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -97,9 +122,17 @@ jobs:
   windows-server:
     name: Windows-Server-Setup bauen und testen
     runs-on: windows-latest
-    needs: [server, probe]
+    # wartet nur auf die Probe, nicht auf die Python-Tests: die laufen parallel, und
+    # Setups wandern erst ins Repository/Release, wenn auch die Server-Tests grün sind
+    needs: [probe]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # releases/ (über 1 GB fertige Setups) braucht kein Job: spart 1,5–3,5 min Checkout je Job
+          sparse-checkout: |
+            /*
+            !/releases/
+          sparse-checkout-cone-mode: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -179,13 +212,19 @@ jobs:
   setups-ins-repo:
     name: Setups ins Repository legen
     runs-on: ubuntu-latest
-    needs: [windows-server]
+    needs: [server, windows-server]
     # nur auf main und nur einmal je Version (releases/<Version>/ noch nicht vorhanden)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # nur was der Job braucht – nicht die Setups aller früheren Versionen
+          sparse-checkout: |
+            /docs/
+            /releases/${{ env.WACHTL_VERSION }}/
+          sparse-checkout-cone-mode: false
       - name: Prüfen, ob diese Version schon im Repository liegt
         id: check
         run: |
@@ -221,12 +260,14 @@ jobs:
   release:
     name: Release veröffentlichen
     runs-on: ubuntu-latest
-    needs: [windows-server]
+    needs: [server, windows-server]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs
       - uses: actions/download-artifact@v4
         with:
           name: wachtl-setups
