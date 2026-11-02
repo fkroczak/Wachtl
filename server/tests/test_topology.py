@@ -127,6 +127,21 @@ class AnalyzeTest(unittest.TestCase):
         self.assertIn("unreachable", {f["kind"] for f in t.findings})
         self.assertIn("s3", t.roots)                              # nicht verbunden: eigener Baum
 
+    def test_shared_lldp_neighbor_that_is_no_registered_switch(self):
+        # Zwei eingetragene Switches sehen per LLDP denselben, nicht eingetragenen Switch (z. B. HP 2530):
+        # der zweite Treffer zeigt auf den schon angelegten Nachbar-Knoten – früher KeyError: None
+        hp = {"if_index": 2, "chassis_id": "8c:85:c1:6f:14:80", "port_id": "24", "port_descr": "24",
+              "sys_name": "HP-2530", "mgmt_ip": "192.168.10.241", "bridge": True}
+        r = rows()
+        for i in (1, 2):
+            snap = json.loads(r[i]["snapshot"])
+            snap["lldp"] = (snap.get("lldp") or []) + [dict(hp, if_index=snap["interfaces"][0]["index"])]
+            r[i] = {**r[i], "snapshot": json.dumps(snap)}
+        t = topology.analyze(r, DEVICES)
+        hp_nodes = [n for n in t.nodes.values() if n.label == "HP-2530"]
+        self.assertEqual(len(hp_nodes), 1)
+        self.assertEqual(hp_nodes[0].kind, "neighbor")
+
     def test_faceplate_rows(self):
         ports = {i: topology.Port(i, f"Gi1/0/{i}", str(i), None, None, 6, 1000, True, True, "full", True,
                                   False) for i in range(1, 9)}

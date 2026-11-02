@@ -300,6 +300,56 @@ class BackupRestoreTest(InstallBase):
         self.assertEqual((self.data / "vm-agg" / "data" / "part.bin").read_bytes(), b"aggregat")
 
 
+    def test_backup_exports_running_vm_agg_without_snapshot(self):
+        import http.server
+        import zipfile
+
+        self.do_install()
+        layout = Layout.load(self.data, self.inst)
+        seen = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen["path"] = self.path
+                body = b"NATIVE-EXPORT"
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_a):
+                pass
+
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        layout.env["PORT_VM_AGG"] = str(srv.server_address[1])
+        archive = host.backup(layout)
+        self.assertTrue(seen["path"].startswith("/api/v1/export/native?"))
+        self.assertNotIn("snapshot", seen["path"])
+        with zipfile.ZipFile(archive) as zf:
+            self.assertEqual(zf.read(host.AGG_EXPORT), b"NATIVE-EXPORT")
+        # Rückspielen startet vm-agg kurz selbst und importiert den Export
+        imported = []
+        with mock.patch.object(host, "import_agg", lambda _l, src: imported.append(src.read_bytes())), \
+                mock.patch.object(winsys, "port_open", return_value=False):
+            host.restore(layout, archive)
+        self.assertEqual(imported, [b"NATIVE-EXPORT"])
+
+    def test_stale_snapshots_are_removed_before_start(self):
+        layout = Layout(self.tmp / "inst", self.tmp / "daten")
+        idx = self.tmp / "daten" / "vm-agg" / "data" / "indexdb" / "snapshots" / "20261022001514-X" / "2026_10"
+        idx.mkdir(parents=True)
+        (idx / "index.bin").write_bytes(b"x")
+        top = self.tmp / "daten" / "vm-agg" / "snapshots" / "20261022001514-X"
+        top.mkdir(parents=True)
+        part = self.tmp / "daten" / "vm-agg" / "data" / "small" / "2026_10"
+        part.mkdir(parents=True)
+        host.clear_stale_snapshots(layout)
+        self.assertEqual(list(idx.parents[1].iterdir()), [])
+        self.assertEqual(list(top.parent.iterdir()), [])
+        self.assertTrue(part.exists())
+
 class ServeTest(unittest.TestCase):
     def call(self, app, path="/", host="srv.local", query=""):
         result = {}

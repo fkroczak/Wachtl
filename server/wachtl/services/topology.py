@@ -666,8 +666,10 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
                 if target == me:
                     continue
                 if target:
+                    # Ziel kann auch ein schon angelegter Nachbar ohne Eintrag sein (mehrere Switches sehen ihn)
                     tsid = nodes[target].switch_id
-                    bp = resolve_port(tsid, e.get("port_id")) or resolve_port(tsid, e.get("port_descr"))
+                    bp = (resolve_port(tsid, e.get("port_id")) or resolve_port(tsid, e.get("port_descr"))
+                          if tsid is not None else None)
                     add_link(me, ap, target, bp, e.get("port_descr") or e.get("port_id"),
                              port.speed if port else None, kind)
                 elif e.get("bridge") or e.get("router") or e.get("ap"):

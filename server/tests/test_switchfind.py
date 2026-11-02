@@ -289,6 +289,18 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(switchfind.label({"vendor": "TP-Link", "model": "TL-SG105PE"}), "TP-Link TL-SG105PE")
         self.assertEqual(switchfind.label({"vendor": "Netgear", "model": None, "name": "Buero"}), "Buero")
 
+    def test_hp_procurve_model_from_telnet_banner(self):
+        # HP 2530: Weboberfläche ohne Titel, Modell nur in der Telnet-Begrüßung (mit Terminal-Steuerfolgen)
+        raw = "\x1b[2J\x1b[?7h\x1b[0;23r\x1b[?6l\x1b[1;1H\x1b[?25l\x1b[1;1HHP J9773A 2530-24G-PoE Switch"
+        stored = "[2J [?7h [0;23r [?6l [1;1H [?25l [1;1HHP J9776A 2530-24G Switch"     # so von älteren Scans
+        for banner, model in ((raw, "2530-24G-PoE"), (stored, "2530-24G")):
+            services = [{"port": 22, "service": "ssh", "banner": "SSH-2.0-Mocana SSH 6.3"},
+                        {"port": 23, "service": "telnet", "banner": banner}, {"port": 80, "service": "http"}]
+            c = switchfind.classify("8C:85:C1:6F:14:80", services)
+            self.assertEqual((c["vendor"], c["model"], c["access"]), ("Aruba", model, "snmp"))
+            self.assertIn("banner", c["sources"])
+            self.assertGreaterEqual(c["confidence"], switchfind.SHOW_FROM)
+
 
 class TreeTest(unittest.TestCase):
     def test_easysmart_without_fdb_hangs_at_port_that_only_sees_it(self):

@@ -43,6 +43,12 @@ class PureTest(unittest.TestCase):
         self.assertIsNone(netscan.link_for("mysql", "10.0.0.2", 3306))
         self.assertIn("full address:s:10.0.0.2:3390", netscan.rdp_file("10.0.0.2", 3390))
 
+    def test_clean_banner(self):
+        self.assertEqual(netscan.clean_banner("\x1b[2J\x1b[?7h\x1b[1;1HHP J9773A 2530-24G-PoE"), "HP J9773A 2530-24G-PoE")
+        self.assertEqual(netscan.clean_banner("[2J [?7h [1;1HHP J9773A"), "HP J9773A")
+        self.assertEqual(netscan.clean_banner("SSH-2.0-OpenSSH_9.6"), "SSH-2.0-OpenSSH_9.6")
+        self.assertIsNone(netscan.clean_banner("\x1b[2J"))
+
     def test_mac(self):
         self.assertEqual(netscan.norm_mac("aa-bb-cc-dd-ee-ff"), "AA:BB:CC:DD:EE:FF")
         self.assertEqual(netscan.norm_mac("a8-bb-cc-dd-ee-ff"), "A8:BB:CC:DD:EE:FF")

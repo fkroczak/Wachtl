@@ -37,3 +37,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Status meldet Fehler' }
 & "${env:ProgramFiles}\Wachtl Server\wachtl-server.cmd" backup
 if ($LASTEXITCODE -ne 0) { throw "Sicherung fehlgeschlagen" }
 Get-ChildItem C:\WachtlData\backups
+$zip = Get-ChildItem C:\WachtlData\backups\wachtl-*.zip | Sort-Object LastWriteTime | Select-Object -Last 1
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$entries = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName).Entries.FullName
+if ($entries -notcontains 'vm-agg.native') { throw "Sicherung ohne vm-agg-Export: $($entries -join ', ')" }
+# Die Sicherung darf vm-agg nicht stören (früher: Snapshot ohne Symlink-Recht -> Absturz und Neustartschleife)
+Start-Sleep -Seconds 15
+$health = Invoke-WebRequest http://127.0.0.1:8429/health -UseBasicParsing -TimeoutSec 5
+if ($health.StatusCode -ne 200) { throw 'vm-agg läuft nach der Sicherung nicht mehr' }
+if (Select-String -Path C:\WachtlData\logs\vm-agg.log -Pattern 'FATAL|panic' -Quiet) { throw 'vm-agg.log meldet FATAL/panic' }

@@ -23,6 +23,7 @@ import sqlite3
 import sys
 import tempfile
 import threading
+import urllib.parse
 import urllib.request
 import zipfile
 from logging.handlers import RotatingFileHandler
@@ -147,6 +148,7 @@ def cmd_run(layout: Layout, _args) -> int:
     stop = threading.Event()
     install_stop_handlers(stop)
     threading.Thread(target=_renew_loop, args=(layout, stop), name="zertifikat", daemon=True).start()
+    clear_stale_snapshots(layout)
     sup = Supervisor(build_specs(layout), layout.logs, stop_event=stop)
     py = str(layout.python)
     code = sup.run_once(ProcSpec("init", [py, "-m", "wachtl.win.host", "init", "--data", str(layout.data_dir)],
@@ -256,6 +258,74 @@ def _fs_url(path: Path) -> str:
     return "fs://" + str(path).replace("\\", "/")
 
 
+AGG_EXPORT = "vm-agg.native"
+_NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def export_agg(layout: Layout, target: Path) -> None:
+    """Alle 1-min-Aggregate im nativen Format von VictoriaMetrics in eine Datei schreiben."""
+    query = urllib.parse.urlencode({"match[]": '{__name__!=""}'})
+    with _NO_PROXY.open(f"{layout.local('VM_AGG')}/api/v1/export/native?{query}", timeout=600) as r, \
+            open(target, "wb") as f:
+        shutil.copyfileobj(r, f, 1024 * 1024)
+
+
+def import_agg(layout: Layout, source: Path, timeout: float = 60) -> None:
+    """Export zurückspielen: vm-agg kurz selbst starten, importieren, auf die Platte schreiben, stoppen."""
+    import subprocess
+    import time
+
+    from .supervisor import Supervisor
+
+    base = layout.local("VM_AGG")
+    kwargs: dict = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {}
+    proc = subprocess.Popen([str(layout.binary("victoria-metrics")),
+                             f"-storageDataPath={layout.data_dir / 'vm-agg'}",
+                             f"-retentionPeriod={layout.env['AGG_RETENTION']}",
+                             f"-httpListenAddr=127.0.0.1:{layout.port('VM_AGG')}", "-loggerLevel=ERROR"],
+                            stdin=subprocess.DEVNULL, **kwargs)
+    try:
+        deadline = time.monotonic() + timeout
+        while not winsys.port_open(layout.port("VM_AGG")):
+            if proc.poll() is not None or time.monotonic() > deadline:
+                raise RuntimeError("VictoriaMetrics (vm-agg) startet nicht – Rückspielen der Aggregate abgebrochen")
+            time.sleep(0.5)
+        with open(source, "rb") as f:
+            req = urllib.request.Request(f"{base}/api/v1/import/native", data=f, method="POST",
+                                         headers={"Content-Length": str(source.stat().st_size)})
+            _NO_PROXY.open(req, timeout=600).close()
+        _NO_PROXY.open(f"{base}/internal/force_flush", timeout=60).close()
+    finally:
+        Supervisor._signal_stop(proc)
+        try:
+            proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+def clear_stale_snapshots(layout: Layout) -> None:
+    """Liegengebliebene VictoriaMetrics-Snapshots löschen, solange die Datenbanken noch nicht laufen.
+
+    VictoriaMetrics räumt sie sonst beim Start selbst weg – unter Windows scheitert das an den eigenen, schon
+    geöffneten Dateien (Hardlinks), und der Prozess stürzt bei jedem Start erneut ab."""
+    for name in ("vm-agg", "vm-raw"):
+        root = layout.data_dir / name
+        for snaps in (root / "snapshots", root / "data" / "small" / "snapshots", root / "data" / "big" / "snapshots",
+                      root / "data" / "indexdb" / "snapshots", root / "indexdb" / "snapshots"):
+            if not snaps.is_dir():
+                continue
+            for entry in snaps.iterdir():
+                log.info("Entferne alten Snapshot %s", entry)
+                try:
+                    if entry.is_dir() and not entry.is_symlink():
+                        shutil.rmtree(entry)
+                    else:
+                        entry.unlink()
+                except OSError as exc:
+                    log.warning("Snapshot %s lässt sich nicht löschen: %s", entry, exc)
+
+
 def backup(layout: Layout, target_dir: Path | None = None) -> Path:
     target_dir = target_dir or layout.backups
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -271,19 +341,14 @@ def backup(layout: Layout, target_dir: Path | None = None) -> Path:
                 src.backup(dst)
             src.close()
             dst.close()
-        # 1-min-Aggregate: im Betrieb per Snapshot (vmbackup), bei gestopptem Dienst als Ordnerkopie
-        agg_port = layout.port("VM_AGG")
-        vmbackup = layout.binary("vmbackup")
-        if winsys.port_open(agg_port) and vmbackup.exists():
-            import subprocess
-
-            subprocess.run([str(vmbackup), f"-storageDataPath={layout.data_dir / 'vm-agg'}",
-                            f"-snapshot.createURL={layout.local('VM_AGG')}/snapshot/create",
-                            f"-dst={_fs_url(work / 'vm-agg')}", "-loggerLevel=ERROR"], check=True)
-        elif not winsys.port_open(agg_port) and (layout.data_dir / "vm-agg").exists():
-            shutil.copytree(layout.data_dir / "vm-agg", work / "vm-agg-files")
-        else:
-            log.warning("vm-agg läuft, aber vmbackup fehlt – Aggregate nicht gesichert")
+        # 1-min-Aggregate: im Betrieb als Export (kein Snapshot – der braucht unter Windows Symlink-Rechte, die das
+        # Dienstkonto nicht hat, und ein halber Snapshot lässt vm-agg danach bei jedem Start abstürzen),
+        # bei gestopptem Dienst als Ordnerkopie
+        if winsys.port_open(layout.port("VM_AGG")):
+            export_agg(layout, work / AGG_EXPORT)
+        elif (layout.data_dir / "vm-agg").exists():
+            shutil.copytree(layout.data_dir / "vm-agg", work / "vm-agg-files",
+                            ignore=shutil.ignore_patterns("snapshots"))
         shutil.copy2(layout.env_file, work / "wachtl.env")
         shutil.copytree(layout.data_dir / "certs", work / "certs")
         (work / "backup.json").write_text(json.dumps({"created": stamp, "data_dir": str(layout.data_dir)}),
@@ -327,7 +392,10 @@ def restore(layout: Layout, archive: Path) -> None:
             layout.db_file.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(work / "wachtl.db", layout.db_file)
         agg = layout.data_dir / "vm-agg"
-        if (work / "vm-agg").exists():
+        if (work / AGG_EXPORT).exists():
+            shutil.rmtree(agg, ignore_errors=True)
+            import_agg(layout, work / AGG_EXPORT)
+        elif (work / "vm-agg").exists():            # ältere Sicherungen (vmbackup)
             import subprocess
 
             subprocess.run([str(layout.binary("vmrestore")), f"-src={_fs_url(work / 'vm-agg')}",
