@@ -16,6 +16,7 @@ import json
 import re
 
 from .. import repo, switch_oui
+from .netscan import clean_banner
 from ..db import ex, ins, q, q1
 
 SHOW_FROM = 50          # ab dieser Sicherheit erscheint ein Fund in der Liste
@@ -30,6 +31,8 @@ MODEL_RE = re.compile(
     r"CRS\d{3}[A-Za-z0-9+-]*|CSS\d{3}[A-Za-z0-9+-]*|"                                    # MikroTik
     r"CBS\d{3}[A-Z0-9-]*|SG\d{3}[A-Z]?-\d{2}[A-Z]*|C9\d{3}[A-Z0-9-]*|WS-C\d{4}[A-Z0-9-]*|"  # Cisco
     r"GS-\d{4}[A-Z0-9+]*)(?:v\d+)?\b")                                                 # LANCOM; „v3“ = Revision
+# HP/Aruba ProCurve melden Produktnummer und Modell im Telnet-Banner: „HP J9773A 2530-24G-PoE Switch“
+HP_BANNER_RE = re.compile(r"\b(?:HPE?|Aruba|ProCurve)\s+(?:J\d{4}[AB]|JL\d{3}A)\s+(\d{4}[A-Z]?-\d{1,2}G[A-Za-z0-9+-]*)")
 SWITCH_WORDS = re.compile(r"switch|procurve|instant on|easy smart|prosafe|smart managed|jetstream|omada|catalyst|"
                           r"web smart|smart switch", re.I)
 NOT_SWITCH = re.compile(r"\b(router|archer|deco|camera|kamera|tapo|nvr|printer|drucker|fritz|access point|eap\d|"
@@ -37,7 +40,8 @@ NOT_SWITCH = re.compile(r"\b(router|archer|deco|camera|kamera|tapo|nvr|printer|d
 EASYSMART_RE = re.compile(r"\bTL-SG1\d{2,3}[DMP]?P?E\b|\bTL-SG10\d{1,2}[A-Z]*E\b", re.I)
 NETGEAR_PLUS_RE = re.compile(r"\bGS\d{3}(?:E|EP|PE|EPP)(?:v\d+)?\b|\bJGS\d{3}[A-Z]*E\b", re.I)
 ACCESS_LABELS = {"snmp": "SNMP", "easysmart": "Weboberfläche (TP-Link Easy Smart)", "none": "keine Abfrage möglich"}
-SOURCE_LABELS = {"oui": "Hersteller der MAC-Adresse", "web": "Weboberfläche", "lldp": "LLDP", "cdp": "CDP",
+SOURCE_LABELS = {"oui": "Hersteller der MAC-Adresse", "web": "Weboberfläche",
+                 "banner": "Telnet-/SSH-Begrüßung", "lldp": "LLDP", "cdp": "CDP",
                  "easysmart": "Rundruf TP-Link", "nsdp": "Rundruf Netgear", "port": "viele Geräte an einem Port"}
 
 
@@ -52,7 +56,7 @@ def access_for(vendor: str | None, model: str | None, proto: str | None = None) 
 
 def _model(*texts: str | None) -> str | None:
     for t in texts:
-        if t and (m := MODEL_RE.search(t)):
+        if t and (m := HP_BANNER_RE.search(t) or MODEL_RE.search(t)):
             return m.group(1)[:40]
     return None
 
@@ -64,8 +68,15 @@ def classify(mac: str | None, services: list[dict], hub_port: bool = False) -> d
     vendor = switch_oui.vendor(mac)
     web = [s for s in services if s.get("port") in WEB_PORTS or s.get("service") in ("http", "https")]
     texts = [x for s in web for x in (s.get("http_title"), s.get("http_server"), s.get("tls_subject")) if x]
-    blob = " ".join(texts)
+    # Telnet-/SSH-Begrüßung: HP/Aruba-Switches nennen dort ihr Modell, die Weboberfläche hat oft keinen Titel
+    banners = [b for s in services if s.get("service") in ("telnet", "ssh") and (b := clean_banner(s.get("banner")))]
+    blob = " ".join(texts + banners)
     model = _model(*texts)
+    src = "web"
+    if not model and (model := _model(*banners)):
+        src = "banner"
+    elif not model and not SWITCH_WORDS.search(" ".join(texts)) and SWITCH_WORDS.search(" ".join(banners)):
+        src = "banner"
     if NOT_SWITCH.search(blob) and not SWITCH_WORDS.search(blob):
         return None
     score, sources = 0, []
@@ -74,10 +85,10 @@ def classify(mac: str | None, services: list[dict], hub_port: bool = False) -> d
         sources.append("oui")
     if model:
         score += 50
-        sources.append("web")
+        sources.append(src)
     elif SWITCH_WORDS.search(blob):
         score += 40
-        sources.append("web")
+        sources.append(src)
     elif vendor and web:
         score += 10                       # Netzwerkhersteller mit Weboberfläche: Router, AP oder Switch
     if hub_port and vendor:

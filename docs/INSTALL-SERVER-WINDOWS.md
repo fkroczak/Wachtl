@@ -129,6 +129,7 @@ Sind diese Ports belegt, meldet das Setup das; sie lassen sich in `wachtl.env` (
 | Setup meldet „Port 443 belegt“ | IIS oder andere Software. Anderen HTTPS-Port wählen (z. B. 8443) oder die IIS-Bindung entfernen |
 | Dienst startet, Web-UI nicht erreichbar | `wachtl-server.cmd status`, dann `logs\web.log` und `logs\supervisor.log` |
 | Graphen leer | `logs\vm-raw.log`; Probes senden? (Übersicht › Letzter Kontakt) |
+| 7-/30-Tage-Graph: „Verbindung verweigert“ (Port 8429) | `logs\vm-agg.log`. Bis 1.0.2 konnte die nächtliche Sicherung vm-agg in eine Neustartschleife bringen (`cannot make a symlink`, danach `cannot remove …\snapshots\…`). Neuere Versionen sichern die Aggregate ohne Snapshot und räumen alte Snapshots beim Dienststart weg – Update einspielen genügt |
 | Keine Alarme | `logs\vmalert.log`, `logs\alertmanager.log`; Verwaltung › Benachrichtigungen › Testnachricht |
 | Dienst startet nicht, Fehler 1069 | Eine Domänen-GPO überschreibt „Anmelden als Dienst“. `NT SERVICE\ALL SERVICES` dort wieder aufnehmen |
 | Deinstallation | Programme und Features › Wachtl Server, unbeaufsichtigt `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES [/REMOVEDATA]`. Entfernt Dienst (samt Server-Probe), Firewall-Regeln – auch von Windows für `python.exe`/`iperf3.exe` angelegte –, die geplante Sicherung und den Registry-Eintrag und prüft danach, dass kein Port mehr lauscht. Am Ende fragt das Setup, ob der Datenordner (Datenbank, privater Schlüssel, Sicherungen) gelöscht werden soll; `/REMOVEDATA` tut das unbeaufsichtigt |

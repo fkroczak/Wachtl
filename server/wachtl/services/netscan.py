@@ -26,6 +26,9 @@ NEW_DEVICE_S = 86400
 KEEP_DAYS = 90
 MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# Terminal-Steuerfolgen in Telnet-Bannern (HP/Aruba: „ESC[2J ESC[?7h ESC[1;1H“) – auch ohne ESC, so wie ältere
+# Scans sie gespeichert haben
+_ANSI = re.compile(r"\x1b?\[[0-9;?]*[A-Za-z]|\x1b[()][0-9A-Za-z]|\x1b[=>]")
 
 EVENT_LABELS = {
     "ip_conflict": "IP-Konflikt",
@@ -78,6 +81,13 @@ def _text(value) -> str | None:
         return None
     text = _CONTROL.sub("", str(value)).strip()[:TEXT_MAX]
     return text or None
+
+
+def clean_banner(value) -> str | None:
+    """Banner ohne Terminal-Steuerfolgen, Steuerzeichen und doppelte Leerzeichen."""
+    if value is None:
+        return None
+    return _text(re.sub(r"\s+", " ", _ANSI.sub(" ", str(value))))
 
 
 def _int(value, lo: int, hi: int) -> int | None:
@@ -212,7 +222,7 @@ def validate(data) -> dict:
             if port is None or any(x["port"] == port for x in ports):
                 continue
             entry = {
-                "port": port, "banner": _text(p.get("banner")), "tls": bool(p.get("tls")),
+                "port": port, "banner": clean_banner(p.get("banner")), "tls": bool(p.get("tls")),
                 "http_status": _int(p.get("http_status"), 100, 599), "http_server": _text(p.get("http_server")),
                 "http_title": _text(p.get("http_title")), "tls_subject": _text(p.get("tls_subject")),
             }
@@ -406,7 +416,7 @@ def devices(site_id: int | None, since: int, until: int | None = None, active_on
         svc = []
         for s in services.get(r["id"], []):
             label = SERVICES.get(s["service"], (s["service"], None))[0]
-            svc.append({**s, "label": label, "link": link_for(s["service"], r["ip"], s["port"], r["id"]),
+            svc.append({**s, "banner": clean_banner(s["banner"]), "label": label, "link": link_for(s["service"], r["ip"], s["port"], r["id"]),
                         "url": (link_for(s["service"], r["ip"], s["port"], r["id"]) or {}).get("url"),
                         "current": s["last_seen"] >= r["last_seen"] - 60})
         out.append({
