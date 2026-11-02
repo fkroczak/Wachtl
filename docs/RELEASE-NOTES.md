@@ -3,6 +3,12 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in 1.0.3
+
+- **Langzeit-Graphen und Berichte wieder verfügbar (Windows-Server)**: Die nächtliche Sicherung konnte den Speicher für 7-/30-Tage-Graphen und PDF-Berichte (vm-agg) abstürzen lassen. Danach startete er nicht mehr („Graph konnte nicht geladen werden … Port 8429 … Verbindung verweigert“). Die Sicherung kommt jetzt ohne Snapshot aus, und beim Dienststart werden liegengebliebene Reste entfernt. Das Update behebt den Zustand ohne weiteres Zutun. Ältere Sicherungen lassen sich weiter zurückspielen.
+- **HP/Aruba-Switches (z. B. 2530) werden erkannt**: Wachtl liest das Modell aus der Telnet-/SSH-Begrüßung, wenn die Weboberfläche keinen Titel hat. Der Netzwerkscan zeigt Begrüßungen ohne Terminal-Steuerzeichen (bisher Zeichensalat wie `[2J [?7h …`).
+- **Topologie: kein „Interner Fehler“ mehr**, wenn mehrere eingetragene Switches denselben nicht eingetragenen Switch per LLDP sehen. Davon hingen auch die Switch-Abfragen und die Gateway-Erkennung der Probes ab.
+
 ## Neu in 1.0.2
 
 - **Neues Logo**: Wachtel als Tropfen im Blau der Weboberfläche – im Web-UI, im Setup und als Symbol neben der Uhr (bisher braun).
