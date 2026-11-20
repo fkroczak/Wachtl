@@ -186,6 +186,38 @@ class AnalyzeTest(unittest.TestCase):
         self.assertEqual([p.short for p in blocks[1]["top"]], ["B1", "B3"])
         self.assertEqual([p.short for p in blocks[1]["bottom"]], ["B2", "B4"])
 
+    def test_mau_without_link_and_empty_slots_from_neighbors(self):
+        # ohne Link: ifMauType 0.0 → Standard-Typ bzw. mögliche Typen entscheiden
+        self.assertEqual(snmpcollect.mau_media("0.0", default_oid="1.3.6.1.2.1.26.4.30"), "copper")
+        bits = bytearray(8)
+        for n in (15, 16, 29, 30):                                   # 100BASE-TX, 1000BASE-T
+            bits[n // 8] |= 0x80 >> (n % 8)
+        self.assertEqual(snmpcollect.mau_media("0.0", type_bits=bytes(bits)), "copper")
+        bits = bytearray(8)
+        bits[26 // 8] |= 0x80 >> (26 % 8)                           # nur 1000BASE-SX
+        self.assertEqual(snmpcollect.mau_media("0.0", type_bits=bytes(bits)), "fiber")
+
+        def port(i, name, up, media):
+            return topology.Port(i, name, name, None, None, 6, 1000 if up else None, up, True, "full", True,
+                                 False, media=media)
+
+        # Modul B: B1–B4 Kupfer, B5–B8 SFP; B6 und B8 leer (keine MAU-Zeile), B4 Kupfer ohne Link
+        ports = {i: port(i, f"B{i}", i in (1, 2, 5, 7), m) for i, m in
+                 enumerate(["copper", "copper", None, "copper", "fiber", None, "sfp", None], 1)}
+        topology.guess_slots(ports)
+        self.assertEqual({p.short for p in ports.values() if p.slot_guess}, {"B6", "B8"})
+        self.assertFalse(ports[3].sfp)                               # zwischen Kupfer: bleibt offen
+        # Switch meldet ohne Link kein Medium: am Rand nicht raten, nur zwischen zwei SFP-Ports
+        ports = {i: port(i, f"C{i}", i in (1, 3), m) for i, m in enumerate(["fiber", None, "fiber", None], 1)}
+        ports[9] = port(9, "D1", True, "copper")
+        topology.guess_slots(ports)
+        self.assertEqual({p.short for p in ports.values() if p.slot_guess}, {"C2"})
+        self.assertEqual(ports[2].medium, "sfp")
+        # Switch ohne MAU-MIB: nichts raten
+        ports = {i: port(i, f"E{i}", False, None) for i in range(1, 5)}
+        topology.guess_slots(ports)
+        self.assertFalse(any(p.sfp for p in ports.values()))
+
     def test_faceplate_rows(self):
         ports = {i: topology.Port(i, f"Gi1/0/{i}", str(i), None, None, 6, 1000, True, True, "full", True,
                                   False) for i in range(1, 9)}

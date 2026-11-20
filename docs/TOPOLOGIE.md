@@ -148,8 +148,12 @@ Knotenpunkt nicht erkennen.
 Gelesene Standard-MIBs (herstellerunabhängig): SNMPv2-MIB (System), IF-MIB (Ports, Geschwindigkeit, Fehler),
 EtherLike-MIB (Duplex), MAU-MIB (Glasfaser, Kupfer oder SFP je Port), BRIDGE-MIB und Q-BRIDGE-MIB (MAC-Tabelle, VLAN), LLDP-MIB und CISCO-CDP-MIB (Nachbarn),
 POWER-ETHERNET-MIB (PoE), IP-MIB (Adressen, ARP, Standard-Gateway). Fehlt eine Tabelle, bleibt der Teil leer.
-Ohne MAU-MIB erkennt Wachtl SFP-Steckplätze nur am Portnamen („Te1/1/1“, „SFP 25“); leere SFP-Steckplätze ohne
-Modul meldet die MAU-MIB nicht und erscheinen als Kupfer.
+Ports ohne Link ordnet Wachtl über Standard-Typ und mögliche Typen der MAU-MIB zu (ein ausgesteckter Kupfer-Port
+bleibt Kupfer). Leere SFP-Steckplätze ohne Modul meldet die MAU-MIB gar nicht: Wachtl erkennt sie an den Nachbar-Ports
+im selben Modul bzw. am selben Switch – sind die nächsten Ports mit Angabe SFP/Glas und keiner Kupfer, gilt der Port als
+leerer SFP-Steckplatz („erkannt an den Nachbar-Ports“). Melden am Switch auch Ports ohne Link ihr Medium, genügt ein
+SFP-Nachbar am Ende der Reihe, sonst müssen beide Seiten SFP sein. Ohne MAU-MIB erkennt Wachtl SFP-Steckplätze nur am
+Portnamen („Te1/1/1“, „SFP 25“).
 
 ## Auswertung
 

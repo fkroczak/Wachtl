@@ -34,7 +34,8 @@ IP_ADDR_IF = "1.3.6.1.2.1.4.20.1.2"
 ARP_MAC = "1.3.6.1.2.1.4.22.1.2"
 DEFAULT_ROUTE = "1.3.6.1.2.1.4.21.1.7.0.0.0.0"
 # MAU-MIB (RFC 4836): Art des Anschlusses je Port – Glasfaser (SX, LX, SR, LR …), Kupfer (TX, T) oder SFP
-MAU_TYPE = "1.3.6.1.2.1.26.2.1.1.3"          # ifMauType, Index ifIndex.mauIndex, Wert dot3MauType…-OID
+MAU_ENTRY = "1.3.6.1.2.1.26.2.1.1"         # Spalten 3 ifMauType, 11 ifMauDefaultType, 13 ifMauTypeListBits
+MAU_TYPE = MAU_ENTRY + ".3"                 # ifMauType, Index ifIndex.mauIndex, Wert dot3MauType…-OID
 MAU_JACK = "1.3.6.1.2.1.26.2.2.1.2"          # ifJackType, Index ifIndex.mauIndex.jackIndex
 MAU_TYPES = "1.3.6.1.2.1.26.4"
 
@@ -52,17 +53,35 @@ JACK_FIBER = {8, 9, 10, 12, 14}               # SC, MIC, ST, MT-RJ, LC
 JACK_COPPER = {2, 3, 5, 15, 16}               # RJ45, RJ45S, BNC, CX4, SFP+ DAC
 
 
-def mau_media(mau_oid, jacks: set[int] = frozenset()) -> str | None:
-    """fiber | copper | sfp (Steckplatz, Medium unbekannt) | None (Switch sagt nichts)."""
-    num = None
-    if isinstance(mau_oid, str) and mau_oid.lstrip(".").startswith(MAU_TYPES + "."):
-        tail = mau_oid.lstrip(".")[len(MAU_TYPES) + 1:]
-        num = int(tail) if tail.isdigit() else None
-    if num in MAU_FIBER or jacks & JACK_FIBER:
+def _mau_num(oid) -> int | None:
+    if isinstance(oid, str) and oid.lstrip(".").startswith(MAU_TYPES + "."):
+        tail = oid.lstrip(".")[len(MAU_TYPES) + 1:]
+        return int(tail) if tail.isdigit() else None
+    return None
+
+
+def _kind(num: int | None) -> str | None:
+    return "fiber" if num in MAU_FIBER else "copper" if num in MAU_COPPER else "sfp" if num in MAU_SLOT else None
+
+
+def mau_media(mau_oid, jacks: set[int] = frozenset(), default_oid=None, type_bits=None) -> str | None:
+    """fiber | copper | sfp (Steckplatz, Medium unbekannt) | None (Switch sagt nichts).
+
+    Ohne Link meldet ifMauType oft nichts (0.0): dann zählen Standard-Typ (ifMauDefaultType) und die möglichen
+    Typen (ifMauTypeListBits) – so bleibt ein ausgesteckter Kupfer-Port Kupfer."""
+    kind = _kind(_mau_num(mau_oid))
+    if jacks & JACK_FIBER:
         return "fiber"
-    if num in MAU_COPPER or (num is None and jacks & JACK_COPPER):
+    if kind == "sfp" and jacks & JACK_COPPER:
         return "copper"
-    return "sfp" if num in MAU_SLOT else None
+    if kind is None and jacks & JACK_COPPER:
+        return "copper"
+    if kind is None:
+        kind = _kind(_mau_num(default_oid))
+    if kind is None and isinstance(type_bits, (bytes, bytearray)):
+        kinds = {_kind(n) for n in range(len(type_bits) * 8) if type_bits[n // 8] & (0x80 >> (n % 8))} - {None}
+        kind = kinds.pop() if len(kinds) == 1 else "sfp" if "sfp" in kinds or kinds == {"fiber", "copper"} else None
+    return kind
 
 
 def _text(v, limit: int = 200) -> str | None:
@@ -172,17 +191,20 @@ def collect(sess: snmp.Session) -> dict:
             "duplex": {2: "half", 3: "full"}.get(duplex.get(idx)),
             "last_change_s": changed[idx] // 100 if isinstance(changed.get(idx), int) else None,
         })
-    # Medium je Port (MAU-MIB): kennt der Switch die Tabelle nicht, bleibt es offen
-    mau: dict[int, object] = {}
-    for idx, v in _table(sess, MAU_TYPE, MAX_IF * 2):
-        if len(idx) == 2 and (idx[0] not in mau or mau[idx[0]] is None):
-            mau[idx[0]] = v
+    # Medium je Port (MAU-MIB): kennt der Switch die Tabelle nicht, bleibt es offen. Leere SFP-Steckplätze haben
+    # keine Zeile – die errät die Auswertung über die Nachbar-Ports (services/topology.py, guess_slots).
+    mau: dict[int, dict[int, object]] = {}
+    for col in (3, 11, 13):
+        for idx, v in _table(sess, f"{MAU_ENTRY}.{col}", MAX_IF * 2):
+            if len(idx) == 2 and v is not None:
+                mau.setdefault(idx[0], {}).setdefault(col, v)
     jacks: dict[int, set[int]] = {}
     for idx, v in _table(sess, MAU_JACK, MAX_IF * 2):
         if len(idx) == 3 and isinstance(v, int):
             jacks.setdefault(idx[0], set()).add(v)
     for i in interfaces:
-        i["media"] = mau_media(mau.get(i["index"]), jacks.get(i["index"], set()))
+        m = mau.get(i["index"], {})
+        i["media"] = mau_media(m.get(3), jacks.get(i["index"], set()), m.get(11), m.get(13))
     out["interfaces"] = interfaces
     if_ids = {i["index"] for i in interfaces}
 

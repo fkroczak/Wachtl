@@ -68,7 +68,7 @@
     <dl class="kvlist">
       <dt>Name</dt><dd>{{ port.name }}</dd>
       <dt>Verbindung</dt><dd>{% if port.up %}{{ speed_text(port.speed) }}{% if port.duplex %} {{ 'Vollduplex' if port.duplex == 'full' else 'Halbduplex' }}{% endif %}{% else %}kein Link{% endif %}</dd>
-      {% if port.medium %}<dt>Anschluss</dt><dd>{{ {'fiber': 'Glasfaser (SFP)', 'sfp': 'SFP-Steckplatz', 'copper': 'Kupfer (Netzwerkbuchse)'}[port.medium] }}</dd>{% endif %}
+      {% if port.medium %}<dt>Anschluss</dt><dd>{{ {'fiber': 'Glasfaser (SFP)', 'sfp': 'SFP-Steckplatz', 'copper': 'Kupfer (Netzwerkbuchse)'}[port.medium] }}{% if port.slot_guess %} <span class="muted small">(leer – erkannt an den Nachbar-Ports)</span>{% endif %}</dd>{% endif %}
       <dt>Rolle</dt><dd>{{ {'uplink': 'Uplink (Richtung Internet)', 'downlink': 'Verbindung zu einem weiteren Gerät im Baum', 'access': 'Geräte-Anschluss', 'free': 'frei', 'down': 'kein Link'}[port.role] }}</dd>
       {% if port.link %}{% set other = port.link.b if port.link.a == sw.node.id else port.link.a %}
       <dt>Verbunden mit</dt><dd>{% if topo.nodes[other].switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=topo.nodes[other].switch_id) }}">{{ topo.nodes[other].label }}</a>{% else %}{{ topo.nodes[other].label }}{% endif %}

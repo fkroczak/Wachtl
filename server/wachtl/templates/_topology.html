@@ -130,7 +130,7 @@
 {% macro _port(p, site, sw_id, selected, verlauf=None) -%}
 {%- set who = (p.neighbor.name if p.neighbor else (p.devices[0].label if p.devices else '')) %}
 <a class="pt pt-{{ p.state }} {{ 'pt-slot' if p.sfp else 'pt-rj' }}{{ ' pt-fiber' if p.media == 'fiber' }}{{ ' pt-sel' if p.index == selected }}" href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=sw_id, port=p.index, verlauf=verlauf) }}#port"
-   aria-label="Port {{ p.short }}{{ ' (SFP-Steckplatz)' if p.sfp }}: {{ 'frei' if not p.up else (speed_text(p.speed) ~ (', Glasfaser' if p.media == 'fiber' else '') ~ (', ' ~ who if who else '') ~ (', Uplink' if p.role == 'uplink' else '') ~ (', PoE' if p.poe else '') ~ (', Fehler' if p.state == 'err' else '')) }}"
+   aria-label="Port {{ p.short }}{{ (' (SFP-Steckplatz, vermutlich leer)' if p.slot_guess else ' (SFP-Steckplatz)') if p.sfp }}: {{ 'frei' if not p.up else (speed_text(p.speed) ~ (', Glasfaser' if p.media == 'fiber' else '') ~ (', ' ~ who if who else '') ~ (', Uplink' if p.role == 'uplink' else '') ~ (', PoE' if p.poe else '') ~ (', Fehler' if p.state == 'err' else '')) }}"
    {%- if p.index == selected %} aria-current="true"{% endif %}><span class="pt-n">{{ p.short|truncate(5, True, '', 0) }}</span>{% if p.role == 'uplink' %}<span class="pt-m" aria-hidden="true">↑</span>{% elif p.poe %}<span class="pt-m" aria-hidden="true">⚡</span>{% endif %}</a>
 {%- endmacro %}
 

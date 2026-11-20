@@ -510,6 +510,7 @@ class Port:
     sees_switches: bool = False             # dahinter liegen weitere verwaltete Switches
     role: str = "free"                      # uplink | downlink | access | free | down
     media: str | None = None                # fiber | copper | sfp (Steckplatz, Medium unbekannt) | None
+    slot_guess: bool = False                # leerer SFP-Steckplatz, erraten aus den Nachbar-Ports
 
     @property
     def medium(self) -> str | None:
@@ -524,6 +525,39 @@ class Port:
         if self.errors_24h >= ERRORS_WARN:
             return "err"
         return speed_class(self.speed)
+
+
+def guess_slots(ports: dict[int, "Port"]) -> None:
+    """Leere SFP-Steckplätze erraten: ohne Modul meldet die MAU-MIB nichts zum Port.
+
+    Ein Port ohne Link und ohne MAU-Angabe gilt als SFP-Steckplatz, wenn die nächsten Ports mit Angabe im selben
+    Modul (HP/Aruba „B13“) bzw. am selben Switch auf beiden Seiten SFP/Glas sind. Melden am Switch auch Ports
+    ohne Link ihr Medium (dann fehlt die Zeile wirklich nur bei leeren Steckplätzen), genügt eine Seite, solange
+    die andere am Ende der Reihe liegt. Liegt Kupfer daneben, bleibt es offen."""
+    phys = [p for p in ports.values() if p.physical]
+    if not any(p.media for p in phys):
+        return                                  # Switch ohne MAU-MIB: nichts zu vergleichen
+    reports_down = any(p.media and not p.up for p in phys)
+    groups: dict[str, list[tuple[int, Port]]] = {}
+    for p in phys:
+        m = MODULE_RE.match(p.short)
+        groups.setdefault(m.group(1) if m else "", []).append((int(m.group(2)) if m else p.index, p))
+
+    def kind(p: Port) -> str | None:
+        return "slot" if p.media in ("fiber", "sfp") or (p.sfp and not p.slot_guess) else \
+            "copper" if p.media == "copper" else None
+
+    for row in groups.values():
+        row = [p for _, p in sorted(row, key=lambda x: x[0])]
+        kinds = [kind(p) for p in row]
+        for i, p in enumerate(row):
+            if p.media or p.sfp or p.up:
+                continue
+            left = next((k for k in reversed(kinds[:i]) if k), None)
+            right = next((k for k in kinds[i + 1:] if k), None)
+            sides = [k for k in (left, right) if k]
+            if sides and "copper" not in sides and (len(sides) == 2 or reports_down):
+                p.sfp = p.slot_guess = True
 
 
 @dataclass
@@ -660,6 +694,7 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
                 i.get("duplex"), physical, physical and slot,
                 poe=i["index"] in poe, vlan=pvid.get(i["index"]), errors_24h=errs.get((r["id"], i["index"]), 0),
                 media=media)
+        guess_slots(ports)
         for e in snap.get("fdb") or []:
             p = ports.get(e["if_index"])
             if p is not None and e["mac"] not in p.macs:
