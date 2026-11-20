@@ -3,6 +3,12 @@
 - **WachtlSetup-…exe**: ein Setup für Probe (Standard) und Wachtl-Server (Windows Server 2019/2022/2025). Für die PCs gibt es im Web-UI unter Verwaltung › Probes registrieren ein vorbelegtes Setup – dort nur „Installieren“.
 - **SHA256SUMS.txt**: Prüfsummen.
 
+## Neu in der nächsten Version
+
+- **Topologie großer Netze auf einen Blick**: Zoom am Baum (−/+, „Ganz zeigen“, Strg + Mausrad), Verschieben durch Ziehen mit der Maus. Der Baum ist kompakter: Access Points und nicht verwaltete Switches stehen untereinander, viele Switches an einem Knoten brechen in Zeilen um. Der Baum öffnet ganz sichtbar, solange er lesbar bleibt.
+- **Glasfaser oder Kupfer erkennbar**: Wachtl liest je Port das Medium (MAU-MIB). Glasfaser- und SFP-Verbindungen sind im Baum hohl gezeichnet und tragen „Glas“ bzw. „SFP“ an der Linie, auch unter „Direkt verbunden“ und in der Port-Tabelle. Die Frontansicht zeigt Kupfer-Ports als Netzwerkbuchse und SFP-Steckplätze als Rechteck, modulare HP/Aruba-Switches (5400zl, 8200zl) je Modul A–F wie am Gerät.
+- **Gefundene Switches zuerst mit „public“**: Die Server-Probe fragt gefundene SNMP-Switches ohne Zugangsdaten mit SNMPv2c „public“ ab und trägt sie selbst ein, wenn sie antworten. Im Assistenten bedeutet eine leere Community jetzt „public“.
+
 ## Neu in 1.0.3
 
 - **Langzeit-Graphen und Berichte wieder verfügbar (Windows-Server)**: Die nächtliche Sicherung konnte den Speicher für 7-/30-Tage-Graphen und PDF-Berichte (vm-agg) abstürzen lassen. Danach startete er nicht mehr („Graph konnte nicht geladen werden … Port 8429 … Verbindung verweigert“). Die Sicherung kommt jetzt ohne Snapshot aus, und beim Dienststart werden liegengebliebene Reste entfernt. Das Update behebt den Zustand ohne weiteres Zutun. Ältere Sicherungen lassen sich weiter zurückspielen.

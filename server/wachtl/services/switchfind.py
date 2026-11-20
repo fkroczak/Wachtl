@@ -7,8 +7,9 @@ Quellen – alle ohne Anmeldung am Gerät:
 - Rundruf der Server-Probe: TP-Link Easy Smart und Netgear ProSAFE Plus melden Modell, Name, MAC und IP.
 
 Ergebnis je Standort: Liste gefundener Switches mit Hersteller, Modell, Sicherheit (0–100) und Zugangsart
-(SNMP, Weboberfläche oder keine). Wachtl probiert keine Zugangsdaten aus – fehlen sie, fragt das Web-UI
-danach („Zugangsdaten eingeben“). Switches, die sich gar nicht abfragen lassen, erscheinen trotzdem im Baum.
+(SNMP, Weboberfläche oder keine). SNMP-Switches fragt die Server-Probe zuerst mit SNMPv2c „public“ ab
+(höchstens einmal am Tag); antworten sie, trägt Wachtl sie selbst ein. Sonst fragt das Web-UI nach den
+Zugangsdaten („Zugangsdaten eingeben“). Switches, die sich gar nicht abfragen lassen, erscheinen trotzdem im Baum.
 """
 from __future__ import annotations
 

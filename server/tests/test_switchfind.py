@@ -440,11 +440,21 @@ class FindAndEnterTest(AppTestCase):
             self.assertEqual(states["SW-Hof"], "new")
             # Server-Probe bekommt den Auftrag mit Zugangsart
             ex("UPDATE net_switches SET last_poll = ?", (repo.now() - 3600,))
-            jobs = self.client.get("/api/probe/v1/topology/jobs", headers=auth).get_json()["jobs"]
+            all_jobs = self.client.get("/api/probe/v1/topology/jobs", headers=auth).get_json()["jobs"]
+            jobs = [j for j in all_jobs if "switch_id" in j]
             self.assertEqual({j["access"] for j in jobs}, {"easysmart"})
             self.assertEqual({j["kind"] for j in jobs}, {"full"})
+            # gefundener SNMP-Switch ohne Zugangsdaten: erst mit „public“ versuchen, danach einen Tag Ruhe
+            public = [j for j in all_jobs if "candidate_id" in j]
+            self.assertEqual([j["host"] for j in public], ["192.168.10.40"])
+            self.assertEqual(public[0]["credentials"], {"version": "2c", "community": "public"})
             ex("UPDATE net_switches SET last_full = ?, last_poll = ?, poll_requested = NULL", (repo.now(), repo.now() - 3600))
             self.assertEqual(self.client.get("/api/probe/v1/topology/jobs", headers=auth).get_json()["jobs"], [])
+            r = self.client.post("/api/probe/v1/results/topology", headers=auth, json={
+                "candidate_id": public[0]["candidate_id"], "kind": "full", "error": "Zeitüberschreitung"})
+            self.assertEqual(r.get_json()["stored"], 0)
+            self.assertEqual(q1("SELECT state FROM net_switch_candidates WHERE id = ?",
+                                (public[0]["candidate_id"],))["state"], "new")
             self.assertEqual(jobs[0]["credentials"]["password"], "geheim-123")
         audit = " ".join(r["detail"] or "" for r in q("SELECT detail FROM audit_log"))
         self.assertNotIn("geheim-123", audit)

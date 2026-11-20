@@ -10,8 +10,21 @@ from wachtl.serverprobe import topology as probe_topology
 from wachtl.services import topology
 
 from .helpers import AppTestCase
-from .snmp_agent import FakeAgent
-from .topo_fixtures import CORE_MAC, DESK, EG_MAC, GW_MAC, OG_MAC, PC1, PC2, PRN, core_mib, eg_mib, og_mib
+from .snmp_agent import FakeAgent, Oid
+from .topo_fixtures import (CORE_MAC, DESK, EG_MAC, GW_MAC, OG_MAC, PC1, PC2, PRN, core_mib, eg_mib, og_mib,
+                            switch_mib)
+
+
+def hp_mib() -> dict:
+    """HP 5406zl wie im Feld: Ports A1…A3, B1…B4; B3 und B4 mit SFP (1000BASE-SX, 1000BASE-X), A1 Kupfer."""
+    m = switch_mib("HP-5406zl", "00:1A:2B:00:09:00",
+                   [(1, "A1", 1000, True), (2, "A2", 1000, False), (3, "A3", 100, True),
+                    (25, "B1", 1000, True), (26, "B2", 1000, False), (27, "B3", 1000, True), (28, "B4", 1000, True)])
+    m["1.3.6.1.2.1.26.2.1.1.3.1.1"] = Oid("1.3.6.1.2.1.26.4.30")        # 1000BASE-T
+    m["1.3.6.1.2.1.26.2.1.1.3.27.1"] = Oid("1.3.6.1.2.1.26.4.26")       # 1000BASE-SX
+    m["1.3.6.1.2.1.26.2.1.1.3.28.1"] = Oid("1.3.6.1.2.1.26.4.22")       # 1000BASE-X: Medium offen …
+    m["1.3.6.1.2.1.26.2.2.1.2.28.1.1"] = 14                            # … Buchse LC: Glas
+    return m
 
 
 def snap_of(mib: dict) -> dict:
@@ -142,6 +155,37 @@ class AnalyzeTest(unittest.TestCase):
         self.assertEqual(len(hp_nodes), 1)
         self.assertEqual(hp_nodes[0].kind, "neighbor")
 
+    def test_media_from_mau_mib_link_label_and_module_faceplate(self):
+        snap = snap_of(hp_mib())
+        media = {i["name"]: i["media"] for i in snap["interfaces"]}
+        self.assertEqual(media, {"A1": "copper", "A2": None, "A3": None, "B1": None, "B2": None, "B3": "fiber",
+                                 "B4": "fiber"})
+        self.assertEqual(snmpcollect.mau_media("1.3.6.1.2.1.26.4.22"), "sfp")
+        self.assertEqual(snmpcollect.mau_media("1.3.6.1.2.1.26.4.16"), "copper")
+        self.assertEqual(snmpcollect.mau_media("0.0"), None)
+        # Medium übersteht die schnelle Abfrage
+        quick = topology.clean_quick({"interfaces": [{"index": 27, "oper_up": True, "speed_mbps": 1000}],
+                                      "system": {"uptime_s": 5}})
+        self.assertEqual(next(i for i in topology.merge_quick(snap, quick)["interfaces"] if i["index"] == 27)["media"],
+                         "fiber")
+        r = rows()
+        r[1] = {**r[1], "sys_name": "HP-5406zl", "snapshot": json.dumps(snap)}
+        t = topology.analyze(r, DEVICES)
+        ports = t.switches[2]["ports"]
+        self.assertTrue(ports[27].sfp and ports[28].sfp)
+        self.assertFalse(ports[1].sfp)
+        self.assertEqual((ports[27].medium, ports[1].medium, ports[25].medium), ("fiber", "copper", None))
+        # Glas-Uplink: Beschriftung und Linie
+        lk = topology.Link("s1", 1, "s2", 27, None, 1000, "lldp")
+        t.nodes["s2"].link = lk
+        self.assertEqual(topology.link_medium(t, lk), "fiber")
+        self.assertTrue(topology.link_label(t, t.nodes["s2"]).endswith("· 1G · Glas"))
+        # Frontansicht wie am Gerät: je Modul ein Block, SFP an seinem Platz
+        blocks = topology.faceplate(ports)
+        self.assertEqual([b["module"] for b in blocks], ["A", "B"])
+        self.assertEqual([p.short for p in blocks[1]["top"]], ["B1", "B3"])
+        self.assertEqual([p.short for p in blocks[1]["bottom"]], ["B2", "B4"])
+
     def test_faceplate_rows(self):
         ports = {i: topology.Port(i, f"Gi1/0/{i}", str(i), None, None, 6, 1000, True, True, "full", True,
                                   False) for i in range(1, 9)}
@@ -159,6 +203,8 @@ class CredentialsTest(AppTestCase):
         self.assertEqual((c["version"], c["community"], e), ("2c", "geheim", []))
         c, e = topology.parse_credentials({"snmp_version": "2c"}, {"version": "2c", "community": "alt"})
         self.assertEqual(c["community"], "alt")
+        c, e = topology.parse_credentials({"snmp_version": "2c", "community": ""})
+        self.assertEqual((c["community"], e), ("public", []))
         c, e = topology.parse_credentials({"snmp_version": "3", "user": "wachtl", "sec_level": "authPriv",
                                            "auth_proto": "sha256", "auth_key": "kurz", "priv_proto": "aes256"})
         self.assertEqual({x.field for x in e}, {"auth_key", "priv_key"})
@@ -405,3 +451,43 @@ class AuditRegressionTest(AppTestCase):
         page = self.client.get(r.headers["Location"]).get_data(as_text=True)
         self.assertIn("Server-Probe ist nicht eingerichtet; die Abfrage läuft erst", page)
         self.assertNotIn("gerade nicht erreichbar", page)
+
+
+class PublicFirstTest(AppTestCase):
+    """Gefundene Switches: zuerst SNMPv2c „public“; antwortet der Switch, trägt Wachtl ihn selbst ein."""
+
+    def test_candidate_answers_public_and_is_added(self):
+        site = self.make_site("Halle")
+        ts = repo.now()
+        for ip, conf in (("127.0.0.1", 90), ("127.0.0.2", 90), ("127.0.0.3", 20)):
+            ins("INSERT INTO net_switch_candidates (site_id, cand_key, ip, vendor, name, access, sources, confidence, "
+                "state, first_seen, last_seen) VALUES (?, ?, ?, 'HP', ?, 'snmp', '[]', ?, 'new', ?, ?)",
+                (site, f"ip:{ip}", ip, f"HP {ip}", conf, ts, ts))
+        jobs = topology.jobs(ts)
+        self.assertEqual([j["host"] for j in jobs], ["127.0.0.1", "127.0.0.2"])       # unsichere Funde nicht
+        self.assertEqual(topology.jobs(ts + 60), [])                                    # höchstens einmal am Tag
+        self.assertEqual(len(topology.jobs(ts + topology.PUBLIC_RETRY_S)), 2)
+        with FakeAgent(hp_mib()) as agent, FakeAgent(hp_mib(), community="geheim") as other:
+            ok = probe_topology.poll({**jobs[0], "port": agent.port})
+            bad = probe_topology.poll({**jobs[1], "port": other.port, "credentials": {**jobs[1]["credentials"]}})
+        self.assertNotIn("switch_id", ok)
+        self.assertEqual(ok["candidate_id"], jobs[0]["candidate_id"])
+        self.assertTrue(bad["error"])
+        self.assertEqual(topology.store_public_result(bad["candidate_id"], None, bad["error"], ts), None)
+        sid = topology.store_public_result(ok["candidate_id"], topology.clean_snapshot(ok["snapshot"]), None, ts)
+        row = q1("SELECT * FROM net_switches WHERE id = ?", (sid,))
+        self.assertEqual((row["status"], row["origin"], row["host"], row["sys_name"]),
+                         ("active", "erkannt", "127.0.0.1", "HP-5406zl"))
+        self.assertEqual(secretbox.unseal(row["secret"])["community"], "public")
+        self.assertEqual(q1("SELECT state FROM net_switch_candidates WHERE id = ?", (ok["candidate_id"],))["state"],
+                         "added")
+        self.assertEqual(q1("SELECT state FROM net_switch_candidates WHERE id = ?", (bad["candidate_id"],))["state"],
+                         "new")
+        self.assertIn("public", q1("SELECT detail FROM audit_log WHERE action = 'topology.switch_create'")["detail"])
+        # Seiten: Glas-Port und Modul-Ansicht
+        self.make_user()
+        self.login()
+        page = self.client.get(f"/sites/{site}/topologie/switche/{sid}?port=27").get_data(as_text=True)
+        self.assertIn("Glasfaser (SFP)", page)
+        self.assertIn("pt-slot", page)
+        self.assertIn('class="face-mod"', page)

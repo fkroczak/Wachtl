@@ -574,6 +574,16 @@ def result_topology():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify(error="JSON-Objekt erwartet"), 400
+    if data.get("candidate_id") is not None:         # gefundener Switch: Versuch mit „public“
+        snapshot, error = None, data.get("error")
+        if not error:
+            try:
+                snapshot = topology.clean_snapshot(data.get("snapshot"))
+            except ValueError as exc:
+                error = str(exc)
+        sid = topology.store_public_result(_int_or_none(data.get("candidate_id")) or 0, snapshot,
+                                           str(error) if error else None, _result_ts(data.get("ts")))
+        return jsonify(stored=1 if sid else 0, switch_id=sid), 201
     sw = q1("SELECT * FROM net_switches WHERE id = ?", (_int_or_none(data.get("switch_id")),))
     if sw is None:
         return jsonify(error="Switch unbekannt"), 422

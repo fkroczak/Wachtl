@@ -9,9 +9,9 @@ Standort mit Gateway, Switches, Problemen und gefundenen Switches; oben wechselt
 
 | Ansicht | Inhalt |
 | --- | --- |
-| **Baum** | Internet → Gateway → Switches → Geräte. An jeder Linie Port und Geschwindigkeit („P1 ⇄ P25 · 10G“), Farbe nach Geschwindigkeit, gestrichelt = vermutet. Klick auf einen Switch zeigt rechts Adresse, Modell, Uplink, Ports und direkte Nachbarn mit „Weboberfläche öffnen“ und SSH. Auf dem Handy steht der Baum zusätzlich als Liste da. |
+| **Baum** | Internet → Gateway → Switches → Geräte. An jeder Linie Port und Geschwindigkeit („P1 ⇄ P25 · 10G“), Farbe nach Geschwindigkeit, gestrichelt = vermutet, hohl = Glasfaser/SFP („B20 ⇄ P10 · 1G · Glas“). Zoom: **−**/**+**, **Ganz zeigen**, Strg + Mausrad; mit der Maus ziehen verschiebt den Baum. Große Netze bleiben kompakt: Blätter (APs, nicht verwaltete Switches) stehen untereinander, viele Switches an einem Knoten brechen in Zeilen um. Der Baum öffnet ganz sichtbar, solange er dabei lesbar bleibt; der gewählte Zoom bleibt je Seite gespeichert. Klick auf einen Switch zeigt rechts Adresse, Modell, Uplink, Ports und direkte Nachbarn mit „Weboberfläche öffnen“ und SSH. Auf dem Handy steht der Baum zusätzlich als Liste da. |
 | **Switches** | Eine Karte je Switch: Uplink, Belegung, PoE, „Aufschalten“ und „Weboberfläche“. Nicht verwaltete und noch nicht eingetragene Switches erscheinen gestrichelt. |
-| **Switch aufgeschaltet** | Frontansicht aller Ports (Farbe = Geschwindigkeit, rot = Fehler, ↑ Uplink, ⚡ PoE). Klick auf einen Port zeigt Verbindung, Nachbar, VLAN, PoE, Fehler der letzten 24 h, die Geräte am Port und – wenn auf einem davon eine Wachtl-Probe läuft – ihre Messwerte. Darunter alle Ports als Tabelle, Zugang und Verlauf. |
+| **Switch aufgeschaltet** | Frontansicht aller Ports wie am Gerät (Farbe = Geschwindigkeit, rot = Fehler, ↑ Uplink, ⚡ PoE; Netzwerkbuchse mit Nase = Kupfer, Rechteck = SFP-Steckplatz, ≈ = Glasfaser). Modulare Switches (HP/Aruba 5400zl/8200zl, Ports „A1“ … „F24“) zeigen je Modul einen Block. Klick auf einen Port zeigt Verbindung, Nachbar, VLAN, PoE, Fehler der letzten 24 h, die Geräte am Port und – wenn auf einem davon eine Wachtl-Probe läuft – ihre Messwerte. Darunter alle Ports als Tabelle, Zugang und Verlauf. |
 | **Probleme** | Baum mit nummerierten Markierungen und die Liste der Befunde, je mit „seit“, Abhilfe und „Als bekannt markieren“. |
 | **Verlauf** | Chronik aller Änderungen nach Tagen, filterbar (Störungen, Links und Ports, Geräte, Switches) und je Switch; rechts das gewählte Ereignis mit dem Baum von damals. |
 | **Pfad suchen** | Gerät nach Name, IP oder MAC suchen: jedes Kabel und jeder Port bis ins Internet, Engstelle, Fehler unterwegs, Messwerte der Probe auf dem Gerät und Änderungen auf dem Weg. |
@@ -21,7 +21,7 @@ Standort mit Gateway, Switches, Problemen und gefundenen Switches; oben wechselt
 Topologie › **Switch hinzufügen** (nur Administratoren), je Switch:
 
 1. **Switch und Zugang**: Adresse, Bezeichnung, Ort, UDP-Port; SNMP-Version und Zugangsdaten – oder „wie bei Switch X“
-   übernehmen (viele Switches teilen sich dieselben Zugangsdaten).
+   übernehmen (viele Switches teilen sich dieselben Zugangsdaten). Bleibt die Community leer, nimmt Wachtl „public“.
 2. **Verbindung testen**: Der Wachtl-Server fragt den Switch sofort ab und zeigt Name, Modell, Ports, Größe der
    MAC-Tabelle, Anzahl der LLDP/CDP-Nachbarn, PoE und VLANs – oder den Fehler mit Hinweisen (falsche Community,
    falscher v3-Benutzer, falsches Auth- oder Priv-Passwort, keine Antwort).
@@ -65,7 +65,10 @@ Kameras und Drucker mit eindeutigem Titel fallen heraus) und wie er sich abfrage
 
 Topologie › **Switches** zeigt die Funde unter **Gefundene Switches**. Der Baum hängt jeden Fund an den Port,
 an dem ein verwalteter Switch seine MAC sieht, mit den Geräten dahinter (gestrichelt, „Zugangsdaten fehlen“ bzw. „ohne
-Abfrage“). **Wachtl probiert keine Passwörter aus.** Fehlen Zugangsdaten, fragt Wachtl danach: Hinweis über dem Baum,
+Abfrage“). **SNMP-Funde fragt die Server-Probe zuerst mit SNMPv2c „public“ ab** – damit antworten die meisten Switches
+ab Werk. Antwortet der Fund und hat er mindestens 5 Ethernet-Ports, trägt Wachtl ihn selbst ein (Herkunft „erkannt“,
+Eintrag im Protokoll). Sonst wiederholt die Probe den Versuch höchstens einmal am Tag. Andere Passwörter probiert
+Wachtl nicht aus. Fehlen Zugangsdaten, fragt Wachtl danach: Hinweis über dem Baum,
 Befund „ohne Zugangsdaten“ und **Zugangsdaten eingeben** am Fund. Der Assistent ist dann mit Adresse, Name und
 Zugangsart vorbelegt. Darunter stehen die übrigen Funde zum Anhaken („gelten dieselben Zugangsdaten auch hier?“):
 Beim Speichern testet Wachtl sie und trägt die ein, bei denen die Anmeldung klappt. Ein Fund, der kein Switch ist oder
@@ -143,8 +146,10 @@ Knotenpunkt nicht erkennen.
 - „Jetzt abfragen“ auf der Switch-Seite: vollständige Abfrage, Ergebnis nach etwa 15–30 Sekunden.
 
 Gelesene Standard-MIBs (herstellerunabhängig): SNMPv2-MIB (System), IF-MIB (Ports, Geschwindigkeit, Fehler),
-EtherLike-MIB (Duplex), BRIDGE-MIB und Q-BRIDGE-MIB (MAC-Tabelle, VLAN), LLDP-MIB und CISCO-CDP-MIB (Nachbarn),
+EtherLike-MIB (Duplex), MAU-MIB (Glasfaser, Kupfer oder SFP je Port), BRIDGE-MIB und Q-BRIDGE-MIB (MAC-Tabelle, VLAN), LLDP-MIB und CISCO-CDP-MIB (Nachbarn),
 POWER-ETHERNET-MIB (PoE), IP-MIB (Adressen, ARP, Standard-Gateway). Fehlt eine Tabelle, bleibt der Teil leer.
+Ohne MAU-MIB erkennt Wachtl SFP-Steckplätze nur am Portnamen („Te1/1/1“, „SFP 25“); leere SFP-Steckplätze ohne
+Modul meldet die MAU-MIB nicht und erscheinen als Kupfer.
 
 ## Auswertung
 

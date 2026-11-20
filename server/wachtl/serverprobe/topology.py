@@ -14,29 +14,39 @@ PARALLEL = 4
 
 
 def poll(job: dict) -> dict:
-    """Einen Switch abfragen. Gibt das Ergebnis für POST results/topology zurück (nie eine Ausnahme)."""
+    """Einen Switch abfragen. Gibt das Ergebnis für POST results/topology zurück (nie eine Ausnahme).
+
+    Aufträge mit candidate_id statt switch_id: gefundener Switch, Versuch mit SNMPv2c „public“."""
+    result = _poll(job)
+    if job.get("candidate_id") is not None:
+        result.pop("switch_id", None)
+        result["candidate_id"] = job["candidate_id"]
+    return result
+
+
+def _poll(job: dict) -> dict:
     ts = int(time.time())
     if job.get("access") == "easysmart":
         try:
-            return {"switch_id": job["switch_id"], "ts": ts, "kind": "full",
+            return {"switch_id": job.get("switch_id"), "ts": ts, "kind": "full",
                     "snapshot": easysmart.poll(job["host"], job.get("credentials") or {}, port=int(job.get("port") or 80))}
         except easysmart.EasySmartError as exc:
-            return {"switch_id": job["switch_id"], "ts": ts, "kind": "full", "error": str(exc)}
+            return {"switch_id": job.get("switch_id"), "ts": ts, "kind": "full", "error": str(exc)}
         except Exception as exc:  # noqa: BLE001
             log.exception("Switch %s: Abfrage unerwartet fehlgeschlagen", job.get("host"))
-            return {"switch_id": job["switch_id"], "ts": ts, "kind": "full",
+            return {"switch_id": job.get("switch_id"), "ts": ts, "kind": "full",
                     "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
     try:
         creds = snmp.Credentials(**{k: v for k, v in (job.get("credentials") or {}).items()
                                     if k in snmp.Credentials.__dataclass_fields__})
         with snmp.Session(job["host"], creds, port=int(job.get("port") or 161), timeout=2.0, retries=1) as sess:
             snapshot = snmpcollect.quick(sess) if job.get("kind") == "quick" else snmpcollect.collect(sess)
-        return {"switch_id": job["switch_id"], "ts": ts, "kind": job.get("kind") or "full", "snapshot": snapshot}
+        return {"switch_id": job.get("switch_id"), "ts": ts, "kind": job.get("kind") or "full", "snapshot": snapshot}
     except snmp.SnmpError as exc:
-        return {"switch_id": job["switch_id"], "ts": ts, "kind": job.get("kind") or "full", "error": str(exc)}
+        return {"switch_id": job.get("switch_id"), "ts": ts, "kind": job.get("kind") or "full", "error": str(exc)}
     except Exception as exc:  # noqa: BLE001 – ein kaputter Switch darf die Probe nie beenden
         log.exception("Switch %s: Abfrage unerwartet fehlgeschlagen", job.get("host"))
-        return {"switch_id": job["switch_id"], "ts": ts, "kind": job.get("kind") or "full",
+        return {"switch_id": job.get("switch_id"), "ts": ts, "kind": job.get("kind") or "full",
                 "error": f"Abfrage fehlgeschlagen: {exc}"[:200]}
 
 
@@ -52,7 +62,9 @@ def loop(api_getter: Callable, stop: threading.Event, poller: Callable[[dict], d
                     wait = max(10, int(resp.get("poll_s") or 30))
                     jobs = resp.get("jobs") or []
                     for result in pool.map(poller, jobs):
-                        if result.get("error"):
+                        if result.get("error") and "candidate_id" in result:
+                            log.debug("Gefundener Switch %s: kein „public“ (%s)", result["candidate_id"], result["error"])
+                        elif result.get("error"):
                             log.warning("Switch %s: %s", result["switch_id"], result["error"])
                         api.result("topology", result)
                 except Exception as exc:  # noqa: BLE001 – Server kurz nicht erreichbar, später erneut

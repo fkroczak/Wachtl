@@ -44,6 +44,12 @@ FLAP_MOVES = 3                   # so oft dieselbe MAC zwischen Ports in 24 h �
 KEEP_DAYS = 90
 TEXT_MAX = 200
 MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
+PUBLIC_COMMUNITY = "public"
+PUBLIC_RETRY_S = 86400          # gefundene Switches: „public“ höchstens einmal am Tag versuchen
+PUBLIC_MIN_PORTS = 5            # erst ab so vielen Ethernet-Ports als Switch eintragen (nicht AP, Drucker)
+# Medium eines Ports (MAU-MIB, sonst Name): Kurzform für Linien, Langform für Tabellen und Screenreader
+MEDIA_TEXT = {"fiber": "Glasfaser", "sfp": "SFP-Modul", "copper": "Kupfer"}
+MEDIA_SHORT = {"fiber": "Glas", "sfp": "SFP"}
 SFP_RE = re.compile(r"sfp|^xg|^te|tengig|^10g|25g|40g|^xe-|hundredgig|fortygig|twentyfive", re.I)
 SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
 KIND_LABELS = {
@@ -85,11 +91,9 @@ def parse_credentials(form, existing: dict | None = None) -> tuple[dict, list]:
                                     (version != "3" and existing.get("version") in ("1", "2c")) else "")
 
     if version in ("1", "2c"):
-        out["community"] = secret("community")
-        if not out["community"]:
-            errors.append(FieldError("Community: bitte eintragen (steht in der Weboberfläche des Switches unter SNMP).",
-                                     "community"))
-        elif len(out["community"]) > 64 or not out["community"].isprintable():
+        # leer = „public“: damit antworten die meisten Switches ab Werk
+        out["community"] = secret("community") or PUBLIC_COMMUNITY
+        if len(out["community"]) > 64 or not out["community"].isprintable():
             errors.append(FieldError("Community: höchstens 64 druckbare Zeichen.", "community"))
         return out, errors
     out["user"] = (form.get("user") or "").strip()
@@ -192,7 +196,48 @@ def jobs(ts: int | None = None, limit: int = 40) -> list[dict]:
                     "access": sw.get("access") or "snmp", "kind": "full" if full else "quick"})
         if len(out) >= limit:
             break
+    return out + public_jobs(ts, max(0, limit - len(out)))
+
+
+def public_jobs(ts: int, limit: int = 10) -> list[dict]:
+    """Gefundene SNMP-Switches ohne Zugangsdaten: zuerst SNMPv2c mit „public“ versuchen (höchstens einmal am Tag)."""
+    from .switchfind import SHOW_FROM
+
+    out = []
+    for c in q("SELECT id, site_id, ip FROM net_switch_candidates WHERE state = 'new' AND access = 'snmp' "
+               "AND ip IS NOT NULL AND confidence >= ? AND (public_tried IS NULL OR public_tried <= ?) "
+               "ORDER BY COALESCE(public_tried, 0), id", (SHOW_FROM, ts - PUBLIC_RETRY_S))[:limit]:
+        if q1("SELECT id FROM net_switches WHERE site_id = ? AND host = ?", (c["site_id"], c["ip"])):
+            continue
+        ex("UPDATE net_switch_candidates SET public_tried = ? WHERE id = ?", (ts, c["id"]))
+        out.append({"candidate_id": c["id"], "host": c["ip"], "port": 161, "access": "snmp", "kind": "full",
+                    "credentials": {"version": "2c", "community": PUBLIC_COMMUNITY}})
     return out
+
+
+def store_public_result(candidate_id: int, snapshot: dict | None, error: str | None, ts: int) -> int | None:
+    """Ergebnis des „public“-Versuchs: antwortet ein Switch, wird er eingetragen und aktiviert. Gibt die Switch-ID zurück."""
+    from .. import secretbox
+    from . import switchfind
+
+    c = q1("SELECT * FROM net_switch_candidates WHERE id = ?", (candidate_id,))
+    if c is None or c["state"] != "new" or error or snapshot is None:
+        return None
+    ports = sum(1 for i in snapshot.get("interfaces") or [] if i.get("type") in PHYSICAL_TYPES)
+    if ports < PUBLIC_MIN_PORTS or q1("SELECT id FROM net_switches WHERE site_id = ? AND host = ?", (c["site_id"], c["ip"])):
+        return None
+    creds = {"version": "2c", "community": PUBLIC_COMMUNITY, "user": "", "auth_proto": "none", "auth_key": "",
+             "priv_proto": "none", "priv_key": "", "context": ""}
+    sid = ins("INSERT INTO net_switches (site_id, name, host, port, snmp_version, secret, status, access, origin, "
+              "created_at, updated_at) VALUES (?, ?, ?, 161, '2c', ?, 'active', 'snmp', 'erkannt', ?, ?)",
+              (c["site_id"], c["name"], c["ip"], secretbox.seal(creds), ts, ts))
+    ex("UPDATE net_switch_candidates SET state = 'added', switch_id = ? WHERE id = ?", (sid, candidate_id))
+    repo.audit("wachtl", "topology.switch_create", f"switch:{sid}",
+               f"{c['ip']}, automatisch eingetragen: antwortet auf SNMPv2c „public“")
+    store_result(q1("SELECT * FROM net_switches WHERE id = ?", (sid,)), snapshot, None, ts)
+    log.info("Gefundener Switch %s antwortet auf „public“ – eingetragen als switch:%s (%s)", c["ip"], sid,
+             switchfind.label(c))
+    return sid
 
 
 # -- Ergebnis speichern -----------------------------------------------------------------
@@ -277,6 +322,7 @@ def clean_snapshot(data) -> dict:
             "fcs_errors": _int(i.get("fcs_errors")),
             "duplex": i.get("duplex") if i.get("duplex") in ("half", "full") else None,
             "last_change_s": _int(i.get("last_change_s")),
+            "media": i.get("media") if i.get("media") in MEDIA_TEXT else None,
         })
     ids = {i["index"] for i in interfaces}
     fdb = []
@@ -463,6 +509,12 @@ class Port:
     link: "Link | None" = None              # Verbindung zu einem Knoten im Baum
     sees_switches: bool = False             # dahinter liegen weitere verwaltete Switches
     role: str = "free"                      # uplink | downlink | access | free | down
+    media: str | None = None                # fiber | copper | sfp (Steckplatz, Medium unbekannt) | None
+
+    @property
+    def medium(self) -> str | None:
+        """Was am Port steckt: fiber | sfp | copper | None. Ohne MAU-MIB: SFP-Steckplatz am Namen erkannt."""
+        return self.media or ("sfp" if self.sfp else None)
 
     @property
     def state(self) -> str:
@@ -598,12 +650,16 @@ def analyze(rows: list[dict], devices: dict[str, dict], errs: dict[tuple[int, in
         ports: dict[int, Port] = {}
         for i in snap.get("interfaces") or []:
             physical = i.get("type") in PHYSICAL_TYPES
+            media = i.get("media") if physical else None
+            # Steckplatz: MAU-MIB meldet Glas/SFP, sonst der Name (Te…, sfp …) – 10GBASE-T-Kupfer zählt nicht
+            slot = media in ("fiber", "sfp") or (media != "copper" and bool(
+                SFP_RE.search(i["name"] or "") or SFP_RE.search(i.get("descr") or "")))
             ports[i["index"]] = Port(
                 i["index"], i["name"], port_short(i["name"]), i.get("descr"), i.get("alias"), i.get("type"),
                 i.get("speed_mbps") if i.get("oper_up") else None, bool(i.get("oper_up")), bool(i.get("admin_up")),
-                i.get("duplex"), physical, physical and bool(SFP_RE.search(i["name"] or "") or
-                                                              SFP_RE.search(i.get("descr") or "")),
-                poe=i["index"] in poe, vlan=pvid.get(i["index"]), errors_24h=errs.get((r["id"], i["index"]), 0))
+                i.get("duplex"), physical, physical and slot,
+                poe=i["index"] in poe, vlan=pvid.get(i["index"]), errors_24h=errs.get((r["id"], i["index"]), 0),
+                media=media)
         for e in snap.get("fdb") or []:
             p = ports.get(e["if_index"])
             if p is not None and e["mac"] not in p.macs:
@@ -910,8 +966,21 @@ def link_port_of(topo: Topology, lk: Link, node_id: str) -> str | None:
     return None
 
 
+def link_medium(topo: Topology, lk: "Link | None") -> str | None:
+    """Medium einer Verbindung aus den Ports beider Seiten: fiber vor sfp vor copper; None = unbekannt."""
+    if lk is None:
+        return None
+    found = set()
+    for nid, pidx in ((lk.a, lk.a_port), (lk.b, lk.b_port)):
+        node = topo.nodes.get(nid)
+        port = topo.switches.get(node.switch_id, {}).get("ports", {}).get(pidx) if node and node.switch_id else None
+        if port is not None and port.medium:
+            found.add(port.medium)
+    return next((m for m in ("fiber", "sfp", "copper") if m in found), None)
+
+
 def link_label(topo: Topology, node: Node) -> str:
-    """Beschriftung der Linie zum Elternknoten: „P1 ⇄ P25 · 10G“."""
+    """Beschriftung der Linie zum Elternknoten: „P1 ⇄ P25 · 10G“, über Glasfaser „B20 ⇄ 49 · 1G · Glas“."""
     lk = node.link
     if not lk:
         return ""
@@ -921,7 +990,7 @@ def link_label(topo: Topology, node: Node) -> str:
         return (f"P{p}" if p[0].isdigit() else p) if p else None
 
     ports = " ⇄ ".join(x for x in (tag(up), tag(down)) if x)
-    return " · ".join(x for x in (ports, speed_short(lk.speed)) if x)
+    return " · ".join(x for x in (ports, speed_short(lk.speed), MEDIA_SHORT.get(link_medium(topo, lk))) if x)
 
 
 # -- Befunde ----------------------------------------------------------------------------
@@ -1131,14 +1200,31 @@ def path_for(topo: Topology, mac: str) -> dict | None:
 
 # -- Darstellung: Baum als SVG ------------------------------------------------------------
 NODE_W, NODE_H, GAP_X, GAP_Y, CHIP_H = 180, 56, 20, 92, 28
+# Blätter (APs, nicht verwaltete Switches …) untereinander statt nebeneinander: hält große Bäume schmal
+STACK_IN, STACK_GAP = 40, 30
+# Viele Kinder nebeneinander: ab dieser Breite in mehrere Zeilen umbrechen (Linie links an den Zeilen entlang)
+ROW_MAX_W = 1500
 
 
 def layout(topo: Topology, show_devices: bool = True) -> dict:
-    """Koordinaten für den Baum (SVG): Knoten, Linien, Beschriftungen, Geräte-Chips."""
+    """Koordinaten für den Baum (SVG): Knoten, Linien, Beschriftungen, Geräte-Chips.
+
+    Damit auch große Netze auf den Schirm passen: Hat ein Knoten mehrere Kinder und sind alle Blätter,
+    stehen sie eingerückt untereinander. Wären die Kinder nebeneinander breiter als ROW_MAX_W,
+    brechen sie in Zeilen um."""
     widths: dict[str, int] = {}
+    rows: dict[str, list[list[str]]] = {}
 
     def kids(nid: str) -> list[str]:
         return topo.nodes[nid].children
+
+    def stacked(nid: str) -> bool:
+        c = kids(nid)
+        return len(c) >= 2 and not any(kids(x) for x in c)
+
+    def anchor(nid: str) -> int:
+        """Abstand der Eingangslinie vom linken Rand des Teilbaums (Mitte der Box)."""
+        return NODE_W // 2 if stacked(nid) or nid in rows else widths[nid] // 2
 
     def chip(nid: str) -> str | None:
         node = topo.nodes[nid]
@@ -1154,67 +1240,114 @@ def layout(topo: Topology, show_devices: bool = True) -> dict:
 
     def width(nid: str) -> int:
         c = kids(nid)
-        w = max(NODE_W, sum(width(x) for x in c) + GAP_X * (len(c) - 1)) if c else NODE_W
+        if stacked(nid):
+            for x in c:
+                width(x)
+            w = STACK_IN + NODE_W
+        elif c:
+            ws = [width(x) for x in c]
+            w = sum(ws) + GAP_X * (len(c) - 1)
+            if len(c) >= 4 and w > ROW_MAX_W:
+                lines_, cur, cur_w = [], [], 0
+                for k, kw in zip(c, ws):
+                    if cur and cur_w + GAP_X + kw > ROW_MAX_W:
+                        lines_.append(cur)
+                        cur, cur_w = [], 0
+                    cur_w += (GAP_X if cur else 0) + kw
+                    cur.append(k)
+                lines_.append(cur)
+                rows[nid] = lines_
+                w = STACK_IN + max(sum(widths[k] for k in r) + GAP_X * (len(r) - 1) for r in lines_)
+            w = max(NODE_W, w)
+        else:
+            w = NODE_W
         widths[nid] = w
         return w
 
     boxes, lines, labels, chips = [], [], [], []
     max_y = 0
 
-    def place(nid: str, left: int, depth: int) -> None:
+    def link_bits(k: str, x: int, y: int) -> dict:
+        lk = topo.nodes[k].link
+        text = link_label(topo, topo.nodes[k])
+        if text:
+            labels.append({"x": x, "y": y, "w": int(len(text) * 6.4) + 12, "text": text,
+                           "slow": bool(lk and lk.speed and lk.speed < 1000)})
+        return {"cls": speed_class(lk.speed if lk else None), "dashed": bool(lk and lk.via in ("vermutet",)),
+                "via": lk.via if lk else "", "media": link_medium(topo, lk)}
+
+    def place(nid: str, left: int, y: int, inline_chip: bool = False) -> None:
         nonlocal max_y
         node = topo.nodes[nid]
-        w = widths[nid]
-        cx = left + w // 2
-        y = 16 + depth * (NODE_H + GAP_Y)
+        cx = left + anchor(nid)
         boxes.append({"node": node, "x": cx - NODE_W // 2, "y": y, "cx": cx})
         max_y = max(max_y, y + NODE_H)
         c = chip(nid)
-        if c and not kids(nid):
+        if c and not kids(nid) and not inline_chip:
             chips.append({"x": cx - 60, "y": y + NODE_H + 22, "w": 120, "text": c, "lx": cx,
                           "ly1": y + NODE_H, "ly2": y + NODE_H + 22})
             max_y = max(max_y, y + NODE_H + 22 + CHIP_H)
         elif c:
             boxes[-1]["chip"] = c
-        cl = left
-        for k in kids(nid):
-            kw = widths[k]
-            kcx = cl + kw // 2
-            ky = 16 + (depth + 1) * (NODE_H + GAP_Y)
-            mid = y + NODE_H + GAP_Y // 2 - 14
-            lk = topo.nodes[k].link
-            lines.append({"d": f"M{cx} {y + NODE_H} V{mid} H{kcx} V{ky}", "cls": speed_class(lk.speed if lk else None),
-                          "dashed": bool(lk and lk.via in ("vermutet",)), "via": lk.via if lk else ""})
-            text = link_label(topo, topo.nodes[k])
-            if text:
-                tw = int(len(text) * 6.4) + 12
-                labels.append({"x": kcx + 6, "y": ky - 30, "w": tw, "text": text,
-                               "slow": bool(lk and lk.speed and lk.speed < 1000)})
-            place(k, cl, depth + 1)
-            cl += kw + GAP_X
+        if stacked(nid):                  # Blätter untereinander
+            trunk, kx = left + 20, left + STACK_IN
+            ky = y + NODE_H + STACK_GAP
+            for k in kids(nid):
+                bits = link_bits(k, kx + 4, ky - 24)
+                lines.append({"d": f"M{trunk} {y + NODE_H} V{ky + NODE_H // 2} H{kx}", **bits})
+                place(k, kx, ky, inline_chip=True)
+                ky += NODE_H + STACK_GAP
+            return
+        # Zeilen: ohne Umbruch eine; mit Umbruch läuft die Linie links an den Zeilen herunter
+        wrapped = nid in rows
+        trunk = left + 20 if wrapped else cx
+        ky = y + NODE_H + GAP_Y
+        for row in rows.get(nid) or [kids(nid)]:
+            cl = left + STACK_IN if wrapped else left
+            mid = ky - GAP_Y // 2 - 14
+            for k in row:
+                kcx = cl + anchor(k)
+                bits = link_bits(k, kcx + 6, ky - 30)
+                lines.append({"d": f"M{trunk} {y + NODE_H} V{mid} H{kcx} V{ky}", **bits})
+                place(k, cl, ky)
+                cl += widths[k] + GAP_X
+            ky = max_y + GAP_Y
 
     # Hauptbaum oben; Switches ohne Verbindung (oder eigene Teilbäume) in einer Zeile darunter
     total_w = 0
     if topo.roots:
         width(topo.roots[0])
-        place(topo.roots[0], 0, 0)
+        place(topo.roots[0], 0, 16)
         total_w = widths[topo.roots[0]]
     others = topo.roots[1:]
     if others:
-        depth = (max_y - 16) // (NODE_H + GAP_Y) + 1
+        y0 = max_y + GAP_Y
         x0 = 0
         for r in others:
             width(r)
-            place(r, x0, depth)
+            place(r, x0, y0)
             x0 += widths[r] + GAP_X
         total_w = max(total_w, x0 - GAP_X)
     return {"boxes": boxes, "lines": lines, "labels": labels, "chips": chips, "node_w": NODE_W,
             "width": max(total_w, NODE_W) + 120, "height": max_y + 24}
 
 
+MODULE_RE = re.compile(r"^([A-Z])(\d{1,2})$")
+
+
 def faceplate(ports: dict[int, Port]) -> list[dict]:
-    """Ports für die Frontansicht: Kupfer in zwei Reihen (ungerade oben), SFP/Uplink-Ports rechts; je 48 ein Block."""
+    """Ports für die Frontansicht: Kupfer in zwei Reihen (ungerade oben), SFP/Uplink-Ports rechts; je 48 ein Block.
+
+    Modulare Switches (HP/Aruba 5400zl, 8200zl: Ports „A1“ … „F24“) wie am Gerät: je Modul ein Block,
+    SFP-Steckplätze an ihrem Platz in den Reihen."""
     phys = [p for p in sorted(ports.values(), key=lambda p: p.index) if p.physical]
+    mods = {m.group(1) for p in phys if (m := MODULE_RE.match(p.short))}
+    if len(mods) >= 2 and all(MODULE_RE.match(p.short) for p in phys):
+        blocks = []
+        for mod in sorted(mods):
+            row = sorted((p for p in phys if p.short[0] == mod), key=lambda p: int(p.short[1:]))
+            blocks.append({"module": mod, "top": row[0::2], "bottom": row[1::2], "sfp": []})
+        return blocks
     copper = [p for p in phys if not p.sfp]
     sfp = [p for p in phys if p.sfp]
     blocks = []

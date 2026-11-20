@@ -68,6 +68,7 @@
     <dl class="kvlist">
       <dt>Name</dt><dd>{{ port.name }}</dd>
       <dt>Verbindung</dt><dd>{% if port.up %}{{ speed_text(port.speed) }}{% if port.duplex %} {{ 'Vollduplex' if port.duplex == 'full' else 'Halbduplex' }}{% endif %}{% else %}kein Link{% endif %}</dd>
+      {% if port.medium %}<dt>Anschluss</dt><dd>{{ {'fiber': 'Glasfaser (SFP)', 'sfp': 'SFP-Steckplatz', 'copper': 'Kupfer (Netzwerkbuchse)'}[port.medium] }}</dd>{% endif %}
       <dt>Rolle</dt><dd>{{ {'uplink': 'Uplink (Richtung Internet)', 'downlink': 'Verbindung zu einem weiteren Gerät im Baum', 'access': 'Geräte-Anschluss', 'free': 'frei', 'down': 'kein Link'}[port.role] }}</dd>
       {% if port.link %}{% set other = port.link.b if port.link.a == sw.node.id else port.link.a %}
       <dt>Verbunden mit</dt><dd>{% if topo.nodes[other].switch_id %}<a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=topo.nodes[other].switch_id) }}">{{ topo.nodes[other].label }}</a>{% else %}{{ topo.nodes[other].label }}{% endif %}
@@ -120,7 +121,7 @@
       <tr{% if port and p.index == port.index %} class="row-sel"{% endif %}>
         <td><a href="{{ url_for('web.topology_switch', site_id=site.id, switch_id=row.id, port=p.index) }}#port">{{ p.short }}</a>{% if p.alias %} <span class="muted small">{{ p.alias }}</span>{% endif %}</td>
         <td>{% if p.link %}{% set other = p.link.b if p.link.a == sw.node.id else p.link.a %}{{ topo.nodes[other].label }}{% elif p.devices %}{{ p.devices[0].label }}{% if p.devices|length > 1 %} <span class="muted small">+{{ p.devices|length - 1 }}</span>{% endif %}{% elif p.neighbor %}{{ p.neighbor.name }}{% else %}<span class="muted">–</span>{% endif %}</td>
-        <td class="nowrap">{% if p.up %}<span class="{{ 'warn-t' if p.speed and p.speed < 1000 and p.role in ('uplink', 'downlink') }}">{{ speed_text(p.speed) }}</span>{% if p.duplex == 'half' %} <span class="badge warning">Halbduplex</span>{% endif %}{% else %}<span class="muted">{{ 'frei' if p.admin_up else 'aus' }}</span>{% endif %}</td>
+        <td class="nowrap">{% if p.up %}<span class="{{ 'warn-t' if p.speed and p.speed < 1000 and p.role in ('uplink', 'downlink') }}">{{ speed_text(p.speed) }}</span>{% if p.medium in ('fiber', 'sfp') %} <span class="muted small">{{ 'Glas' if p.medium == 'fiber' else 'SFP' }}</span>{% endif %}{% if p.duplex == 'half' %} <span class="badge warning">Halbduplex</span>{% endif %}{% else %}<span class="muted">{{ 'frei' if p.admin_up else 'aus' }}</span>{% endif %}</td>
         <td>{{ 'ja' if p.poe else '–' }}</td><td>{{ p.vlan or '–' }}</td>
         <td class="{{ 'down-t' if p.errors_24h >= 50 }}">{{ p.errors_24h }}</td>
       </tr>{% endif %}{% endfor %}</tbody>

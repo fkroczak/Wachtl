@@ -1,7 +1,7 @@
 """Daten eines Switches per SNMP abfragen (docs/TOPOLOGIE.md): System, Ports, MAC-Tabelle, Nachbarn, PoE, VLAN.
 
 Nur Standard-MIBs, damit es mit Switches aller Hersteller funktioniert:
-SNMPv2-MIB, IF-MIB, EtherLike-MIB, BRIDGE-MIB, Q-BRIDGE-MIB, LLDP-MIB, CISCO-CDP-MIB, POWER-ETHERNET-MIB, IP-MIB.
+SNMPv2-MIB, IF-MIB, EtherLike-MIB, MAU-MIB, BRIDGE-MIB, Q-BRIDGE-MIB, LLDP-MIB, CISCO-CDP-MIB, POWER-ETHERNET-MIB, IP-MIB.
 Fehlt eine Tabelle (Switch kennt sie nicht), bleibt sie leer – nur das System muss antworten.
 Läuft in der Server-Probe (regelmäßig) und im Web-UI (Assistent „Verbindung testen“).
 """
@@ -33,12 +33,36 @@ POE_PORT_STATUS = "1.3.6.1.2.1.105.1.1.1.6"
 IP_ADDR_IF = "1.3.6.1.2.1.4.20.1.2"
 ARP_MAC = "1.3.6.1.2.1.4.22.1.2"
 DEFAULT_ROUTE = "1.3.6.1.2.1.4.21.1.7.0.0.0.0"
+# MAU-MIB (RFC 4836): Art des Anschlusses je Port – Glasfaser (SX, LX, SR, LR …), Kupfer (TX, T) oder SFP
+MAU_TYPE = "1.3.6.1.2.1.26.2.1.1.3"          # ifMauType, Index ifIndex.mauIndex, Wert dot3MauType…-OID
+MAU_JACK = "1.3.6.1.2.1.26.2.2.1.2"          # ifJackType, Index ifIndex.mauIndex.jackIndex
+MAU_TYPES = "1.3.6.1.2.1.26.4"
 
 MAX_FDB = 20000
 MAX_ARP = 5000
 MAX_IF = 1024
 # Port-Typen, die als Anschluss am Gerät zählen (Ethernet in seinen Varianten)
 PHYSICAL_TYPES = {6, 7, 26, 62, 69, 117}
+# dot3MauType-Nummern: Glasfaser (FOIRL, FL, FX, LX, SX, LR, SR, ER, LRM, BX, PX …), Kupfer (T, TX, CX, CX4),
+# 1000BASE-X / 10GBASE-R ohne Angabe des Mediums = Steckplatz (SFP), Medium unbekannt
+MAU_FIBER = {3, 6, 7, 8, 12, 13, 17, 18, 23, 24, 25, 26, 32, 34, 35, 36, 38, 39, 40, *range(44, 54), 55, *range(59, 71)}
+MAU_COPPER = {2, 4, 5, 10, 11, 14, 15, 16, 19, 20, 27, 28, 29, 30, 41, 42, 43, 54}
+MAU_SLOT = {21, 22, 31, 33, 37}
+JACK_FIBER = {8, 9, 10, 12, 14}               # SC, MIC, ST, MT-RJ, LC
+JACK_COPPER = {2, 3, 5, 15, 16}               # RJ45, RJ45S, BNC, CX4, SFP+ DAC
+
+
+def mau_media(mau_oid, jacks: set[int] = frozenset()) -> str | None:
+    """fiber | copper | sfp (Steckplatz, Medium unbekannt) | None (Switch sagt nichts)."""
+    num = None
+    if isinstance(mau_oid, str) and mau_oid.lstrip(".").startswith(MAU_TYPES + "."):
+        tail = mau_oid.lstrip(".")[len(MAU_TYPES) + 1:]
+        num = int(tail) if tail.isdigit() else None
+    if num in MAU_FIBER or jacks & JACK_FIBER:
+        return "fiber"
+    if num in MAU_COPPER or (num is None and jacks & JACK_COPPER):
+        return "copper"
+    return "sfp" if num in MAU_SLOT else None
 
 
 def _text(v, limit: int = 200) -> str | None:
@@ -148,6 +172,17 @@ def collect(sess: snmp.Session) -> dict:
             "duplex": {2: "half", 3: "full"}.get(duplex.get(idx)),
             "last_change_s": changed[idx] // 100 if isinstance(changed.get(idx), int) else None,
         })
+    # Medium je Port (MAU-MIB): kennt der Switch die Tabelle nicht, bleibt es offen
+    mau: dict[int, object] = {}
+    for idx, v in _table(sess, MAU_TYPE, MAX_IF * 2):
+        if len(idx) == 2 and (idx[0] not in mau or mau[idx[0]] is None):
+            mau[idx[0]] = v
+    jacks: dict[int, set[int]] = {}
+    for idx, v in _table(sess, MAU_JACK, MAX_IF * 2):
+        if len(idx) == 3 and isinstance(v, int):
+            jacks.setdefault(idx[0], set()).add(v)
+    for i in interfaces:
+        i["media"] = mau_media(mau.get(i["index"]), jacks.get(i["index"], set()))
     out["interfaces"] = interfaces
     if_ids = {i["index"] for i in interfaces}
 

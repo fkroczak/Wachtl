@@ -81,10 +81,10 @@
         <select name="snmp_version" {{ 'disabled' if copying }} {{ attrs }}>{% for k, label in SNMP_VERSIONS %}<option value="{{ k }}" {{ 'selected' if k == version }}>{{ label }}</option>{% endfor %}</select>
       {% endcall %}
       {% set v12 = not copying and version in ('1', '2c') %}
-      {% call(attrs) field("community", "Community", help="Lese-Community aus den SNMP-Einstellungen des Switches.", error=fe.community,
+      {% call(attrs) field("community", "Community", help="Lese-Community aus den SNMP-Einstellungen des Switches. Leer lassen = „public“ – damit antworten die meisten Switches ab Werk.", error=fe.community,
                           show_if="snmp_version:1,2c", hidden=not v12) %}
         <input name="community" type="password" maxlength="64" autocomplete="new-password" {{ 'disabled' if not v12 }}
-          placeholder="{{ 'gesetzt – leer lassen = unverändert' if existing.version in ('1', '2c') and existing.community else '' }}" {{ attrs }}>
+          placeholder="{{ 'gesetzt – leer lassen = unverändert' if existing.version in ('1', '2c') and existing.community else 'public' }}" {{ attrs }}>
       {% endcall %}
       {% set v3 = not copying and version == '3' %}
       {% call(attrs) field("user", "Benutzer", error=fe.user, show_if="snmp_version:3", hidden=not v3) %}

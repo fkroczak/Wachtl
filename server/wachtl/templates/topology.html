@@ -121,7 +121,7 @@
     <ul class="topo-nb">
       {% for nb in s.neighbors %}
       <li><span>Port {{ nb.port.short }} → {% if nb.node.switch_id %}<a href="{{ url_for('web.topology', site_id=site.id, switch=nb.node.switch_id) }}">{{ nb.node.label }}</a>{% else %}{{ nb.node.label }}{% endif %}</span>
-        <span class="{{ 'warn-t' if nb.port.speed and nb.port.speed < 1000 else 'muted' }}">{{ speed_short(nb.port.speed) or '–' }}{{ ' · PoE' if nb.port.poe }}</span></li>
+        <span class="{{ 'warn-t' if nb.port.speed and nb.port.speed < 1000 else 'muted' }}">{{ speed_short(nb.port.speed) or '–' }}{% if nb.port.medium in ('fiber', 'sfp') %} · {{ 'Glas' if nb.port.medium == 'fiber' else 'SFP' }}{% endif %}{{ ' · PoE' if nb.port.poe }}</span></li>
       {% endfor %}
     </ul>
     {% endif %}
